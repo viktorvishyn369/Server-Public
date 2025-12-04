@@ -34,13 +34,26 @@ function startServer() {
 
   console.log('Starting server from:', serverPath);
   
+  // Use pipe for stdio to keep process alive
   serverProcess = spawn('node', ['server.js'], {
     cwd: serverPath,
-    stdio: 'inherit'
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: false
+  });
+
+  // Log server output
+  serverProcess.stdout.on('data', (data) => {
+    console.log(`[Server] ${data.toString().trim()}`);
+  });
+
+  serverProcess.stderr.on('data', (data) => {
+    console.error(`[Server Error] ${data.toString().trim()}`);
   });
 
   serverProcess.on('error', (err) => {
     console.error('Failed to start server:', err);
+    serverProcess = null;
+    updateTrayMenu();
   });
 
   serverProcess.on('close', (code) => {
