@@ -8,23 +8,18 @@ let serverProcess = null;
 let serverPath = null;
 let uploadsPath = null;
 
-// Determine if we're in development or production
-const isDev = !app.isPackaged;
-
-if (isDev) {
-  // Development: use ../server
-  serverPath = path.join(__dirname, '..', 'server');
-} else {
-  // Production: server is in resources
-  serverPath = path.join(process.resourcesPath, 'server');
-}
-
+// Always use the actual server directory (not the bundled one)
+// This ensures uploads folder is in the right place
+serverPath = path.join(__dirname, '..', 'server');
 uploadsPath = path.join(serverPath, 'uploads');
 
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
 }
+
+console.log('Server path:', serverPath);
+console.log('Uploads path:', uploadsPath);
 
 function startServer() {
   if (serverProcess) {
@@ -62,16 +57,35 @@ function startServer() {
     updateTrayMenu();
   });
 
-  updateTrayMenu();
+  // Update menu after a delay to ensure server is fully started
+  setTimeout(() => {
+    updateTrayMenu();
+  }, 2000);
 }
 
 function stopServer() {
+  console.log('Stopping server...');
+  
+  // Kill the server process
   if (serverProcess) {
-    serverProcess.kill();
+    serverProcess.kill('SIGTERM');
     serverProcess = null;
-    console.log('Server stopped');
-    updateTrayMenu();
   }
+  
+  // Also kill any node process on port 3000 (in case it's still running)
+  const { exec } = require('child_process');
+  exec('lsof -ti:3000 | xargs kill -9', (error) => {
+    if (error) {
+      console.log('No server process found on port 3000');
+    } else {
+      console.log('Server stopped');
+    }
+    
+    // Update menu after a delay to ensure port is released
+    setTimeout(() => {
+      updateTrayMenu();
+    }, 500);
+  });
 }
 
 function restartServer() {
@@ -86,49 +100,72 @@ function openUploadsFolder() {
   shell.openPath(uploadsPath);
 }
 
-function updateTrayMenu() {
-  const isRunning = serverProcess !== null;
+function checkServerRunning(callback) {
+  const net = require('net');
+  const client = new net.Socket();
   
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: isRunning ? '● Server Running' : '○ Server Stopped',
-      enabled: false
-    },
-    { type: 'separator' },
-    {
-      label: 'Open Files Location',
-      click: openUploadsFolder
-    },
-    { type: 'separator' },
-    {
-      label: 'Restart Server',
-      click: restartServer,
-      enabled: isRunning
-    },
-    {
-      label: 'Stop Server',
-      click: stopServer,
-      enabled: isRunning
-    },
-    {
-      label: 'Start Server',
-      click: startServer,
-      enabled: !isRunning
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => {
-        stopServer();
-        app.quit();
-      }
-    }
-  ]);
+  client.setTimeout(1000);
+  
+  client.on('connect', () => {
+    client.destroy();
+    callback(true);
+  });
+  
+  client.on('error', () => {
+    callback(false);
+  });
+  
+  client.on('timeout', () => {
+    client.destroy();
+    callback(false);
+  });
+  
+  client.connect(3000, '127.0.0.1');
+}
 
-  tray.setContextMenu(contextMenu);
-  
-  // Update tooltip
-  tray.setToolTip(isRunning ? 'PhotoSync Server - Running' : 'PhotoSync Server - Stopped');
+function updateTrayMenu() {
+  checkServerRunning((isRunning) => {
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: isRunning ? '● Server Running' : '○ Server Stopped',
+        enabled: false
+      },
+      { type: 'separator' },
+      {
+        label: 'Open Files Location',
+        click: openUploadsFolder
+      },
+      { type: 'separator' },
+      {
+        label: 'Restart Server',
+        click: restartServer,
+        enabled: isRunning
+      },
+      {
+        label: 'Stop Server',
+        click: stopServer,
+        enabled: isRunning
+      },
+      {
+        label: 'Start Server',
+        click: startServer,
+        enabled: !isRunning
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        click: () => {
+          stopServer();
+          app.quit();
+        }
+      }
+    ]);
+
+    tray.setContextMenu(contextMenu);
+    
+    // Update tooltip
+    tray.setToolTip(isRunning ? 'PhotoSync Server - Running' : 'PhotoSync Server - Stopped');
+  });
 }
 
 app.whenReady().then(() => {
@@ -142,7 +179,21 @@ app.whenReady().then(() => {
   tray = new Tray(trayIcon);
   tray.setToolTip('PhotoSync Server');
   
+  // Update menu when clicked
+  tray.on('click', () => {
+    updateTrayMenu();
+  });
+  
+  tray.on('right-click', () => {
+    updateTrayMenu();
+  });
+  
   updateTrayMenu();
+  
+  // Auto-refresh menu every 3 seconds
+  setInterval(() => {
+    updateTrayMenu();
+  }, 3000);
   
   // Start server automatically
   startServer();
