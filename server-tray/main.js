@@ -179,8 +179,8 @@ app.whenReady().then(() => {
   const iconPath = path.join(__dirname, 'icon.png');
   const icon = nativeImage.createFromPath(iconPath);
   
-  // Resize for tray (16x16 or 32x32)
-  const trayIcon = icon.resize({ width: 16, height: 16 });
+  // Resize for tray - macOS menu bar icons are typically 22x22 points
+  const trayIcon = icon.resize({ width: 22, height: 22 });
   
   tray = new Tray(trayIcon);
   tray.setToolTip('PhotoSync Server');
