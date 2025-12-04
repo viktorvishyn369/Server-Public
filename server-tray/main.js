@@ -68,24 +68,30 @@ function stopServer() {
   
   // Kill the server process
   if (serverProcess) {
-    serverProcess.kill('SIGTERM');
-    serverProcess = null;
+    try {
+      serverProcess.kill('SIGKILL');
+      serverProcess = null;
+    } catch (e) {
+      console.error('Error killing server process:', e);
+    }
   }
   
-  // Also kill any node process on port 3000 (in case it's still running)
-  const { exec } = require('child_process');
-  exec('lsof -ti:3000 | xargs kill -9', (error) => {
-    if (error) {
-      console.log('No server process found on port 3000');
-    } else {
-      console.log('Server stopped');
+  // Force kill any node process on port 3000
+  const { execSync } = require('child_process');
+  try {
+    const pid = execSync('lsof -ti:3000').toString().trim();
+    if (pid) {
+      execSync(`kill -9 ${pid}`);
+      console.log('Server stopped (PID:', pid, ')');
     }
-    
-    // Update menu after a delay to ensure port is released
-    setTimeout(() => {
-      updateTrayMenu();
-    }, 500);
-  });
+  } catch (error) {
+    console.log('No server process found on port 3000');
+  }
+  
+  // Update menu after a delay to ensure port is released
+  setTimeout(() => {
+    updateTrayMenu();
+  }, 1000);
 }
 
 function restartServer() {
