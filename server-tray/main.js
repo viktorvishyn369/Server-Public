@@ -11,6 +11,7 @@ let serverPath = null;
 let uploadsPath = null;
 let updateAvailable = false;
 let latestVersion = null;
+let updateStatus = 'Not checked yet';
 let startOnBoot = false;
 
 const store = new Store({ name: 'photosync-tray' });
@@ -179,6 +180,7 @@ function checkForUpdates() {
     if (match && result.includes('"available":true')) {
       latestVersion = match[1];
       updateAvailable = true;
+      updateStatus = `Update available: v${latestVersion}`;
       
       new Notification({
         title: 'PhotoSync Update Available',
@@ -189,6 +191,7 @@ function checkForUpdates() {
       console.log(`Update available: v${latestVersion}`);
     } else {
       updateAvailable = false;
+      updateStatus = 'Up to date';
       new Notification({
         title: 'PhotoSync Up to Date',
         body: 'You are running the latest version',
@@ -200,6 +203,7 @@ function checkForUpdates() {
     updateTrayMenu();
   } catch (error) {
     console.error('Error checking for updates:', error);
+    updateStatus = 'Update check failed';
   }
 }
 
@@ -272,6 +276,10 @@ function updateTrayMenu() {
     const menuTemplate = [
       {
         label: isRunning ? '🟢 Server Running' : '⚪ Server Stopped',
+        enabled: false
+      },
+      {
+        label: `Update status: ${updateStatus}`,
         enabled: false
       },
       { type: 'separator' },
