@@ -2,6 +2,8 @@ const { app, Tray, Menu, shell, nativeImage, Notification } = require('electron'
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const Store = require('electron-store');
 
 let tray = null;
 let serverProcess = null;
@@ -9,6 +11,9 @@ let serverPath = null;
 let uploadsPath = null;
 let updateAvailable = false;
 let latestVersion = null;
+let startOnBoot = false;
+
+const store = new Store({ name: 'photosync-tray' });
 
 // Always use the actual server directory (not the bundled one)
 // This ensures uploads folder is in the right place
@@ -22,6 +27,60 @@ if (!fs.existsSync(uploadsPath)) {
 
 console.log('Server path:', serverPath);
 console.log('Uploads path:', uploadsPath);
+
+function setAutostart(enabled) {
+  startOnBoot = enabled;
+  store.set('startOnBoot', enabled);
+
+  // macOS & Windows: use built-in login item settings
+  if (process.platform === 'darwin' || process.platform === 'win32') {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: enabled,
+        openAsHidden: true
+      });
+      console.log('Login item settings updated. openAtLogin =', enabled);
+    } catch (err) {
+      console.error('Failed to update login item settings:', err);
+    }
+    return;
+  }
+
+  // Linux: create/remove autostart .desktop entry
+  if (process.platform === 'linux') {
+    try {
+      const autostartDir = path.join(os.homedir(), '.config', 'autostart');
+      const desktopFile = path.join(autostartDir, 'photosync-server.desktop');
+
+      if (!fs.existsSync(autostartDir)) {
+        fs.mkdirSync(autostartDir, { recursive: true });
+      }
+
+      if (enabled) {
+        const execPath = process.execPath; // points to the built app binary
+        const desktopContent = [
+          '[Desktop Entry]',
+          'Type=Application',
+          'Name=PhotoSync Server',
+          `Exec="${execPath}"`,
+          'X-GNOME-Autostart-enabled=true',
+          'NoDisplay=false',
+          'Terminal=false',
+          ''
+        ].join('\n');
+        fs.writeFileSync(desktopFile, desktopContent, { encoding: 'utf8' });
+        console.log('Created autostart entry at', desktopFile);
+      } else {
+        if (fs.existsSync(desktopFile)) {
+          fs.unlinkSync(desktopFile);
+          console.log('Removed autostart entry at', desktopFile);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to configure Linux autostart:', err);
+    }
+  }
+}
 
 function startServer() {
   if (serverProcess) {
@@ -236,6 +295,15 @@ function updateTrayMenu() {
         click: startServer,
         enabled: !isRunning
       },
+      { type: 'separator' },
+      {
+        label: startOnBoot ? '☑ Start on Boot' : '☐ Start on Boot',
+        click: () => {
+          const newValue = !startOnBoot;
+          setAutostart(newValue);
+          updateTrayMenu();
+        }
+      },
       { type: 'separator' }
     ];
     
@@ -293,6 +361,10 @@ app.whenReady().then(() => {
     updateTrayMenu();
   });
   
+  // Load startOnBoot setting and apply autostart configuration once
+  startOnBoot = store.get('startOnBoot', false);
+  setAutostart(startOnBoot);
+
   updateTrayMenu();
   
   // Auto-refresh menu every 3 seconds
