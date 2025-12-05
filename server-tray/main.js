@@ -212,7 +212,7 @@ function installUpdate() {
   
   new Notification({
     title: 'PhotoSync Update',
-    body: 'Installing update... Server will restart.',
+    body: 'Installing update... Server and tray will restart.',
     silent: false
   }).show();
   
@@ -220,21 +220,41 @@ function installUpdate() {
   
   setTimeout(() => {
     try {
-      execSync('npm run update', { 
+      // Project root (contains server and server-tray)
+      const projectRoot = path.join(serverPath, '..');
+
+      console.log('Pulling latest code for full project...');
+      execSync('git pull origin main', {
+        cwd: projectRoot,
+        stdio: 'inherit'
+      });
+
+      console.log('Installing server dependencies...');
+      execSync('npm install --production', {
         cwd: serverPath,
         stdio: 'inherit'
       });
-      
+
+      console.log('Installing tray dependencies...');
+      const trayDir = __dirname; // server-tray directory
+      execSync('npm install', {
+        cwd: trayDir,
+        stdio: 'inherit'
+      });
+
       new Notification({
         title: 'PhotoSync Updated',
-        body: 'Update installed successfully! Restarting server...',
+        body: 'Update installed. Restarting tray and server...',
         silent: false
       }).show();
-      
+
+      // Relaunch the tray app so new code is loaded on all platforms
+      updateAvailable = false;
+      updateTrayMenu();
+
       setTimeout(() => {
-        startServer();
-        updateAvailable = false;
-        updateTrayMenu();
+        app.relaunch();
+        app.exit(0);
       }, 2000);
     } catch (error) {
       console.error('Update failed:', error);
@@ -243,7 +263,8 @@ function installUpdate() {
         body: 'Failed to install update. Check logs.',
         silent: false
       }).show();
-      startServer(); // Restart with old version
+      // Try to restart server with existing version
+      startServer();
     }
   }, 1000);
 }
