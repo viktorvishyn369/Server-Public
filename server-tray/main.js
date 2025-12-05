@@ -297,7 +297,7 @@ function updateTrayMenu() {
       },
       { type: 'separator' },
       {
-        label: startOnBoot ? 'Start on Boot (On)' : 'Start on Boot (Off)',
+        label: startOnBoot ? '🟢 Start on Boot' : '🔴 Start on Boot',
         click: () => {
           const newValue = !startOnBoot;
           setAutostart(newValue);
