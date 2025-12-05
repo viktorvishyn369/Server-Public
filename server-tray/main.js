@@ -1,5 +1,5 @@
-const { app, Tray, Menu, shell, nativeImage } = require('electron');
-const { spawn } = require('child_process');
+const { app, Tray, Menu, shell, nativeImage, Notification } = require('electron');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -7,6 +7,8 @@ let tray = null;
 let serverProcess = null;
 let serverPath = null;
 let uploadsPath = null;
+let updateAvailable = false;
+let latestVersion = null;
 
 // Always use the actual server directory (not the bundled one)
 // This ensures uploads folder is in the right place
@@ -106,6 +108,83 @@ function openUploadsFolder() {
   shell.openPath(uploadsPath);
 }
 
+function checkForUpdates() {
+  console.log('Checking for updates...');
+  try {
+    const result = execSync('npm run check-update', { 
+      cwd: serverPath,
+      encoding: 'utf8'
+    });
+    
+    const match = result.match(/"version":"([^"]+)"/);
+    if (match && result.includes('"available":true')) {
+      latestVersion = match[1];
+      updateAvailable = true;
+      
+      new Notification({
+        title: 'PhotoSync Update Available',
+        body: `Version ${latestVersion} is available!`,
+        silent: false
+      }).show();
+      
+      console.log(`Update available: v${latestVersion}`);
+    } else {
+      updateAvailable = false;
+      new Notification({
+        title: 'PhotoSync Up to Date',
+        body: 'You are running the latest version',
+        silent: false
+      }).show();
+      console.log('Already on latest version');
+    }
+    
+    updateTrayMenu();
+  } catch (error) {
+    console.error('Error checking for updates:', error);
+  }
+}
+
+function installUpdate() {
+  console.log('Installing update...');
+  
+  new Notification({
+    title: 'PhotoSync Update',
+    body: 'Installing update... Server will restart.',
+    silent: false
+  }).show();
+  
+  stopServer();
+  
+  setTimeout(() => {
+    try {
+      execSync('npm run update', { 
+        cwd: serverPath,
+        stdio: 'inherit'
+      });
+      
+      new Notification({
+        title: 'PhotoSync Updated',
+        body: 'Update installed successfully! Restarting server...',
+        silent: false
+      }).show();
+      
+      setTimeout(() => {
+        startServer();
+        updateAvailable = false;
+        updateTrayMenu();
+      }, 2000);
+    } catch (error) {
+      console.error('Update failed:', error);
+      new Notification({
+        title: 'PhotoSync Update Failed',
+        body: 'Failed to install update. Check logs.',
+        silent: false
+      }).show();
+      startServer(); // Restart with old version
+    }
+  }, 1000);
+}
+
 function checkServerRunning(callback) {
   const net = require('net');
   const client = new net.Socket();
@@ -131,9 +210,9 @@ function checkServerRunning(callback) {
 
 function updateTrayMenu() {
   checkServerRunning((isRunning) => {
-    const contextMenu = Menu.buildFromTemplate([
+    const menuTemplate = [
       {
-        label: isRunning ? '● Server Running' : '○ Server Stopped',
+        label: isRunning ? '🟢 Server Running' : '⚪ Server Stopped',
         enabled: false
       },
       { type: 'separator' },
@@ -157,20 +236,40 @@ function updateTrayMenu() {
         click: startServer,
         enabled: !isRunning
       },
-      { type: 'separator' },
-      {
-        label: 'Quit',
-        click: () => {
-          stopServer();
-          app.quit();
-        }
+      { type: 'separator' }
+    ];
+    
+    // Add update menu items
+    if (updateAvailable) {
+      menuTemplate.push({
+        label: `✨ Update Available (v${latestVersion})`,
+        click: installUpdate
+      });
+    }
+    
+    menuTemplate.push({
+      label: 'Check for Updates',
+      click: checkForUpdates
+    });
+    
+    menuTemplate.push({ type: 'separator' });
+    menuTemplate.push({
+      label: 'Quit',
+      click: () => {
+        stopServer();
+        app.quit();
       }
-    ]);
+    });
 
+    const contextMenu = Menu.buildFromTemplate(menuTemplate);
     tray.setContextMenu(contextMenu);
     
     // Update tooltip
-    tray.setToolTip(isRunning ? 'PhotoSync Server - Running' : 'PhotoSync Server - Stopped');
+    let tooltip = isRunning ? 'PhotoSync Server - Running' : 'PhotoSync Server - Stopped';
+    if (updateAvailable) {
+      tooltip += ` (Update available: v${latestVersion})`;
+    }
+    tray.setToolTip(tooltip);
   });
 }
 
@@ -203,6 +302,16 @@ app.whenReady().then(() => {
   
   // Start server automatically
   startServer();
+  
+  // Check for updates on startup (after 5 seconds)
+  setTimeout(() => {
+    checkForUpdates();
+  }, 5000);
+  
+  // Check for updates every 24 hours
+  setInterval(() => {
+    checkForUpdates();
+  }, 24 * 60 * 60 * 1000);
 });
 
 app.on('window-all-closed', (e) => {
