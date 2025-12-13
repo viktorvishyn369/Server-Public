@@ -333,34 +333,24 @@ function updateTrayMenu() {
         enabled: false
       },
       { type: 'separator' },
+      ...(ips.length > 0
+        ? [
+            { label: 'Local IP (click to copy)', enabled: false },
+            ...ips.map((ip) => ({
+              label: ip,
+              click: () => {
+                clipboard.writeText(ip);
+                notifyCopied(ip);
+              }
+            }))
+          ]
+        : [
+            { label: 'No local IPv4 address detected', enabled: false }
+          ]),
+      { type: 'separator' },
       {
         label: 'Open Files Location',
         click: openUploadsFolder
-      },
-      {
-        label: 'Local IP Addresses',
-        submenu: (ips.length > 0)
-          ? ips.flatMap((ip) => ([
-              {
-                label: `Copy IP: ${ip}`,
-                click: () => {
-                  clipboard.writeText(ip);
-                  notifyCopied(ip);
-                }
-              },
-              {
-                label: `Copy URL: http://${ip}:3000`,
-                click: () => {
-                  const url = `http://${ip}:3000`;
-                  clipboard.writeText(url);
-                  notifyCopied(url);
-                }
-              },
-              { type: 'separator' }
-            ]))
-          : [
-              { label: 'No local IPv4 address detected', enabled: false }
-            ]
       },
       { type: 'separator' },
       {
