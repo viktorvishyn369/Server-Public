@@ -1,4 +1,4 @@
-const { app, Tray, Menu, shell, nativeImage, Notification } = require('electron');
+const { app, Tray, Menu, shell, nativeImage, Notification, clipboard } = require('electron');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -168,6 +168,34 @@ function openUploadsFolder() {
   shell.openPath(uploadsPath);
 }
 
+function getLocalIpAddresses() {
+  const nets = os.networkInterfaces ? os.networkInterfaces() : {};
+  const ips = [];
+  Object.keys(nets || {}).forEach((name) => {
+    const entries = nets[name] || [];
+    entries.forEach((net) => {
+      if (!net) return;
+      if (net.family !== 'IPv4') return;
+      if (net.internal) return;
+      if (!net.address) return;
+      ips.push(net.address);
+    });
+  });
+  return Array.from(new Set(ips)).sort();
+}
+
+function notifyCopied(text) {
+  try {
+    new Notification({
+      title: 'Copied',
+      body: text,
+      silent: true
+    }).show();
+  } catch (e) {
+    // ignore
+  }
+}
+
 function checkForUpdates() {
   console.log('Checking for updates...');
   try {
@@ -294,6 +322,7 @@ function checkServerRunning(callback) {
 
 function updateTrayMenu() {
   checkServerRunning((isRunning) => {
+    const ips = getLocalIpAddresses();
     const menuTemplate = [
       {
         label: isRunning ? '🟢 Server Running' : '⚪ Server Stopped',
@@ -307,6 +336,31 @@ function updateTrayMenu() {
       {
         label: 'Open Files Location',
         click: openUploadsFolder
+      },
+      {
+        label: 'Local IP Addresses',
+        submenu: (ips.length > 0)
+          ? ips.flatMap((ip) => ([
+              {
+                label: `Copy IP: ${ip}`,
+                click: () => {
+                  clipboard.writeText(ip);
+                  notifyCopied(ip);
+                }
+              },
+              {
+                label: `Copy URL: http://${ip}:3000`,
+                click: () => {
+                  const url = `http://${ip}:3000`;
+                  clipboard.writeText(url);
+                  notifyCopied(url);
+                }
+              },
+              { type: 'separator' }
+            ]))
+          : [
+              { label: 'No local IPv4 address detected', enabled: false }
+            ]
       },
       { type: 'separator' },
       {
