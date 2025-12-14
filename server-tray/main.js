@@ -11,12 +11,60 @@ let serverPath = null;
 let uploadsPath = null;
 let dbPath = null;
 let cloudUsersPath = null;
+let logFilePath = null;
 let updateAvailable = false;
 let latestVersion = null;
 let updateStatus = 'Updates: GitHub Releases';
 let startOnBoot = false;
 
 const store = new Store({ name: 'photosync-tray' });
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    try {
+      updateTrayMenu();
+    } catch (e) {
+      // ignore
+    }
+  });
+}
+
+function appendLog(line) {
+  try {
+    if (!logFilePath) return;
+    fs.appendFileSync(logFilePath, `${new Date().toISOString()} ${line}\n`, { encoding: 'utf8' });
+  } catch (e) {
+    // ignore
+  }
+}
+
+function safeConsole(method, ...args) {
+  try {
+    if (console && typeof console[method] === 'function') {
+      console[method](...args);
+    }
+  } catch (e) {
+    if (e && e.code === 'EPIPE') return;
+  }
+  try {
+    const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    appendLog(`[${method}] ${msg}`);
+  } catch (e) {
+    // ignore
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  if (err && err.code === 'EPIPE') return;
+  safeConsole('error', 'Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  safeConsole('error', 'Unhandled Rejection:', reason);
+});
 
 function getBundledServerPath() {
   if (app && app.isPackaged) return path.join(process.resourcesPath, 'server');
@@ -32,6 +80,7 @@ function initPaths() {
   uploadsPath = path.join(getDataRoot(), 'uploads');
   dbPath = path.join(getDataRoot(), 'backup.db');
   cloudUsersPath = path.join(getDataRoot(), 'cloud', 'users');
+  logFilePath = path.join(getDataRoot(), 'server-tray.log');
 
   if (!fs.existsSync(uploadsPath)) {
     fs.mkdirSync(uploadsPath, { recursive: true });
@@ -41,8 +90,9 @@ function initPaths() {
     fs.mkdirSync(cloudUsersPath, { recursive: true });
   }
 
-  console.log('Server path:', serverPath);
-  console.log('Uploads path:', uploadsPath);
+  safeConsole('log', 'Server path:', serverPath);
+  safeConsole('log', 'Uploads path:', uploadsPath);
+  safeConsole('log', 'Tray log path:', logFilePath);
 }
 
 function setAutostart(enabled) {
@@ -56,9 +106,9 @@ function setAutostart(enabled) {
         openAtLogin: enabled,
         openAsHidden: true
       });
-      console.log('Login item settings updated. openAtLogin =', enabled);
+      safeConsole('log', 'Login item settings updated. openAtLogin =', enabled);
     } catch (err) {
-      console.error('Failed to update login item settings:', err);
+      safeConsole('error', 'Failed to update login item settings:', err);
     }
     return;
   }
@@ -86,22 +136,22 @@ function setAutostart(enabled) {
           ''
         ].join('\n');
         fs.writeFileSync(desktopFile, desktopContent, { encoding: 'utf8' });
-        console.log('Created autostart entry at', desktopFile);
+        safeConsole('log', 'Created autostart entry at', desktopFile);
       } else {
         if (fs.existsSync(desktopFile)) {
           fs.unlinkSync(desktopFile);
-          console.log('Removed autostart entry at', desktopFile);
+          safeConsole('log', 'Removed autostart entry at', desktopFile);
         }
       }
     } catch (err) {
-      console.error('Failed to configure Linux autostart:', err);
+      safeConsole('error', 'Failed to configure Linux autostart:', err);
     }
   }
 }
 
 function startServer() {
   if (serverProcess) {
-    console.log('Server already running');
+    safeConsole('log', 'Server already running');
     return;
   }
 
@@ -109,7 +159,23 @@ function startServer() {
     initPaths();
   }
 
-  console.log('Starting server from:', serverPath);
+  stopLegacyService();
+  const portIsFree = freePort3000ForPhotoSync();
+  if (!portIsFree) {
+    try {
+      new Notification({
+        title: 'PhotoSync Server',
+        body: 'Port 3000 is already in use by another app. Close it and try again.',
+        silent: true
+      }).show();
+    } catch (e) {
+      // ignore
+    }
+    updateTrayMenu();
+    return;
+  }
+
+  safeConsole('log', 'Starting server from:', serverPath);
   
   const serverEntry = path.join(serverPath, 'server.js');
   const nodeModulesPaths = [
@@ -128,12 +194,13 @@ function startServer() {
     NODE_PATH: nodePath,
     UPLOAD_DIR: uploadsPath,
     DB_PATH: dbPath,
-    CLOUD_DIR: path.join(getDataRoot(), 'cloud')
+    CLOUD_DIR: path.join(getDataRoot(), 'cloud'),
+    ELECTRON_RUN_AS_NODE: '1'
   };
 
   // Use Electron's embedded Node runtime so system Node is not required.
   // `--runAsNode` makes Electron behave like Node.js.
-  serverProcess = spawn(process.execPath, ['--runAsNode', serverEntry], {
+  serverProcess = spawn(process.execPath, [serverEntry], {
     cwd: serverPath,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -142,21 +209,21 @@ function startServer() {
 
   // Log server output
   serverProcess.stdout.on('data', (data) => {
-    console.log(`[Server] ${data.toString().trim()}`);
+    safeConsole('log', `[Server] ${data.toString().trim()}`);
   });
 
   serverProcess.stderr.on('data', (data) => {
-    console.error(`[Server Error] ${data.toString().trim()}`);
+    safeConsole('error', `[Server Error] ${data.toString().trim()}`);
   });
 
   serverProcess.on('error', (err) => {
-    console.error('Failed to start server:', err);
+    safeConsole('error', 'Failed to start server:', err);
     serverProcess = null;
     updateTrayMenu();
   });
 
   serverProcess.on('close', (code) => {
-    console.log(`Server process exited with code ${code}`);
+    safeConsole('log', `Server process exited with code ${code}`);
     serverProcess = null;
     updateTrayMenu();
   });
@@ -168,7 +235,7 @@ function startServer() {
 }
 
 function stopServer() {
-  console.log('Stopping server...');
+  safeConsole('log', 'Stopping server...');
   
   // Kill the server process
   if (serverProcess) {
@@ -176,42 +243,11 @@ function stopServer() {
       serverProcess.kill('SIGKILL');
       serverProcess = null;
     } catch (e) {
-      console.error('Error killing server process:', e);
+      safeConsole('error', 'Error killing server process:', e);
     }
   }
   
-  // Force kill any process on port 3000 (best-effort)
-  try {
-    if (process.platform === 'win32') {
-      const out = execSync('netstat -ano | findstr :3000', { encoding: 'utf8' }).toString();
-      const lines = out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const pids = new Set();
-      for (const line of lines) {
-        const parts = line.split(/\s+/);
-        const pid = parts[parts.length - 1];
-        if (pid && /^\d+$/.test(pid)) pids.add(pid);
-      }
-      for (const pid of pids) {
-        try {
-          execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
-          console.log('Server stopped (PID:', pid, ')');
-        } catch (e) {
-          // ignore
-        }
-      }
-      if (pids.size === 0) console.log('No server process found on port 3000');
-    } else {
-      const pid = execSync('lsof -ti:3000', { encoding: 'utf8' }).toString().trim();
-      if (pid) {
-        execSync(`kill -9 ${pid}`);
-        console.log('Server stopped (PID:', pid, ')');
-      } else {
-        console.log('No server process found on port 3000');
-      }
-    }
-  } catch (error) {
-    console.log('No server process found on port 3000');
-  }
+  freePort3000ForPhotoSync();
   
   // Update menu after a delay to ensure port is released
   setTimeout(() => {
@@ -220,7 +256,7 @@ function stopServer() {
 }
 
 function restartServer() {
-  console.log('Restarting server...');
+  safeConsole('log', 'Restarting server...');
   stopServer();
   setTimeout(() => {
     startServer();
@@ -233,18 +269,167 @@ function openUploadsFolder() {
 
 function getLocalIpAddresses() {
   const nets = os.networkInterfaces ? os.networkInterfaces() : {};
-  const ips = [];
+
+  const isRfc1918 = (ip) => {
+    if (typeof ip !== 'string') return false;
+    if (ip.startsWith('10.')) return true;
+    if (ip.startsWith('192.168.')) return true;
+    const m = ip.match(/^172\.(\d+)\./);
+    if (m) {
+      const n = Number(m[1]);
+      return n >= 16 && n <= 31;
+    }
+    return false;
+  };
+
+  const isBlockedInterface = (name) => {
+    const n = String(name || '').toLowerCase();
+    return (
+      n === 'lo0' ||
+      n.startsWith('lo') ||
+      n.startsWith('utun') ||
+      n.startsWith('tun') ||
+      n.startsWith('tap') ||
+      n.startsWith('bridge') ||
+      n.startsWith('vmnet') ||
+      n.startsWith('vboxnet') ||
+      n.startsWith('docker') ||
+      n.startsWith('br-') ||
+      n.startsWith('awdl') ||
+      n.startsWith('llw')
+    );
+  };
+
+  const preferredInterfaces = process.platform === 'darwin'
+    ? ['en0', 'en1']
+    : process.platform === 'win32'
+      ? ['wi-fi', 'wlan', 'ethernet']
+      : ['eth0', 'wlan0'];
+
+  const candidates = [];
   Object.keys(nets || {}).forEach((name) => {
+    if (isBlockedInterface(name)) return;
     const entries = nets[name] || [];
     entries.forEach((net) => {
       if (!net) return;
       if (net.family !== 'IPv4') return;
       if (net.internal) return;
       if (!net.address) return;
-      ips.push(net.address);
+      if (net.address.startsWith('169.254.')) return;
+      if (!isRfc1918(net.address)) return;
+
+      const key = String(name || '').toLowerCase();
+      const isPreferred = preferredInterfaces.some((p) => key === p || key.includes(p));
+      candidates.push({ name, address: net.address, preferred: isPreferred });
     });
   });
-  return Array.from(new Set(ips)).sort();
+
+  candidates.sort((a, b) => {
+    if (a.preferred !== b.preferred) return a.preferred ? -1 : 1;
+    return a.address.localeCompare(b.address);
+  });
+
+  const chosen = candidates.length > 0 ? candidates[0].address : null;
+  return chosen ? [chosen] : [];
+}
+
+function stopLegacyService() {
+  if (process.platform !== 'darwin') return;
+  try {
+    const agentPath = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.photosync.server.plist');
+    if (!fs.existsSync(agentPath)) return;
+
+    const uid = typeof process.getuid === 'function' ? String(process.getuid()) : '';
+    try {
+      if (uid) execSync(`launchctl bootout gui/${uid} "${agentPath}"`, { stdio: 'ignore' });
+    } catch (e) {
+      // ignore
+    }
+    try {
+      execSync(`launchctl unload "${agentPath}"`, { stdio: 'ignore' });
+    } catch (e) {
+      // ignore
+    }
+    try {
+      execSync('launchctl remove com.photosync.server', { stdio: 'ignore' });
+    } catch (e) {
+      // ignore
+    }
+
+    // Prevent respawn by removing the legacy plist.
+    try {
+      fs.unlinkSync(agentPath);
+      safeConsole('log', 'Removed legacy launch agent:', agentPath);
+    } catch (e) {
+      // ignore
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+function getPort3000Listeners() {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync('netstat -ano | findstr :3000', { encoding: 'utf8' }).toString();
+      const lines = out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const pids = new Set();
+      for (const line of lines) {
+        const parts = line.split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && /^\d+$/.test(pid)) pids.add(pid);
+      }
+      return Array.from(pids);
+    }
+
+    const out = execSync('lsof -ti:3000 -sTCP:LISTEN', { encoding: 'utf8' }).toString();
+    return out
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter((s) => /^\d+$/.test(s));
+  } catch (e) {
+    return [];
+  }
+}
+
+function isPhotoSyncOwnedPid(pid) {
+  try {
+    const cmd = execSync(`ps -p ${pid} -o command=`, { encoding: 'utf8' }).toString();
+    const hay = String(cmd || '');
+    if (hay.includes('PhotoSync Server.app/Contents/Resources/server/server.js')) return true;
+    if (hay.includes('/PhotoSync/server/server.js')) return true;
+    if (hay.includes('com.photosync.server')) return true;
+    if (hay.toLowerCase().includes('photosync') && hay.includes('server.js')) return true;
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+function freePort3000ForPhotoSync() {
+  const pids = getPort3000Listeners();
+  if (pids.length === 0) return true;
+
+  let killedAny = false;
+  for (const pid of pids) {
+    if (!isPhotoSyncOwnedPid(pid)) continue;
+    try {
+      if (process.platform === 'win32') {
+        execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+      } else {
+        execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+      }
+      killedAny = true;
+      safeConsole('log', 'Stopped PhotoSync listener on port 3000 (PID:', pid, ')');
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  if (!killedAny) return false;
+
+  const remaining = getPort3000Listeners();
+  return remaining.length === 0;
 }
 
 function notifyCopied(text) {
