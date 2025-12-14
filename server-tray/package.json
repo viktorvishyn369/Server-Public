@@ -17,18 +17,23 @@
     "files": [
       "main.js",
       "icon.png",
-      "icon-template.png",
-      "../server/**/*",
-      "!../server/node_modules",
-      "!../server/uploads",
-      "!../server/backup.db"
+      "package.json"
     ],
     "extraResources": [
       {
         "from": "../server",
         "to": "server",
-        "filter": ["**/*", "!node_modules", "!uploads", "!backup.db"]
+        "filter": [
+          "**/*",
+          "!uploads",
+          "!backup.db",
+          "!cloud",
+          "!node_modules"
+        ]
       }
+    ],
+    "asarUnpack": [
+      "**/node_modules/**"
     ],
     "directories": {
       "output": "dist"
@@ -56,6 +61,10 @@
       "target": [
         {
           "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
           "arch": ["x64"]
         }
       ],

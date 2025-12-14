@@ -9,25 +9,41 @@ let tray = null;
 let serverProcess = null;
 let serverPath = null;
 let uploadsPath = null;
+let dbPath = null;
+let cloudUsersPath = null;
 let updateAvailable = false;
 let latestVersion = null;
-let updateStatus = 'Not checked yet';
+let updateStatus = 'Updates: GitHub Releases';
 let startOnBoot = false;
 
 const store = new Store({ name: 'photosync-tray' });
 
-// Always use the actual server directory (not the bundled one)
-// This ensures uploads folder is in the right place
-serverPath = path.join(__dirname, '..', 'server');
-uploadsPath = path.join(serverPath, 'uploads');
-
-// Ensure uploads directory exists
-if (!fs.existsSync(uploadsPath)) {
-  fs.mkdirSync(uploadsPath, { recursive: true });
+function getBundledServerPath() {
+  if (app && app.isPackaged) return path.join(process.resourcesPath, 'server');
+  return path.join(__dirname, '..', 'server');
 }
 
-console.log('Server path:', serverPath);
-console.log('Uploads path:', uploadsPath);
+function getDataRoot() {
+  return app.getPath('userData');
+}
+
+function initPaths() {
+  serverPath = getBundledServerPath();
+  uploadsPath = path.join(getDataRoot(), 'uploads');
+  dbPath = path.join(getDataRoot(), 'backup.db');
+  cloudUsersPath = path.join(getDataRoot(), 'cloud', 'users');
+
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+  }
+
+  if (!fs.existsSync(cloudUsersPath)) {
+    fs.mkdirSync(cloudUsersPath, { recursive: true });
+  }
+
+  console.log('Server path:', serverPath);
+  console.log('Uploads path:', uploadsPath);
+}
 
 function setAutostart(enabled) {
   startOnBoot = enabled;
@@ -89,11 +105,34 @@ function startServer() {
     return;
   }
 
+  if (!serverPath || !uploadsPath || !dbPath) {
+    initPaths();
+  }
+
   console.log('Starting server from:', serverPath);
   
-  // Use pipe for stdio to keep process alive
-  serverProcess = spawn('node', ['server.js'], {
+  const serverEntry = path.join(serverPath, 'server.js');
+  const nodeModulesPaths = (app && app.isPackaged)
+    ? [
+        path.join(process.resourcesPath, 'app.asar', 'node_modules'),
+        path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+      ]
+    : [path.join(__dirname, 'node_modules')];
+
+  const nodePath = [...nodeModulesPaths, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
+  const env = {
+    ...process.env,
+    NODE_PATH: nodePath,
+    UPLOAD_DIR: uploadsPath,
+    DB_PATH: dbPath,
+    CLOUD_DIR: path.join(getDataRoot(), 'cloud')
+  };
+
+  // Use Electron's embedded Node runtime so system Node is not required.
+  // `--runAsNode` makes Electron behave like Node.js.
+  serverProcess = spawn(process.execPath, ['--runAsNode', serverEntry], {
     cwd: serverPath,
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false
   });
@@ -138,13 +177,34 @@ function stopServer() {
     }
   }
   
-  // Force kill any node process on port 3000
-  const { execSync } = require('child_process');
+  // Force kill any process on port 3000 (best-effort)
   try {
-    const pid = execSync('lsof -ti:3000').toString().trim();
-    if (pid) {
-      execSync(`kill -9 ${pid}`);
-      console.log('Server stopped (PID:', pid, ')');
+    if (process.platform === 'win32') {
+      const out = execSync('netstat -ano | findstr :3000', { encoding: 'utf8' }).toString();
+      const lines = out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const pids = new Set();
+      for (const line of lines) {
+        const parts = line.split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && /^\d+$/.test(pid)) pids.add(pid);
+      }
+      for (const pid of pids) {
+        try {
+          execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+          console.log('Server stopped (PID:', pid, ')');
+        } catch (e) {
+          // ignore
+        }
+      }
+      if (pids.size === 0) console.log('No server process found on port 3000');
+    } else {
+      const pid = execSync('lsof -ti:3000', { encoding: 'utf8' }).toString().trim();
+      if (pid) {
+        execSync(`kill -9 ${pid}`);
+        console.log('Server stopped (PID:', pid, ')');
+      } else {
+        console.log('No server process found on port 3000');
+      }
     }
   } catch (error) {
     console.log('No server process found on port 3000');
@@ -197,104 +257,23 @@ function notifyCopied(text) {
 }
 
 function checkForUpdates() {
-  console.log('Checking for updates...');
+  // Packaged apps should update as an app (not via git/npm scripts).
+  // Open GitHub Releases so the user can download the latest installer.
   try {
-    const result = execSync('npm run check-update', { 
-      cwd: serverPath,
-      encoding: 'utf8'
-    });
-    
-    const match = result.match(/"version":"([^"]+)"/);
-    if (match && result.includes('"available":true')) {
-      latestVersion = match[1];
-      updateAvailable = true;
-      updateStatus = `Update available: v${latestVersion}`;
-      
-      new Notification({
-        title: 'PhotoSync Update Available',
-        body: `Version ${latestVersion} is available!`,
-        silent: false
-      }).show();
-      
-      console.log(`Update available: v${latestVersion}`);
-    } else {
-      updateAvailable = false;
-      updateStatus = 'Up to date';
-      new Notification({
-        title: 'PhotoSync Up to Date',
-        body: 'You are running the latest version',
-        silent: false
-      }).show();
-      console.log('Already on latest version');
-    }
-    
-    updateTrayMenu();
-  } catch (error) {
-    console.error('Error checking for updates:', error);
-    updateStatus = 'Update check failed';
+    shell.openExternal('https://github.com/viktorvishyn369/PhotoSync/releases');
+  } catch (e) {
+    // ignore
   }
 }
 
 function installUpdate() {
-  console.log('Installing update...');
-  
-  new Notification({
-    title: 'PhotoSync Update',
-    body: 'Installing update... Server and tray will restart.',
-    silent: false
-  }).show();
-  
-  stopServer();
-  
-  setTimeout(() => {
-    try {
-      // Project root (contains server and server-tray)
-      const projectRoot = path.join(serverPath, '..');
-
-      console.log('Pulling latest code for full project...');
-      execSync('git pull origin main', {
-        cwd: projectRoot,
-        stdio: 'inherit'
-      });
-
-      console.log('Installing server dependencies...');
-      execSync('npm install --production', {
-        cwd: serverPath,
-        stdio: 'inherit'
-      });
-
-      console.log('Installing tray dependencies...');
-      const trayDir = __dirname; // server-tray directory
-      execSync('npm install', {
-        cwd: trayDir,
-        stdio: 'inherit'
-      });
-
-      new Notification({
-        title: 'PhotoSync Updated',
-        body: 'Update installed. Restarting tray and server...',
-        silent: false
-      }).show();
-
-      // Relaunch the tray app so new code is loaded on all platforms
-      updateAvailable = false;
-      updateTrayMenu();
-
-      setTimeout(() => {
-        app.relaunch();
-        app.exit(0);
-      }, 2000);
-    } catch (error) {
-      console.error('Update failed:', error);
-      new Notification({
-        title: 'PhotoSync Update Failed',
-        body: 'Failed to install update. Check logs.',
-        silent: false
-      }).show();
-      // Try to restart server with existing version
-      startServer();
-    }
-  }, 1000);
+  // Packaged apps should update as an app (not via git/npm scripts).
+  // Open GitHub Releases so the user can download the latest installer.
+  try {
+    shell.openExternal('https://github.com/viktorvishyn369/PhotoSync/releases');
+  } catch (e) {
+    // ignore
+  }
 }
 
 function checkServerRunning(callback) {
@@ -415,6 +394,7 @@ function updateTrayMenu() {
 }
 
 app.whenReady().then(() => {
+  initPaths();
   // Create tray icon
   const iconPath = path.join(__dirname, 'icon.png');
   const icon = nativeImage.createFromPath(iconPath);
@@ -447,16 +427,6 @@ app.whenReady().then(() => {
   
   // Start server automatically
   startServer();
-  
-  // Check for updates on startup (after 5 seconds)
-  setTimeout(() => {
-    checkForUpdates();
-  }, 5000);
-  
-  // Check for updates every 24 hours
-  setInterval(() => {
-    checkForUpdates();
-  }, 24 * 60 * 60 * 1000);
 });
 
 app.on('window-all-closed', (e) => {
