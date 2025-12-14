@@ -422,6 +422,41 @@ function getPort3000Listeners() {
   }
 }
 
+function isPort3000InUse() {
+  try {
+    if (process.platform === 'win32') {
+      const out = execSync('netstat -ano | findstr :3000', { encoding: 'utf8' }).toString();
+      return out.trim().length > 0;
+    }
+
+    try {
+      const out = execSync('lsof -nP -iTCP:3000 -sTCP:LISTEN || true', { encoding: 'utf8' }).toString();
+      const lines = out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      return lines.length > 1;
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      const out = execSync('ss -ltn 2>/dev/null | grep ":3000" || true', { encoding: 'utf8' }).toString();
+      return out.trim().length > 0;
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      const out = execSync('netstat -ltn 2>/dev/null | grep ":3000" || true', { encoding: 'utf8' }).toString();
+      return out.trim().length > 0;
+    } catch (e) {
+      // ignore
+    }
+
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 function isPhotoSyncOwnedPid(pid) {
   try {
     const pidStr = String(pid);
@@ -450,7 +485,10 @@ function isPhotoSyncOwnedPid(pid) {
 
 function freePort3000ForPhotoSync() {
   const pids = getPort3000Listeners();
-  if (pids.length === 0) return true;
+
+  // If the port is in use but we cannot discover any PID (common on Linux without
+  // permission to see process info), do NOT attempt to start a second server.
+  if (pids.length === 0) return !isPort3000InUse();
 
   let killedAny = false;
   for (const pid of pids) {
@@ -471,7 +509,8 @@ function freePort3000ForPhotoSync() {
   if (!killedAny) return false;
 
   const remaining = getPort3000Listeners();
-  return remaining.length === 0;
+  if (remaining.length > 0) return false;
+  return !isPort3000InUse();
 }
 
 function notifyCopied(text) {
