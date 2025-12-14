@@ -9,7 +9,8 @@
     "build": "electron-builder",
     "build-mac": "electron-builder --mac",
     "build-win": "electron-builder --win",
-    "build-linux": "electron-builder --linux"
+    "build-linux": "electron-builder --linux",
+    "rebuild-native": "electron-builder install-app-deps"
   },
   "build": {
     "appId": "com.photosync.server.tray",
@@ -17,7 +18,8 @@
     "files": [
       "main.js",
       "icon.png",
-      "package.json"
+      "package.json",
+      "node_modules/**/*"
     ],
     "extraResources": [
       {
@@ -33,7 +35,9 @@
       }
     ],
     "asarUnpack": [
-      "**/node_modules/**"
+      "**/*.node",
+      "**/node_modules/sqlite3/**",
+      "**/node_modules/bcrypt/**"
     ],
     "directories": {
       "output": "dist"
@@ -73,7 +77,17 @@
     }
   },
   "dependencies": {
-    "electron-store": "^8.1.0"
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "electron-store": "^8.1.0",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "sqlite3": "^5.1.7",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "electron": "^28.0.0",

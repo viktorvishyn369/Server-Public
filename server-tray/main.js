@@ -112,12 +112,15 @@ function startServer() {
   console.log('Starting server from:', serverPath);
   
   const serverEntry = path.join(serverPath, 'server.js');
-  const nodeModulesPaths = (app && app.isPackaged)
-    ? [
-        path.join(process.resourcesPath, 'app.asar', 'node_modules'),
-        path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
-      ]
-    : [path.join(__dirname, 'node_modules')];
+  const nodeModulesPaths = [
+    ...(app && app.isPackaged
+      ? [
+          path.join(process.resourcesPath, 'app.asar', 'node_modules'),
+          path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+        ]
+      : [path.join(__dirname, 'node_modules')]),
+    path.join(serverPath, 'node_modules')
+  ];
 
   const nodePath = [...nodeModulesPaths, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
   const env = {
