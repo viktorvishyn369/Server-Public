@@ -1,6 +1,6 @@
 {
   "name": "photosync-server-tray",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "PhotoSync Server - System Tray Manager",
   "author": "PhotoSync",
   "main": "main.js",
