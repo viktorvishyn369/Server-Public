@@ -46,6 +46,7 @@
     "mac": {
       "category": "public.app-category.utilities",
       "icon": "icon.png",
+      "minimumSystemVersion": "10.15.0",
       "target": [
         {
           "target": "dmg",
