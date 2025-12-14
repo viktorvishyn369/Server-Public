@@ -7,10 +7,14 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build-mac": "electron-builder --mac",
+    "build-mac:x64": "npm run rebuild-native:x64 && electron-builder --mac dmg --x64",
+    "build-mac:arm64": "npm run rebuild-native:arm64 && electron-builder --mac dmg --arm64",
+    "build-mac": "npm run build-mac:x64 && npm run build-mac:arm64",
     "build-win": "electron-builder --win",
     "build-linux": "electron-builder --linux",
-    "rebuild-native": "electron-builder install-app-deps"
+    "rebuild-native": "electron-builder install-app-deps",
+    "rebuild-native:x64": "npm_config_arch=x64 npm_config_target_arch=x64 electron-builder install-app-deps",
+    "rebuild-native:arm64": "npm_config_arch=arm64 npm_config_target_arch=arm64 electron-builder install-app-deps"
   },
   "build": {
     "appId": "com.photosync.server.tray",
@@ -49,8 +53,7 @@
       "minimumSystemVersion": "10.15.0",
       "target": [
         {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "target": "dmg"
         }
       ]
     },
