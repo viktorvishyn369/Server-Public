@@ -382,11 +382,41 @@ function getPort3000Listeners() {
       return Array.from(pids);
     }
 
-    const out = execSync('lsof -ti:3000 -sTCP:LISTEN', { encoding: 'utf8' }).toString();
-    return out
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter((s) => /^\d+$/.test(s));
+    try {
+      const out = execSync('lsof -ti:3000 -sTCP:LISTEN', { encoding: 'utf8' }).toString();
+      return out
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => /^\d+$/.test(s));
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      const out = execSync('ss -ltnp 2>/dev/null | grep ":3000" || true', { encoding: 'utf8' }).toString();
+      const pids = new Set();
+      for (const line of out.split(/\r?\n/)) {
+        const m = line.match(/pid=(\d+)/);
+        if (m && m[1]) pids.add(m[1]);
+      }
+      return Array.from(pids);
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      const out = execSync('netstat -ltnp 2>/dev/null | grep ":3000" || true', { encoding: 'utf8' }).toString();
+      const pids = new Set();
+      for (const line of out.split(/\r?\n/)) {
+        const m = line.match(/\s(\d+)\//);
+        if (m && m[1]) pids.add(m[1]);
+      }
+      return Array.from(pids);
+    } catch (e) {
+      // ignore
+    }
+
+    return [];
   } catch (e) {
     return [];
   }
@@ -394,7 +424,19 @@ function getPort3000Listeners() {
 
 function isPhotoSyncOwnedPid(pid) {
   try {
-    const cmd = execSync(`ps -p ${pid} -o command=`, { encoding: 'utf8' }).toString();
+    const pidStr = String(pid);
+    if (!/^\d+$/.test(pidStr)) return false;
+
+    if (process.platform === 'win32') {
+      const ps = `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pidStr}').CommandLine"`;
+      const cmd = execSync(ps, { encoding: 'utf8' }).toString();
+      const hay = String(cmd || '').toLowerCase();
+      if (hay.includes('photosync') && hay.includes('server')) return true;
+      if (hay.includes('server.js') && hay.includes('photosync')) return true;
+      return false;
+    }
+
+    const cmd = execSync(`ps -p ${pidStr} -o command=`, { encoding: 'utf8' }).toString();
     const hay = String(cmd || '');
     if (hay.includes('PhotoSync Server.app/Contents/Resources/server/server.js')) return true;
     if (hay.includes('/PhotoSync/server/server.js')) return true;
