@@ -15,6 +15,7 @@
   "build": {
     "appId": "com.photosync.server.tray",
     "productName": "PhotoSync Server",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
       "icon.png",
