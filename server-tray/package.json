@@ -1,6 +1,6 @@
 {
   "name": "photosync-server-tray",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "PhotoSync Server - System Tray Manager",
   "author": "PhotoSync",
   "main": "main.js",
@@ -51,6 +51,9 @@
       "category": "public.app-category.utilities",
       "icon": "icon.png",
       "minimumSystemVersion": "10.15.0",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "target": [
         {
           "target": "dmg"
