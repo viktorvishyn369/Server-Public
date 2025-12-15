@@ -570,31 +570,41 @@ function checkServerRunning(callback) {
 
 function updateTrayMenu() {
   checkServerRunning((isRunning) => {
+    const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '').trim();
     const ips = getLocalIpAddresses();
+
+    const ipSubmenu = ips.length > 0
+      ? [
+          { label: 'Click an address to copy', enabled: false },
+          { type: 'separator' },
+          ...ips.map((ip) => ({
+            label: ip,
+            click: () => {
+              clipboard.writeText(ip);
+              notifyCopied(ip);
+            }
+          }))
+        ]
+      : [{ label: 'No local IPv4 address detected', enabled: false }];
+
     const menuTemplate = [
       {
-        label: isRunning ? '🟢 Server Running' : '⚪ Server Stopped',
+        label: currentVersion ? `PhotoSync Server v${currentVersion}` : 'PhotoSync Server',
         enabled: false
       },
       {
-        label: `Update status: ${updateStatus}`,
+        label: isRunning ? 'Status: Running' : 'Status: Stopped',
+        enabled: false
+      },
+      {
+        label: updateStatus,
         enabled: false
       },
       { type: 'separator' },
-      ...(ips.length > 0
-        ? [
-            { label: 'Local IP (click to copy)', enabled: false },
-            ...ips.map((ip) => ({
-              label: ip,
-              click: () => {
-                clipboard.writeText(ip);
-                notifyCopied(ip);
-              }
-            }))
-          ]
-        : [
-            { label: 'No local IPv4 address detected', enabled: false }
-          ]),
+      {
+        label: 'Local IP Addresses',
+        submenu: ipSubmenu
+      },
       { type: 'separator' },
       {
         label: 'Open Files Location',
@@ -602,42 +612,48 @@ function updateTrayMenu() {
       },
       { type: 'separator' },
       {
-        label: 'Restart Server',
-        click: restartServer,
-        enabled: isRunning
+        label: 'Server',
+        submenu: [
+          {
+            label: 'Start',
+            click: startServer,
+            enabled: !isRunning
+          },
+          {
+            label: 'Restart',
+            click: restartServer,
+            enabled: isRunning
+          },
+          {
+            label: 'Stop',
+            click: stopServer,
+            enabled: isRunning
+          }
+        ]
       },
       {
-        label: 'Stop Server',
-        click: stopServer,
-        enabled: isRunning
-      },
-      {
-        label: 'Start Server',
-        click: startServer,
-        enabled: !isRunning
-      },
-      { type: 'separator' },
-      {
-        label: startOnBoot ? 'Start on Boot: ON ✅' : 'Start on Boot: OFF ⛔',
-        click: () => {
-          const newValue = !startOnBoot;
-          setAutostart(newValue);
+        label: 'Start on Boot',
+        type: 'checkbox',
+        checked: !!startOnBoot,
+        click: (menuItem) => {
+          setAutostart(!!menuItem.checked);
           updateTrayMenu();
         }
       },
-      { type: 'separator' }
+      { type: 'separator' },
+      
     ];
     
     // Add update menu items
     if (updateAvailable) {
       menuTemplate.push({
-        label: `✨ Update Available (v${latestVersion})`,
+        label: `Update Available (v${latestVersion})`,
         click: installUpdate
       });
     }
     
     menuTemplate.push({
-      label: 'Check for Updates',
+      label: 'Check for Updates…',
       click: checkForUpdates
     });
     
@@ -654,7 +670,8 @@ function updateTrayMenu() {
     tray.setContextMenu(contextMenu);
     
     // Update tooltip
-    let tooltip = isRunning ? 'PhotoSync Server - Running' : 'PhotoSync Server - Stopped';
+    let tooltip = currentVersion ? `PhotoSync Server v${currentVersion}` : 'PhotoSync Server';
+    tooltip += isRunning ? ' — Running' : ' — Stopped';
     if (updateAvailable) {
       tooltip += ` (Update available: v${latestVersion})`;
     }
