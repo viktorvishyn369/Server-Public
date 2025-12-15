@@ -2,7 +2,11 @@
   "name": "photosync-server-tray",
   "version": "1.0.5",
   "description": "PhotoSync Server - System Tray Manager",
-  "author": "PhotoSync",
+  "homepage": "https://github.com/viktorvishyn369/PhotoSync",
+  "author": {
+    "name": "PhotoSync",
+    "email": "photosync@users.noreply.github.com"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -81,7 +85,8 @@
         }
       ],
       "icon": "icon.png",
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "PhotoSync <photosync@users.noreply.github.com>"
     }
   },
   "dependencies": {
