@@ -128,7 +128,7 @@ function setAutostart(enabled) {
         const desktopContent = [
           '[Desktop Entry]',
           'Type=Application',
-          'Name=PhotoSync Server',
+          'Name=PhotoLynk Server',
           `Exec="${execPath}"`,
           'X-GNOME-Autostart-enabled=true',
           'NoDisplay=false',
@@ -164,7 +164,7 @@ function startServer() {
   if (!portIsFree) {
     try {
       new Notification({
-        title: 'PhotoSync Server',
+        title: 'PhotoLynk Server',
         body: 'Port 3000 is already in use by another app. Close it and try again.',
         silent: true
       }).show();
@@ -474,7 +474,9 @@ function isPhotoSyncOwnedPid(pid) {
     const cmd = execSync(`ps -p ${pidStr} -o command=`, { encoding: 'utf8' }).toString();
     const hay = String(cmd || '');
     if (hay.includes('PhotoSync Server.app/Contents/Resources/server/server.js')) return true;
+    if (hay.includes('PhotoLynk Server.app/Contents/Resources/server/server.js')) return true;
     if (hay.includes('/PhotoSync/server/server.js')) return true;
+    if (hay.includes('/PhotoLynk/server/server.js')) return true;
     if (hay.includes('com.photosync.server')) return true;
     if (hay.toLowerCase().includes('photosync') && hay.includes('server.js')) return true;
     return false;
@@ -500,7 +502,7 @@ function freePort3000ForPhotoSync() {
         execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
       }
       killedAny = true;
-      safeConsole('log', 'Stopped PhotoSync listener on port 3000 (PID:', pid, ')');
+      safeConsole('log', 'Stopped PhotoLynk listener on port 3000 (PID:', pid, ')');
     } catch (e) {
       // ignore
     }
@@ -529,7 +531,7 @@ function checkForUpdates() {
   // Packaged apps should update as an app (not via git/npm scripts).
   // Open GitHub Releases so the user can download the latest installer.
   try {
-    shell.openExternal('https://github.com/viktorvishyn369/PhotoSync/releases');
+    shell.openExternal('https://github.com/viktorvishyn369/PhotoLynk/releases');
   } catch (e) {
     // ignore
   }
@@ -539,7 +541,7 @@ function installUpdate() {
   // Packaged apps should update as an app (not via git/npm scripts).
   // Open GitHub Releases so the user can download the latest installer.
   try {
-    shell.openExternal('https://github.com/viktorvishyn369/PhotoSync/releases');
+    shell.openExternal('https://github.com/viktorvishyn369/PhotoLynk/releases');
   } catch (e) {
     // ignore
   }
@@ -589,7 +591,7 @@ function updateTrayMenu() {
 
     const menuTemplate = [
       {
-        label: currentVersion ? `PhotoSync Server v${currentVersion}` : 'PhotoSync Server',
+        label: currentVersion ? `PhotoLynk Server v${currentVersion}` : 'PhotoLynk Server',
         enabled: false
       },
       {
@@ -670,7 +672,7 @@ function updateTrayMenu() {
     tray.setContextMenu(contextMenu);
     
     // Update tooltip
-    let tooltip = currentVersion ? `PhotoSync Server v${currentVersion}` : 'PhotoSync Server';
+    let tooltip = currentVersion ? `PhotoLynk Server v${currentVersion}` : 'PhotoLynk Server';
     tooltip += isRunning ? ' — Running' : ' — Stopped';
     if (updateAvailable) {
       tooltip += ` (Update available: v${latestVersion})`;
@@ -689,7 +691,7 @@ app.whenReady().then(() => {
   const trayIcon = icon.resize({ width: 22, height: 22 });
   
   tray = new Tray(trayIcon);
-  tray.setToolTip('PhotoSync Server');
+  tray.setToolTip('PhotoLynk Server');
   
   // Update menu when clicked
   tray.on('click', () => {

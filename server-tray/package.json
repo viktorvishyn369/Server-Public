@@ -1,10 +1,10 @@
 {
   "name": "photosync-server-tray",
   "version": "1.0.1",
-  "description": "PhotoSync Server - System Tray Manager",
-  "homepage": "https://github.com/viktorvishyn369/PhotoSync",
+  "description": "PhotoLynk Server - System Tray Manager",
+  "homepage": "https://github.com/viktorvishyn369/PhotoLynk",
   "author": {
-    "name": "PhotoSync",
+    "name": "PhotoLynk",
     "email": "photosync@users.noreply.github.com"
   },
   "main": "main.js",
@@ -22,7 +22,7 @@
   },
   "build": {
     "appId": "com.photosync.server.tray",
-    "productName": "PhotoSync Server",
+    "productName": "PhotoLynk Server",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
@@ -86,7 +86,7 @@
       ],
       "icon": "icon.png",
       "category": "Utility",
-      "maintainer": "PhotoSync <photosync@users.noreply.github.com>"
+      "maintainer": "PhotoLynk <photosync@users.noreply.github.com>"
     }
   },
   "dependencies": {
