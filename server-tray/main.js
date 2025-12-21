@@ -17,7 +17,7 @@ let latestVersion = null;
 let updateStatus = 'Updates: GitHub Releases';
 let startOnBoot = false;
 
-const store = new Store({ name: 'photosync-tray' });
+const store = new Store({ name: 'photolynk-tray' });
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
