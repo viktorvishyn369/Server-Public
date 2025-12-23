@@ -1,11 +1,14 @@
-const { app, Tray, Menu, shell, nativeImage, Notification, clipboard } = require('electron');
+const { app, Tray, Menu, shell, nativeImage, Notification, clipboard, BrowserWindow, ipcMain } = require('electron');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const Store = require('electron-store');
 
 let tray = null;
+let qrWindow = null;
+let backupWindow = null;
 let serverProcess = null;
 let serverPath = null;
 let uploadsPath = null;
@@ -547,6 +550,657 @@ function installUpdate() {
   }
 }
 
+// ============================================================================
+// QR CODE PAIRING SYSTEM
+// ============================================================================
+
+function generatePairingToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function getPairingData() {
+  const ips = getLocalIpAddresses();
+  const ip = ips.length > 0 ? ips[0] : '127.0.0.1';
+  
+  // Get or create a persistent pairing token
+  let pairingToken = store.get('pairingToken');
+  if (!pairingToken) {
+    pairingToken = generatePairingToken();
+    store.set('pairingToken', pairingToken);
+  }
+  
+  return {
+    type: 'photolynk-local',
+    ip: ip,
+    port: 3000,
+    token: pairingToken,
+    name: os.hostname() || 'PhotoLynk Server'
+  };
+}
+
+function showQRCodeWindow() {
+  if (qrWindow && !qrWindow.isDestroyed()) {
+    qrWindow.focus();
+    return;
+  }
+  
+  const pairingData = getPairingData();
+  const qrDataString = JSON.stringify(pairingData);
+  
+  qrWindow = new BrowserWindow({
+    width: 420,
+    height: 520,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    alwaysOnTop: true,
+    title: 'Pair Mobile Device',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+  
+  // Generate QR code HTML
+  const QRCode = require('qrcode');
+  QRCode.toDataURL(qrDataString, { width: 280, margin: 2 }, (err, url) => {
+    if (err) {
+      safeConsole('error', 'Failed to generate QR code:', err);
+      qrWindow.close();
+      return;
+    }
+    
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .title {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #a0a0a0;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .qr-container {
+      background: #fff;
+      padding: 16px;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .qr-code {
+      display: block;
+      width: 280px;
+      height: 280px;
+    }
+    .instructions {
+      margin-top: 24px;
+      text-align: center;
+      max-width: 340px;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+    .step-num {
+      background: #4a90d9;
+      color: #fff;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+    .step-text {
+      font-size: 13px;
+      color: #d0d0d0;
+      line-height: 1.4;
+    }
+    .ip-info {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .ip-label { color: #a0a0a0; }
+    .ip-value { color: #4a90d9; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="title">📱 Pair Mobile Device</div>
+  <div class="subtitle">Scan this QR code with the PhotoLynk mobile app</div>
+  
+  <div class="qr-container">
+    <img class="qr-code" src="${url}" alt="QR Code">
+  </div>
+  
+  <div class="instructions">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Open PhotoLynk app on your phone</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">Select "Local" connection type</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">Tap "Scan QR Code" and point at this screen</div>
+    </div>
+  </div>
+  
+  <div class="ip-info">
+    <span class="ip-label">Server IP: </span>
+    <span class="ip-value">${pairingData.ip}:${pairingData.port}</span>
+  </div>
+</body>
+</html>`;
+    
+    qrWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  });
+  
+  qrWindow.on('closed', () => {
+    qrWindow = null;
+  });
+  
+  // Hide menu bar
+  qrWindow.setMenuBarVisibility(false);
+}
+
+// ============================================================================
+// DESKTOP BACKUP CLIENT
+// ============================================================================
+
+function getPhotoFolders() {
+  const folders = [];
+  const home = os.homedir();
+  
+  if (process.platform === 'darwin') {
+    // macOS
+    folders.push(path.join(home, 'Pictures'));
+    folders.push(path.join(home, 'Photos Library.photoslibrary')); // Apple Photos
+    folders.push(path.join(home, 'Desktop'));
+    folders.push(path.join(home, 'Downloads'));
+  } else if (process.platform === 'win32') {
+    // Windows
+    folders.push(path.join(home, 'Pictures'));
+    folders.push(path.join(home, 'Videos'));
+    folders.push(path.join(home, 'Desktop'));
+    folders.push(path.join(home, 'Downloads'));
+    // OneDrive Pictures
+    const oneDrive = path.join(home, 'OneDrive', 'Pictures');
+    if (fs.existsSync(oneDrive)) folders.push(oneDrive);
+  } else {
+    // Linux
+    folders.push(path.join(home, 'Pictures'));
+    folders.push(path.join(home, 'Videos'));
+    folders.push(path.join(home, 'Desktop'));
+    folders.push(path.join(home, 'Downloads'));
+  }
+  
+  return folders.filter(f => {
+    try {
+      return fs.existsSync(f) && fs.statSync(f).isDirectory();
+    } catch (e) {
+      return false;
+    }
+  });
+}
+
+function showBackupWindow() {
+  if (backupWindow && !backupWindow.isDestroyed()) {
+    backupWindow.focus();
+    return;
+  }
+  
+  const credentials = store.get('backupCredentials') || {};
+  const photoFolders = getPhotoFolders();
+  
+  backupWindow = new BrowserWindow({
+    width: 600,
+    height: 700,
+    resizable: true,
+    minimizable: true,
+    maximizable: false,
+    title: 'Desktop Backup',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+  
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+      padding: 24px;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #a0a0a0;
+      margin-bottom: 24px;
+    }
+    .section {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #4a90d9;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: #a0a0a0;
+      margin-bottom: 6px;
+    }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      font-size: 14px;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #4a90d9;
+    }
+    .folder-list {
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    .folder-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+    .folder-item input[type="checkbox"] {
+      width: auto;
+      margin-right: 12px;
+    }
+    .folder-path {
+      font-size: 13px;
+      color: #d0d0d0;
+      word-break: break-all;
+    }
+    .btn {
+      padding: 14px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #4a90d9;
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #3a7bc8;
+    }
+    .btn-primary:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      margin-right: 12px;
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.15);
+    }
+    .status {
+      margin-top: 20px;
+      padding: 16px;
+      background: rgba(74,144,217,0.1);
+      border-radius: 8px;
+      display: none;
+    }
+    .status.visible { display: block; }
+    .status-text { font-size: 14px; }
+    .progress-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #4a90d9;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .radio-group {
+      display: flex;
+      gap: 16px;
+    }
+    .radio-option {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      cursor: pointer;
+      flex: 1;
+    }
+    .radio-option.selected {
+      background: rgba(74,144,217,0.2);
+      border: 1px solid #4a90d9;
+    }
+    .radio-option input {
+      width: auto;
+      margin-right: 10px;
+    }
+    .note {
+      font-size: 12px;
+      color: #888;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🖥️ Desktop Backup</h1>
+  <p class="subtitle">Backup photos and videos from this computer</p>
+  
+  <div class="section">
+    <div class="section-title">Backup Destination</div>
+    <div class="radio-group">
+      <label class="radio-option" id="opt-remote">
+        <input type="radio" name="destination" value="remote">
+        <div>
+          <div style="font-weight:600">Remote Server</div>
+          <div style="font-size:12px;color:#888">Your own server</div>
+        </div>
+      </label>
+      <label class="radio-option" id="opt-stealthcloud">
+        <input type="radio" name="destination" value="stealthcloud" checked>
+        <div>
+          <div style="font-weight:600">StealthCloud</div>
+          <div style="font-size:12px;color:#888">Managed cloud</div>
+        </div>
+      </label>
+    </div>
+  </div>
+  
+  <div class="section" id="remote-config" style="display:none">
+    <div class="section-title">Remote Server Settings</div>
+    <div class="form-group">
+      <label>Server Address (IP or Domain)</label>
+      <input type="text" id="remote-address" placeholder="e.g., 192.168.1.100 or backup.example.com" value="${credentials.remoteAddress || ''}">
+    </div>
+    <div class="form-group">
+      <label>Port</label>
+      <input type="text" id="remote-port" placeholder="3000" value="${credentials.remotePort || '3000'}">
+    </div>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">Account Credentials</div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="email" placeholder="your@email.com" value="${credentials.email || ''}">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Your password" value="${credentials.password || ''}">
+    </div>
+    <p class="note">Use the same credentials as your mobile app to sync across devices.</p>
+  </div>
+  
+  <div class="section">
+    <div class="section-title">Folders to Backup</div>
+    <div class="folder-list">
+      ${photoFolders.map((f, i) => `
+        <div class="folder-item">
+          <input type="checkbox" id="folder-${i}" value="${f}" ${i === 0 ? 'checked' : ''}>
+          <span class="folder-path">${f}</span>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  
+  <div style="display:flex;align-items:center">
+    <button class="btn btn-secondary" onclick="window.close()">Cancel</button>
+    <button class="btn btn-primary" id="backup-btn" onclick="startBackup()">Start Backup</button>
+  </div>
+  
+  <div class="status" id="status">
+    <div class="status-text" id="status-text">Preparing...</div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+  </div>
+  
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // Handle destination radio buttons
+    document.querySelectorAll('input[name="destination"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        document.querySelectorAll('.radio-option').forEach(opt => opt.classList.remove('selected'));
+        e.target.closest('.radio-option').classList.add('selected');
+        document.getElementById('remote-config').style.display = 
+          e.target.value === 'remote' ? 'block' : 'none';
+      });
+    });
+    
+    // Initialize selected state
+    document.querySelector('input[name="destination"]:checked')
+      .closest('.radio-option').classList.add('selected');
+    
+    function startBackup() {
+      const destination = document.querySelector('input[name="destination"]:checked').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      
+      if (!email || !password) {
+        alert('Please enter your email and password');
+        return;
+      }
+      
+      const folders = [];
+      document.querySelectorAll('.folder-item input:checked').forEach(cb => {
+        folders.push(cb.value);
+      });
+      
+      if (folders.length === 0) {
+        alert('Please select at least one folder to backup');
+        return;
+      }
+      
+      const config = {
+        destination,
+        email,
+        password,
+        folders,
+        remoteAddress: document.getElementById('remote-address').value,
+        remotePort: document.getElementById('remote-port').value || '3000'
+      };
+      
+      document.getElementById('backup-btn').disabled = true;
+      document.getElementById('status').classList.add('visible');
+      
+      ipcRenderer.send('start-desktop-backup', config);
+    }
+    
+    ipcRenderer.on('backup-progress', (event, data) => {
+      document.getElementById('status-text').textContent = data.message;
+      document.getElementById('progress-fill').style.width = (data.progress * 100) + '%';
+    });
+    
+    ipcRenderer.on('backup-complete', (event, data) => {
+      document.getElementById('status-text').textContent = data.message;
+      document.getElementById('progress-fill').style.width = '100%';
+      document.getElementById('backup-btn').disabled = false;
+      document.getElementById('backup-btn').textContent = 'Backup Complete ✓';
+    });
+    
+    ipcRenderer.on('backup-error', (event, data) => {
+      document.getElementById('status-text').textContent = 'Error: ' + data.message;
+      document.getElementById('backup-btn').disabled = false;
+    });
+  </script>
+</body>
+</html>`;
+  
+  backupWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  
+  backupWindow.on('closed', () => {
+    backupWindow = null;
+  });
+  
+  backupWindow.setMenuBarVisibility(false);
+}
+
+// IPC handlers for backup
+let activeBackupClient = null;
+
+ipcMain.on('start-desktop-backup', async (event, config) => {
+  try {
+    // Save credentials for next time
+    store.set('backupCredentials', {
+      email: config.email,
+      password: config.password,
+      remoteAddress: config.remoteAddress,
+      remotePort: config.remotePort
+    });
+    
+    event.reply('backup-progress', { message: 'Scanning for photos and videos...', progress: 0 });
+    
+    // Scan folders for media files
+    const mediaFiles = [];
+    const extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.bmp', '.webp', 
+                        '.mp4', '.mov', '.avi', '.mkv', '.m4v', '.3gp'];
+    
+    for (const folder of config.folders) {
+      try {
+        scanFolder(folder, mediaFiles, extensions);
+      } catch (e) {
+        safeConsole('error', 'Error scanning folder:', folder, e);
+      }
+    }
+    
+    event.reply('backup-progress', { 
+      message: 'Found ' + mediaFiles.length + ' files to backup...', 
+      progress: 0.05 
+    });
+    
+    if (mediaFiles.length === 0) {
+      event.reply('backup-complete', { message: 'No media files found in selected folders.' });
+      return;
+    }
+    
+    // Start actual backup with encryption and chunking
+    const { DesktopBackupClient } = require('./backup-client');
+    
+    activeBackupClient = new DesktopBackupClient(config, (progress) => {
+      event.reply('backup-progress', progress);
+    });
+    
+    const result = await activeBackupClient.backup(mediaFiles);
+    activeBackupClient = null;
+    
+    event.reply('backup-complete', { 
+      message: 'Backup complete! Uploaded: ' + result.uploaded + ', Skipped: ' + result.skipped + ', Failed: ' + result.failed
+    });
+    
+  } catch (error) {
+    safeConsole('error', 'Backup error:', error);
+    activeBackupClient = null;
+    event.reply('backup-error', { message: error.message || 'Unknown error' });
+  }
+});
+
+ipcMain.on('cancel-desktop-backup', () => {
+  if (activeBackupClient) {
+    activeBackupClient.cancel();
+  }
+});
+
+function scanFolder(folderPath, results, extensions, depth = 0) {
+  if (depth > 5) return; // Limit recursion depth
+  
+  try {
+    const items = fs.readdirSync(folderPath);
+    for (const item of items) {
+      if (item.startsWith('.')) continue; // Skip hidden files
+      
+      const fullPath = path.join(folderPath, item);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          scanFolder(fullPath, results, extensions, depth + 1);
+        } else if (stat.isFile()) {
+          const ext = path.extname(item).toLowerCase();
+          if (extensions.includes(ext)) {
+            results.push({
+              path: fullPath,
+              name: item,
+              size: stat.size,
+              modified: stat.mtime
+            });
+          }
+        }
+      } catch (e) {
+        // Skip files we can't access
+      }
+    }
+  } catch (e) {
+    // Skip folders we can't read
+  }
+}
+
 function checkServerRunning(callback) {
   const net = require('net');
   const client = new net.Socket();
@@ -611,6 +1265,15 @@ function updateTrayMenu() {
       {
         label: 'Open Files Location',
         click: openUploadsFolder
+      },
+      { type: 'separator' },
+      {
+        label: '📱 Pair Mobile Device (QR Code)',
+        click: showQRCodeWindow
+      },
+      {
+        label: '🖥️ Desktop Backup...',
+        click: showBackupWindow
       },
       { type: 'separator' },
       {
