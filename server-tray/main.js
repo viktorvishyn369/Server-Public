@@ -588,13 +588,15 @@ function showQRCodeWindow() {
   const qrDataString = JSON.stringify(pairingData);
   
   qrWindow = new BrowserWindow({
-    width: 420,
-    height: 520,
-    resizable: false,
+    width: 360,
+    height: 480,
+    minWidth: 320,
+    minHeight: 420,
+    resizable: true,
     minimizable: false,
     maximizable: false,
     alwaysOnTop: true,
-    title: 'Pair Mobile Device',
+    title: 'Connect Mobile',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -615,109 +617,120 @@ function showQRCodeWindow() {
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --accent: #4a90d9;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --text-muted: #666;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: #fff;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      padding: 20px;
+      height: 100vh;
+      padding: clamp(12px, 4vw, 24px);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: clamp(12px, 3vw, 20px);
     }
     .title {
-      font-size: 22px;
+      font-size: clamp(16px, 5vw, 20px);
       font-weight: 600;
-      margin-bottom: 8px;
-      color: #fff;
     }
     .subtitle {
-      font-size: 14px;
-      color: #a0a0a0;
-      margin-bottom: 24px;
-      text-align: center;
+      font-size: clamp(11px, 3vw, 13px);
+      color: var(--text-secondary);
+      margin-top: 4px;
     }
     .qr-container {
       background: #fff;
-      padding: 16px;
-      border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      padding: clamp(10px, 3vw, 16px);
+      border-radius: clamp(10px, 3vw, 14px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
     .qr-code {
       display: block;
-      width: 280px;
-      height: 280px;
+      width: clamp(160px, 50vw, 220px);
+      height: clamp(160px, 50vw, 220px);
     }
-    .instructions {
-      margin-top: 24px;
-      text-align: center;
-      max-width: 340px;
+    .steps {
+      margin-top: clamp(12px, 3vw, 20px);
+      width: 100%;
+      max-width: 300px;
     }
     .step {
       display: flex;
-      align-items: flex-start;
-      margin-bottom: 12px;
-      text-align: left;
+      align-items: center;
+      margin-bottom: clamp(6px, 1.5vw, 10px);
     }
     .step-num {
-      background: #4a90d9;
+      background: var(--accent);
       color: #fff;
-      width: 24px;
-      height: 24px;
+      width: clamp(18px, 5vw, 22px);
+      height: clamp(18px, 5vw, 22px);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      font-size: clamp(10px, 2.5vw, 11px);
       font-weight: 600;
-      margin-right: 12px;
+      margin-right: clamp(8px, 2vw, 10px);
       flex-shrink: 0;
     }
     .step-text {
-      font-size: 13px;
-      color: #d0d0d0;
-      line-height: 1.4;
+      font-size: clamp(11px, 3vw, 12px);
+      color: var(--text-secondary);
     }
-    .ip-info {
-      margin-top: 16px;
-      padding: 12px 16px;
-      background: rgba(255,255,255,0.1);
+    .ip-badge {
+      margin-top: clamp(10px, 2.5vw, 16px);
+      padding: clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px);
+      background: rgba(74,144,217,0.15);
       border-radius: 8px;
-      font-size: 13px;
+      font-size: clamp(11px, 3vw, 12px);
     }
-    .ip-label { color: #a0a0a0; }
-    .ip-value { color: #4a90d9; font-weight: 600; }
+    .ip-badge span { color: var(--accent); font-weight: 600; }
   </style>
 </head>
 <body>
-  <div class="title">📱 Pair Mobile Device</div>
-  <div class="subtitle">Scan this QR code with the PhotoLynk mobile app</div>
+  <div class="header">
+    <div class="title">📱 Connect Mobile</div>
+    <div class="subtitle">Scan with PhotoLynk app</div>
+  </div>
   
   <div class="qr-container">
     <img class="qr-code" src="${url}" alt="QR Code">
   </div>
   
-  <div class="instructions">
+  <div class="steps">
     <div class="step">
       <div class="step-num">1</div>
-      <div class="step-text">Open PhotoLynk app on your phone</div>
+      <div class="step-text">Open PhotoLynk on your phone</div>
     </div>
     <div class="step">
       <div class="step-num">2</div>
-      <div class="step-text">Select "Local" connection type</div>
+      <div class="step-text">Select "Local" server type</div>
     </div>
     <div class="step">
       <div class="step-num">3</div>
-      <div class="step-text">Tap "Scan QR Code" and point at this screen</div>
+      <div class="step-text">Tap "Scan QR" and point here</div>
     </div>
   </div>
   
-  <div class="ip-info">
-    <span class="ip-label">Server IP: </span>
-    <span class="ip-value">${pairingData.ip}:${pairingData.port}</span>
+  <div class="ip-badge">
+    Server: <span>${pairingData.ip}:${pairingData.port}</span>
   </div>
 </body>
 </html>`;
@@ -783,8 +796,10 @@ function showBackupWindow() {
   const photoFolders = getPhotoFolders();
   
   backupWindow = new BrowserWindow({
-    width: 600,
-    height: 700,
+    width: 420,
+    height: 580,
+    minWidth: 360,
+    minHeight: 480,
     resizable: true,
     minimizable: true,
     maximizable: false,
@@ -800,244 +815,354 @@ function showBackupWindow() {
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-card: rgba(255,255,255,0.05);
+      --bg-input: rgba(255,255,255,0.08);
+      --accent: #4a90d9;
+      --accent-hover: #3a7bc8;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0a0;
+      --text-muted: #666;
+      --border: rgba(255,255,255,0.1);
+      --success: #4CAF50;
+      --error: #FF6B6B;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1a1a2e;
-      color: #fff;
-      padding: 24px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: clamp(12px, 3vw, 20px);
     }
-    h1 {
-      font-size: 24px;
-      margin-bottom: 8px;
+    .header {
+      text-align: center;
+      padding-bottom: clamp(8px, 2vw, 12px);
+      flex-shrink: 0;
     }
-    .subtitle {
-      color: #a0a0a0;
-      margin-bottom: 24px;
+    .header h1 {
+      font-size: clamp(16px, 4vw, 20px);
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .header .subtitle {
+      font-size: clamp(11px, 2.5vw, 12px);
+      color: var(--text-secondary);
+    }
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(8px, 2vw, 12px);
+      min-height: 0;
     }
     .section {
-      background: rgba(255,255,255,0.05);
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
+      background: var(--bg-card);
+      border-radius: 10px;
+      padding: clamp(10px, 2.5vw, 14px);
+      flex-shrink: 0;
     }
     .section-title {
-      font-size: 16px;
+      font-size: clamp(12px, 3vw, 14px);
       font-weight: 600;
-      margin-bottom: 16px;
-      color: #4a90d9;
+      margin-bottom: clamp(8px, 2vw, 10px);
+      color: var(--accent);
     }
-    .form-group {
-      margin-bottom: 16px;
+    .radio-group {
+      display: flex;
+      gap: clamp(6px, 2vw, 10px);
     }
-    label {
-      display: block;
-      font-size: 13px;
-      color: #a0a0a0;
-      margin-bottom: 6px;
-    }
-    input, select {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid rgba(255,255,255,0.1);
+    .radio-option {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: clamp(8px, 2vw, 10px) clamp(10px, 2.5vw, 12px);
+      background: var(--bg-input);
+      border: 1px solid transparent;
       border-radius: 8px;
-      background: rgba(255,255,255,0.05);
-      color: #fff;
-      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
     }
-    input:focus, select:focus {
+    .radio-option:hover { background: rgba(255,255,255,0.1); }
+    .radio-option.selected {
+      background: rgba(74,144,217,0.15);
+      border-color: var(--accent);
+    }
+    .radio-option input { display: none; }
+    .radio-dot {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--text-secondary);
+      border-radius: 50%;
+      margin-right: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .radio-option.selected .radio-dot {
+      border-color: var(--accent);
+    }
+    .radio-option.selected .radio-dot::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+    }
+    .radio-label { font-size: clamp(11px, 2.8vw, 13px); font-weight: 500; }
+    .radio-sublabel { font-size: clamp(9px, 2.2vw, 10px); color: var(--text-muted); margin-top: 1px; }
+    .form-row {
+      display: flex;
+      gap: clamp(6px, 2vw, 10px);
+      margin-bottom: clamp(6px, 1.5vw, 8px);
+    }
+    .form-row:last-child { margin-bottom: 0; }
+    .form-group { flex: 1; }
+    .form-group label {
+      display: block;
+      font-size: clamp(10px, 2.5vw, 11px);
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: clamp(8px, 2vw, 10px) clamp(10px, 2.5vw, 12px);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-input);
+      color: var(--text-primary);
+      font-size: clamp(12px, 3vw, 13px);
+    }
+    .form-group input:focus {
       outline: none;
-      border-color: #4a90d9;
+      border-color: var(--accent);
+    }
+    .form-group input::placeholder { color: var(--text-muted); }
+    .note {
+      font-size: clamp(9px, 2.2vw, 10px);
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+    .folders-section {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
     }
     .folder-list {
-      max-height: 150px;
+      flex: 1;
       overflow-y: auto;
+      max-height: clamp(60px, 15vh, 100px);
     }
     .folder-item {
       display: flex;
       align-items: center;
-      padding: 8px 12px;
-      background: rgba(255,255,255,0.03);
+      padding: clamp(6px, 1.5vw, 8px) clamp(8px, 2vw, 10px);
+      background: var(--bg-input);
       border-radius: 6px;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
+      cursor: pointer;
     }
+    .folder-item:hover { background: rgba(255,255,255,0.1); }
     .folder-item input[type="checkbox"] {
-      width: auto;
-      margin-right: 12px;
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      accent-color: var(--accent);
+      flex-shrink: 0;
     }
     .folder-path {
-      font-size: 13px;
-      color: #d0d0d0;
-      word-break: break-all;
+      font-size: clamp(10px, 2.5vw, 11px);
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .footer {
+      display: flex;
+      gap: clamp(8px, 2vw, 10px);
+      padding-top: clamp(10px, 2.5vw, 14px);
+      flex-shrink: 0;
     }
     .btn {
-      padding: 14px 24px;
+      flex: 1;
+      padding: clamp(10px, 2.5vw, 12px);
       border: none;
       border-radius: 8px;
-      font-size: 15px;
+      font-size: clamp(12px, 3vw, 14px);
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
     }
+    .btn-secondary {
+      background: var(--bg-input);
+      color: var(--text-primary);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.15); }
     .btn-primary {
-      background: #4a90d9;
+      background: var(--accent);
       color: #fff;
     }
-    .btn-primary:hover {
-      background: #3a7bc8;
-    }
+    .btn-primary:hover { background: var(--accent-hover); }
     .btn-primary:disabled {
-      background: #555;
+      background: #444;
       cursor: not-allowed;
     }
-    .btn-secondary {
-      background: rgba(255,255,255,0.1);
-      color: #fff;
-      margin-right: 12px;
-    }
-    .btn-secondary:hover {
-      background: rgba(255,255,255,0.15);
+    .btn-success {
+      background: var(--success);
     }
     .status {
-      margin-top: 20px;
-      padding: 16px;
       background: rgba(74,144,217,0.1);
       border-radius: 8px;
+      padding: clamp(10px, 2.5vw, 12px);
+      margin-top: clamp(8px, 2vw, 10px);
       display: none;
+      flex-shrink: 0;
     }
     .status.visible { display: block; }
-    .status-text { font-size: 14px; }
+    .status-text {
+      font-size: clamp(11px, 2.8vw, 12px);
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
     .progress-bar {
-      height: 6px;
+      height: 4px;
       background: rgba(255,255,255,0.1);
-      border-radius: 3px;
-      margin-top: 12px;
+      border-radius: 2px;
       overflow: hidden;
     }
     .progress-fill {
       height: 100%;
-      background: #4a90d9;
+      background: var(--accent);
       width: 0%;
       transition: width 0.3s;
     }
-    .radio-group {
-      display: flex;
-      gap: 16px;
-    }
-    .radio-option {
-      display: flex;
-      align-items: center;
-      padding: 12px 16px;
-      background: rgba(255,255,255,0.03);
-      border-radius: 8px;
-      cursor: pointer;
-      flex: 1;
-    }
-    .radio-option.selected {
-      background: rgba(74,144,217,0.2);
-      border: 1px solid #4a90d9;
-    }
-    .radio-option input {
-      width: auto;
-      margin-right: 10px;
-    }
-    .note {
-      font-size: 12px;
-      color: #888;
-      margin-top: 8px;
-    }
+    .status.error .status-text { color: var(--error); }
+    .status.success .progress-fill { background: var(--success); }
+    #remote-config { display: none; }
+    #remote-config.visible { display: block; }
   </style>
 </head>
 <body>
-  <h1>🖥️ Desktop Backup</h1>
-  <p class="subtitle">Backup photos and videos from this computer</p>
+  <div class="header">
+    <h1>🖥️ Desktop Backup</h1>
+    <p class="subtitle">Backup photos & videos from this computer</p>
+  </div>
   
-  <div class="section">
-    <div class="section-title">Backup Destination</div>
-    <div class="radio-group">
-      <label class="radio-option" id="opt-remote">
-        <input type="radio" name="destination" value="remote">
-        <div>
-          <div style="font-weight:600">Remote Server</div>
-          <div style="font-size:12px;color:#888">Your own server</div>
+  <div class="content">
+    <div class="section">
+      <div class="section-title">Destination</div>
+      <div class="radio-group">
+        <label class="radio-option" id="opt-remote">
+          <input type="radio" name="destination" value="remote">
+          <div class="radio-dot"></div>
+          <div>
+            <div class="radio-label">Remote Server</div>
+            <div class="radio-sublabel">Your own server</div>
+          </div>
+        </label>
+        <label class="radio-option selected" id="opt-stealthcloud">
+          <input type="radio" name="destination" value="stealthcloud" checked>
+          <div class="radio-dot"></div>
+          <div>
+            <div class="radio-label">StealthCloud</div>
+            <div class="radio-sublabel">Managed cloud</div>
+          </div>
+        </label>
+      </div>
+    </div>
+    
+    <div class="section" id="remote-config">
+      <div class="section-title">Remote Server</div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>Address</label>
+          <input type="text" id="remote-address" placeholder="192.168.1.100" value="${credentials.remoteAddress || ''}">
         </div>
-      </label>
-      <label class="radio-option" id="opt-stealthcloud">
-        <input type="radio" name="destination" value="stealthcloud" checked>
-        <div>
-          <div style="font-weight:600">StealthCloud</div>
-          <div style="font-size:12px;color:#888">Managed cloud</div>
+        <div class="form-group" style="flex:1">
+          <label>Port</label>
+          <input type="text" id="remote-port" placeholder="3000" value="${credentials.remotePort || '3000'}">
         </div>
-      </label>
+      </div>
     </div>
-  </div>
-  
-  <div class="section" id="remote-config" style="display:none">
-    <div class="section-title">Remote Server Settings</div>
-    <div class="form-group">
-      <label>Server Address (IP or Domain)</label>
-      <input type="text" id="remote-address" placeholder="e.g., 192.168.1.100 or backup.example.com" value="${credentials.remoteAddress || ''}">
-    </div>
-    <div class="form-group">
-      <label>Port</label>
-      <input type="text" id="remote-port" placeholder="3000" value="${credentials.remotePort || '3000'}">
-    </div>
-  </div>
-  
-  <div class="section">
-    <div class="section-title">Account Credentials</div>
-    <div class="form-group">
-      <label>Email</label>
-      <input type="email" id="email" placeholder="your@email.com" value="${credentials.email || ''}">
-    </div>
-    <div class="form-group">
-      <label>Password</label>
-      <input type="password" id="password" placeholder="Your password" value="${credentials.password || ''}">
-    </div>
-    <p class="note">Use the same credentials as your mobile app to sync across devices.</p>
-  </div>
-  
-  <div class="section">
-    <div class="section-title">Folders to Backup</div>
-    <div class="folder-list">
-      ${photoFolders.map((f, i) => `
-        <div class="folder-item">
-          <input type="checkbox" id="folder-${i}" value="${f}" ${i === 0 ? 'checked' : ''}>
-          <span class="folder-path">${f}</span>
+    
+    <div class="section">
+      <div class="section-title">Credentials</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="email" placeholder="your@email.com" value="${credentials.email || ''}">
         </div>
-      `).join('')}
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="password" placeholder="Password" value="${credentials.password || ''}">
+        </div>
+      </div>
+      <p class="note">Use same credentials as mobile app to sync across devices.</p>
+    </div>
+    
+    <div class="section folders-section">
+      <div class="section-title">Folders</div>
+      <div class="folder-list">
+        ${photoFolders.map((f, i) => `
+          <label class="folder-item">
+            <input type="checkbox" value="${f}" ${i === 0 ? 'checked' : ''}>
+            <span class="folder-path" title="${f}">${f}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    
+    <div class="status" id="status">
+      <div class="status-text" id="status-text">Preparing...</div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
     </div>
   </div>
   
-  <div style="display:flex;align-items:center">
-    <button class="btn btn-secondary" onclick="window.close()">Cancel</button>
+  <div class="footer">
+    <button class="btn btn-secondary" id="cancel-btn" onclick="handleCancel()">Cancel</button>
     <button class="btn btn-primary" id="backup-btn" onclick="startBackup()">Start Backup</button>
-  </div>
-  
-  <div class="status" id="status">
-    <div class="status-text" id="status-text">Preparing...</div>
-    <div class="progress-bar">
-      <div class="progress-fill" id="progress-fill"></div>
-    </div>
   </div>
   
   <script>
     const { ipcRenderer } = require('electron');
+    let isBackingUp = false;
     
-    // Handle destination radio buttons
     document.querySelectorAll('input[name="destination"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         document.querySelectorAll('.radio-option').forEach(opt => opt.classList.remove('selected'));
         e.target.closest('.radio-option').classList.add('selected');
-        document.getElementById('remote-config').style.display = 
-          e.target.value === 'remote' ? 'block' : 'none';
+        const remoteConfig = document.getElementById('remote-config');
+        if (e.target.value === 'remote') {
+          remoteConfig.classList.add('visible');
+        } else {
+          remoteConfig.classList.remove('visible');
+        }
       });
     });
     
-    // Initialize selected state
-    document.querySelector('input[name="destination"]:checked')
-      .closest('.radio-option').classList.add('selected');
+    function handleCancel() {
+      if (isBackingUp) {
+        ipcRenderer.send('cancel-desktop-backup');
+        document.getElementById('status-text').textContent = 'Cancelling...';
+      } else {
+        window.close();
+      }
+    }
     
     function startBackup() {
       const destination = document.querySelector('input[name="destination"]:checked').value;
@@ -1045,7 +1170,7 @@ function showBackupWindow() {
       const password = document.getElementById('password').value;
       
       if (!email || !password) {
-        alert('Please enter your email and password');
+        showError('Please enter email and password');
         return;
       }
       
@@ -1055,7 +1180,7 @@ function showBackupWindow() {
       });
       
       if (folders.length === 0) {
-        alert('Please select at least one folder to backup');
+        showError('Select at least one folder');
         return;
       }
       
@@ -1068,10 +1193,23 @@ function showBackupWindow() {
         remotePort: document.getElementById('remote-port').value || '3000'
       };
       
+      isBackingUp = true;
       document.getElementById('backup-btn').disabled = true;
+      document.getElementById('backup-btn').textContent = 'Backing up...';
+      document.getElementById('cancel-btn').textContent = 'Stop';
       document.getElementById('status').classList.add('visible');
+      document.getElementById('status').classList.remove('error', 'success');
       
       ipcRenderer.send('start-desktop-backup', config);
+    }
+    
+    function showError(msg) {
+      const status = document.getElementById('status');
+      status.classList.add('visible', 'error');
+      document.getElementById('status-text').textContent = msg;
+      setTimeout(() => {
+        status.classList.remove('visible', 'error');
+      }, 3000);
     }
     
     ipcRenderer.on('backup-progress', (event, data) => {
@@ -1080,15 +1218,23 @@ function showBackupWindow() {
     });
     
     ipcRenderer.on('backup-complete', (event, data) => {
+      isBackingUp = false;
+      document.getElementById('status').classList.add('success');
       document.getElementById('status-text').textContent = data.message;
       document.getElementById('progress-fill').style.width = '100%';
       document.getElementById('backup-btn').disabled = false;
-      document.getElementById('backup-btn').textContent = 'Backup Complete ✓';
+      document.getElementById('backup-btn').textContent = 'Done ✓';
+      document.getElementById('backup-btn').classList.add('btn-success');
+      document.getElementById('cancel-btn').textContent = 'Close';
     });
     
     ipcRenderer.on('backup-error', (event, data) => {
-      document.getElementById('status-text').textContent = 'Error: ' + data.message;
+      isBackingUp = false;
+      document.getElementById('status').classList.add('error');
+      document.getElementById('status-text').textContent = data.message;
       document.getElementById('backup-btn').disabled = false;
+      document.getElementById('backup-btn').textContent = 'Retry';
+      document.getElementById('cancel-btn').textContent = 'Close';
     });
   </script>
 </body>
@@ -1268,7 +1414,7 @@ function updateTrayMenu() {
       },
       { type: 'separator' },
       {
-        label: '📱 Pair Mobile Device (QR Code)',
+        label: '📱 Connect Mobile (QR Code)',
         click: showQRCodeWindow
       },
       {
@@ -1347,11 +1493,25 @@ function updateTrayMenu() {
 app.whenReady().then(() => {
   initPaths();
   // Create tray icon
-  const iconPath = path.join(__dirname, 'icon.png');
-  const icon = nativeImage.createFromPath(iconPath);
+  // Use template icon (black/white, auto-inverts) on macOS 10.14+ for dark mode support
+  // Use color icon on older macOS and other platforms
+  let trayIcon;
+  const isMac = process.platform === 'darwin';
+  const macVersion = isMac ? parseInt(require('os').release().split('.')[0], 10) : 0;
+  const supportsDarkMode = isMac && macVersion >= 18; // macOS 10.14 Mojave = Darwin 18
   
-  // Resize for tray - macOS menu bar icons are typically 22x22 points
-  const trayIcon = icon.resize({ width: 22, height: 22 });
+  if (supportsDarkMode) {
+    // Template icon - macOS will auto-invert for dark/light mode
+    const templatePath = path.join(__dirname, 'iconTemplate.png');
+    const templateIcon = nativeImage.createFromPath(templatePath);
+    trayIcon = templateIcon.resize({ width: 22, height: 22 });
+    trayIcon.setTemplateImage(true);
+  } else {
+    // Color icon for older macOS and other platforms
+    const iconPath = path.join(__dirname, 'icon.png');
+    const icon = nativeImage.createFromPath(iconPath);
+    trayIcon = icon.resize({ width: 22, height: 22 });
+  }
   
   tray = new Tray(trayIcon);
   tray.setToolTip('PhotoLynk Server');

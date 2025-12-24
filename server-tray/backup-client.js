@@ -45,6 +45,14 @@ class DesktopBackupClient {
     this.cancelled = false;
   }
 
+  normalizeFilenameForCompare(name) {
+    if (!name || typeof name !== 'string') return null;
+    const base = path.basename(name);
+    const trimmed = (base || '').trim();
+    if (!trimmed) return null;
+    return trimmed.toLowerCase();
+  }
+
   getBaseUrl() {
     if (this.config.destination === 'stealthcloud') {
       return STEALTHCLOUD_BASE_URL;
@@ -53,9 +61,7 @@ class DesktopBackupClient {
       const port = this.config.remotePort || '3000';
       return `https://${host}:${port}`;
     } else {
-      const host = this.config.localAddress || '127.0.0.1';
-      const port = this.config.localPort || '3000';
-      return `http://${host}:${port}`;
+      throw new Error('Invalid destination (expected remote or stealthcloud)');
     }
   }
 
@@ -111,13 +117,16 @@ class DesktopBackupClient {
   }
 
   // Create chunk nonce from base nonce + chunk index (same as mobile)
+  // Mobile uses little-endian byte order for the chunk index
   makeChunkNonce(baseNonce16, chunkIndex) {
     const nonce = new Uint8Array(24);
     nonce.set(baseNonce16, 0);
-    // Write chunk index as big-endian 64-bit at bytes 16-23
-    const view = new DataView(nonce.buffer);
-    view.setUint32(16, 0, false);
-    view.setUint32(20, chunkIndex, false);
+    // Write chunk index as little-endian 64-bit at bytes 16-23 (matching mobile)
+    let x = BigInt(chunkIndex);
+    for (let i = 0; i < 8; i++) {
+      nonce[16 + i] = Number(x & 0xffn);
+      x >>= 8n;
+    }
     return nonce;
   }
 
@@ -144,6 +153,58 @@ class DesktopBackupClient {
       }
       throw error;
     }
+  }
+
+  async uploadClassicRawFile(file) {
+    const baseUrl = this.getBaseUrl();
+    const url = `${baseUrl}/api/upload/raw`;
+    const filePath = file && file.path ? file.path : null;
+    const fileName = file && file.name ? file.name : null;
+    if (!filePath || !fileName) throw new Error('Invalid file');
+
+    const stream = fs.createReadStream(filePath);
+    await axios.post(url, stream, {
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'X-Device-UUID': this.deviceUuid,
+        'X-Filename': fileName,
+        'Content-Type': 'application/octet-stream'
+      },
+      timeout: 5 * 60 * 1000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    });
+  }
+
+  async getExistingClassicFilenames() {
+    const baseUrl = this.getBaseUrl();
+    const out = new Set();
+    const pageLimit = 500;
+    let offset = 0;
+
+    while (true) {
+      const response = await axios.get(`${baseUrl}/api/files`, {
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'X-Device-UUID': this.deviceUuid
+        },
+        params: { offset, limit: pageLimit },
+        timeout: 30000
+      });
+
+      const files = (response.data && response.data.files) ? response.data.files : [];
+      for (const f of files) {
+        const n = this.normalizeFilenameForCompare(f && f.filename ? f.filename : null);
+        if (n) out.add(n);
+      }
+
+      if (!files || files.length < pageLimit) break;
+      offset += files.length;
+      const total = typeof response.data?.total === 'number' ? response.data.total : null;
+      if (typeof total === 'number' && offset >= total) break;
+    }
+
+    return out;
   }
 
   // Upload manifest to StealthCloud
@@ -287,14 +348,21 @@ class DesktopBackupClient {
     // Login first
     await this.login();
 
-    // Derive master key (same as mobile app)
-    this.masterKey = this.deriveMasterKey(this.config.password, this.config.email);
+    const isStealthCloud = this.config.destination === 'stealthcloud';
 
-    this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
+    let existingIds = null;
+    let existingClassic = null;
 
-    // Get existing manifests to skip already backed up files
-    const existingManifests = await this.getExistingManifests();
-    const existingIds = new Set(existingManifests.map(m => m.manifestId));
+    if (isStealthCloud) {
+      // Derive master key (same as mobile app)
+      this.masterKey = this.deriveMasterKey(this.config.password, this.config.email);
+      this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
+      const existingManifests = await this.getExistingManifests();
+      existingIds = new Set(existingManifests.map(m => m.manifestId));
+    } else {
+      this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
+      existingClassic = await this.getExistingClassicFilenames();
+    }
 
     let uploaded = 0;
     let skipped = 0;
@@ -306,20 +374,42 @@ class DesktopBackupClient {
       }
 
       const file = mediaFiles[i];
-      const manifestId = crypto.createHash('sha256').update(`desktop:${file.path}`).digest('hex');
 
-      // Skip if already backed up
-      if (existingIds.has(manifestId)) {
-        skipped++;
-        this.progressCallback({
-          message: `Skipping ${file.name} (already backed up)`,
-          progress: 0.1 + (i / mediaFiles.length) * 0.9
-        });
-        continue;
+      if (isStealthCloud) {
+        const manifestId = crypto.createHash('sha256').update(`desktop:${file.path}`).digest('hex');
+        if (existingIds && existingIds.has(manifestId)) {
+          skipped++;
+          this.progressCallback({
+            message: `Skipping ${file.name} (already backed up)`,
+            progress: 0.1 + (i / mediaFiles.length) * 0.9
+          });
+          continue;
+        }
+      } else {
+        const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
+        if (normalized && existingClassic && existingClassic.has(normalized)) {
+          skipped++;
+          this.progressCallback({
+            message: `Skipping ${file.name} (already backed up)`,
+            progress: 0.1 + (i / mediaFiles.length) * 0.9
+          });
+          continue;
+        }
       }
 
       try {
-        await this.uploadFile(file, i, mediaFiles.length);
+        if (isStealthCloud) {
+          const res = await this.uploadFile(file, i, mediaFiles.length);
+          if (existingIds && res && res.manifestId) existingIds.add(res.manifestId);
+        } else {
+          this.progressCallback({
+            message: `Uploading ${file.name}`,
+            progress: 0.1 + (i / mediaFiles.length) * 0.9
+          });
+          await this.uploadClassicRawFile(file);
+          const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
+          if (normalized && existingClassic) existingClassic.add(normalized);
+        }
         uploaded++;
       } catch (error) {
         console.error(`Failed to upload ${file.name}:`, error.message);
