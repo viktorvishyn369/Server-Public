@@ -1,6 +1,6 @@
 {
   "name": "photolynk-server-tray",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "PhotoLynk Server - System Tray Manager",
   "homepage": "https://github.com/viktorvishyn369/PhotoLynk",
   "author": {
@@ -22,7 +22,7 @@
   },
   "build": {
     "appId": "com.photolynk.server.tray",
-    "productName": "PhotoLynk Server",
+    "productName": "PhotoLynk Desktop",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
