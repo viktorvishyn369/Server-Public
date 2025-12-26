@@ -1,4 +1,4 @@
-const { app, Tray, Menu, shell, nativeImage, Notification, clipboard, BrowserWindow, ipcMain } = require('electron');
+const { app, Tray, Menu, shell, nativeImage, Notification, clipboard, BrowserWindow, ipcMain, powerSaveBlocker } = require('electron');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -19,6 +19,7 @@ let updateAvailable = false;
 let latestVersion = null;
 let updateStatus = 'Updates: GitHub Releases';
 let startOnBoot = false;
+let backupPowerSaveBlockerId = null;
 
 const store = new Store({ name: 'photolynk-tray' });
 
@@ -33,6 +34,28 @@ if (!hasSingleInstanceLock) {
       // ignore
     }
   });
+}
+
+function startBackupPowerSaveBlocker() {
+  try {
+    if (backupPowerSaveBlockerId && powerSaveBlocker.isStarted(backupPowerSaveBlockerId)) return;
+    backupPowerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  } catch (e) {
+    backupPowerSaveBlockerId = null;
+  }
+}
+
+function stopBackupPowerSaveBlocker() {
+  try {
+    if (!backupPowerSaveBlockerId) return;
+    if (powerSaveBlocker.isStarted(backupPowerSaveBlockerId)) {
+      powerSaveBlocker.stop(backupPowerSaveBlockerId);
+    }
+  } catch (e) {
+    // ignore
+  } finally {
+    backupPowerSaveBlockerId = null;
+  }
 }
 
 function appendLog(line) {
@@ -620,11 +643,14 @@ function showQRCodeWindow() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     :root {
-      --bg-primary: #1a1a2e;
-      --accent: #4a90d9;
-      --text-primary: #ffffff;
-      --text-secondary: #a0a0a0;
-      --text-muted: #666;
+      --bg-primary: #0A0A0A;
+      --bg-card: #1E1E1E;
+      --accent: #BB86FC;
+      --accent-secondary: #03DAC6;
+      --text-primary: #FFFFFF;
+      --text-secondary: #AAAAAA;
+      --text-muted: #666666;
+      --border: #333333;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -659,7 +685,7 @@ function showQRCodeWindow() {
       background: #fff;
       padding: clamp(10px, 3vw, 16px);
       border-radius: clamp(10px, 3vw, 14px);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     }
     .qr-code {
       display: block;
@@ -678,7 +704,7 @@ function showQRCodeWindow() {
     }
     .step-num {
       background: var(--accent);
-      color: #fff;
+      color: #000;
       width: clamp(18px, 5vw, 22px);
       height: clamp(18px, 5vw, 22px);
       border-radius: 50%;
@@ -697,11 +723,11 @@ function showQRCodeWindow() {
     .ip-badge {
       margin-top: clamp(10px, 2.5vw, 16px);
       padding: clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px);
-      background: rgba(74,144,217,0.15);
+      background: rgba(187,134,252,0.15);
       border-radius: 8px;
       font-size: clamp(11px, 3vw, 12px);
     }
-    .ip-badge span { color: var(--accent); font-weight: 600; }
+    .ip-badge span { color: var(--accent-secondary); font-weight: 600; }
   </style>
 </head>
 <body>
@@ -818,17 +844,18 @@ function showBackupWindow() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     :root {
-      --bg-primary: #1a1a2e;
-      --bg-card: rgba(255,255,255,0.05);
-      --bg-input: rgba(255,255,255,0.08);
-      --accent: #4a90d9;
-      --accent-hover: #3a7bc8;
-      --text-primary: #ffffff;
-      --text-secondary: #a0a0a0;
-      --text-muted: #666;
-      --border: rgba(255,255,255,0.1);
-      --success: #4CAF50;
-      --error: #FF6B6B;
+      --bg-primary: #0A0A0A;
+      --bg-card: #1E1E1E;
+      --bg-input: #1A1A1A;
+      --accent: #BB86FC;
+      --accent-hover: #9B66DC;
+      --accent-secondary: #03DAC6;
+      --text-primary: #FFFFFF;
+      --text-secondary: #AAAAAA;
+      --text-muted: #666666;
+      --border: #333333;
+      --success: #03DAC6;
+      --error: #CF6679;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -892,9 +919,9 @@ function showBackupWindow() {
       cursor: pointer;
       transition: all 0.2s;
     }
-    .radio-option:hover { background: rgba(255,255,255,0.1); }
+    .radio-option:hover { background: rgba(255,255,255,0.08); }
     .radio-option.selected {
-      background: rgba(74,144,217,0.15);
+      background: rgba(187,134,252,0.15);
       border-color: var(--accent);
     }
     .radio-option input { display: none; }
@@ -1022,7 +1049,7 @@ function showBackupWindow() {
       background: var(--success);
     }
     .status {
-      background: rgba(74,144,217,0.1);
+      background: rgba(187,134,252,0.1);
       border-radius: 8px;
       padding: clamp(10px, 2.5vw, 12px);
       margin-top: clamp(8px, 2vw, 10px);
@@ -1262,7 +1289,50 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
       remotePort: config.remotePort
     });
     
-    event.reply('backup-progress', { message: 'Scanning for photos and videos...', progress: 0 });
+    // For StealthCloud, check subscription first
+    if (config.destination === 'stealthcloud') {
+      const { DesktopBackupClient } = require('./backup-client');
+      const checkClient = new DesktopBackupClient(config, (progress) => {
+        event.reply('backup-progress', progress);
+      });
+      
+      // Login first to get token
+      await checkClient.login();
+      
+      // Check subscription status
+      const subStatus = await checkClient.checkSubscription();
+      
+      if (!subStatus.allowed) {
+        // Show branded notification about subscription
+        try {
+          new Notification({
+            title: 'PhotoLynk Subscription Required',
+            body: subStatus.reason || 'Open PhotoLynk on your mobile device to subscribe.',
+            silent: false
+          }).show();
+        } catch (e) {
+          // Notification may fail on some systems
+        }
+        
+        event.reply('backup-error', { 
+          message: subStatus.reason || 'Subscription required. Open PhotoLynk on your mobile device to subscribe.',
+          code: 'SUBSCRIPTION_REQUIRED'
+        });
+        return;
+      }
+      
+      // Store subscription info for space check later
+      config._subscriptionStatus = subStatus;
+      
+      // Show subscription info
+      const planLabel = subStatus.planGb === 1000 ? '1 TB' : (subStatus.planGb + ' GB');
+      event.reply('backup-progress', { 
+        message: `Subscription active (${planLabel} plan)`, 
+        progress: 0.04 
+      });
+    }
+    
+    event.reply('backup-progress', { message: 'Scanning for photos and videos...', progress: 0.05 });
     
     // Scan folders for media files
     const mediaFiles = [];
@@ -1279,7 +1349,7 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
     
     event.reply('backup-progress', { 
       message: 'Found ' + mediaFiles.length + ' files to backup...', 
-      progress: 0.05 
+      progress: 0.1 
     });
     
     if (mediaFiles.length === 0) {
@@ -1293,9 +1363,19 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
     activeBackupClient = new DesktopBackupClient(config, (progress) => {
       event.reply('backup-progress', progress);
     });
+
+    if (config.destination === 'stealthcloud') {
+      startBackupPowerSaveBlocker();
+      event.reply('backup-progress', {
+        message: 'Keeping this computer awake while backing up to StealthCloud (screen may turn off as usual)...',
+        progress: 0.11
+      });
+    }
     
     const result = await activeBackupClient.backup(mediaFiles);
     activeBackupClient = null;
+
+    stopBackupPowerSaveBlocker();
     
     event.reply('backup-complete', { 
       message: 'Backup complete! Uploaded: ' + result.uploaded + ', Skipped: ' + result.skipped + ', Failed: ' + result.failed
@@ -1304,7 +1384,41 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
   } catch (error) {
     safeConsole('error', 'Backup error:', error);
     activeBackupClient = null;
-    event.reply('backup-error', { message: error.message || 'Unknown error' });
+
+    stopBackupPowerSaveBlocker();
+
+    const code = error && (error.code || error.errorCode);
+    if (code === 'INSUFFICIENT_SPACE') {
+      const formatBytes = (bytes) => {
+        const n = Number(bytes || 0);
+        if (!Number.isFinite(n) || n <= 0) return '0 B';
+        if (n < 1000) return `${n} B`;
+        if (n < 1000 * 1000) return `${(n / 1000).toFixed(1)} KB`;
+        if (n < 1000 * 1000 * 1000) return `${(n / (1000 * 1000)).toFixed(1)} MB`;
+        return `${(n / (1000 * 1000 * 1000)).toFixed(2)} GB`;
+      };
+
+      const requiredStr = formatBytes(error.requiredSpace);
+      const remainingStr = formatBytes(error.remainingBytes);
+
+      try {
+        new Notification({
+          title: 'PhotoLynk - Not Enough Space',
+          body: `Need ${requiredStr}, only ${remainingStr} available. Upgrade your plan in the mobile app.`,
+          silent: false
+        }).show();
+      } catch (e) {
+        // ignore
+      }
+
+      event.reply('backup-error', {
+        message: `Not enough cloud storage. Need ${requiredStr}, but only ${remainingStr} available. Upgrade your plan in the PhotoLynk mobile app.`,
+        code: 'INSUFFICIENT_SPACE'
+      });
+      return;
+    }
+
+    event.reply('backup-error', { message: (error && error.message) ? error.message : 'Unknown error' });
   }
 });
 
@@ -1312,6 +1426,7 @@ ipcMain.on('cancel-desktop-backup', () => {
   if (activeBackupClient) {
     activeBackupClient.cancel();
   }
+  stopBackupPowerSaveBlocker();
 });
 
 function scanFolder(folderPath, results, extensions, depth = 0) {
@@ -1375,9 +1490,10 @@ function updateTrayMenu() {
     const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '').trim();
     const ips = getLocalIpAddresses();
 
+    // Build IP submenu
     const ipSubmenu = ips.length > 0
       ? [
-          { label: 'Click an address to copy', enabled: false },
+          { label: 'Click to copy', enabled: false },
           { type: 'separator' },
           ...ips.map((ip) => ({
             label: ip,
@@ -1387,63 +1503,68 @@ function updateTrayMenu() {
             }
           }))
         ]
-      : [{ label: 'No local IPv4 address detected', enabled: false }];
+      : [{ label: 'No network detected', enabled: false }];
 
-    const menuTemplate = [
+    // Local Server submenu
+    const localServerSubmenu = [
       {
-        label: currentVersion ? `PhotoLynk Server v${currentVersion}` : 'PhotoLynk Server',
-        enabled: false
-      },
-      {
-        label: isRunning ? 'Status: Running' : 'Status: Stopped',
-        enabled: false
-      },
-      {
-        label: updateStatus,
+        label: isRunning ? '● Running' : '○ Stopped',
         enabled: false
       },
       { type: 'separator' },
       {
-        label: 'Local IP Addresses',
-        submenu: ipSubmenu
+        label: 'Pair Mobile Device (QR)',
+        click: showQRCodeWindow
       },
-      { type: 'separator' },
       {
-        label: 'Open Files Location',
+        label: 'View Received Files',
         click: openUploadsFolder
       },
       { type: 'separator' },
       {
-        label: '📱 Connect Mobile (QR Code)',
-        click: showQRCodeWindow
-      },
-      {
-        label: '🖥️ Desktop Backup...',
-        click: showBackupWindow
+        label: 'Network Address',
+        submenu: ipSubmenu
       },
       { type: 'separator' },
       {
-        label: 'Server',
-        submenu: [
-          {
-            label: 'Start',
-            click: startServer,
-            enabled: !isRunning
-          },
-          {
-            label: 'Restart',
-            click: restartServer,
-            enabled: isRunning
-          },
-          {
-            label: 'Stop',
-            click: stopServer,
-            enabled: isRunning
-          }
-        ]
+        label: 'Start',
+        click: startServer,
+        enabled: !isRunning
       },
       {
-        label: 'Start on Boot',
+        label: 'Restart',
+        click: restartServer,
+        enabled: isRunning
+      },
+      {
+        label: 'Stop',
+        click: stopServer,
+        enabled: isRunning
+      }
+    ];
+
+    // Main menu - clearly separated sections
+    const menuTemplate = [
+      {
+        label: currentVersion ? `PhotoLynk v${currentVersion}` : 'PhotoLynk',
+        enabled: false
+      },
+      { type: 'separator' },
+      // Cloud Backup section
+      {
+        label: 'Backup This PC to StealthCloud',
+        click: showBackupWindow
+      },
+      { type: 'separator' },
+      // Local Server section
+      {
+        label: 'Local Server',
+        submenu: localServerSubmenu
+      },
+      { type: 'separator' },
+      // Preferences
+      {
+        label: 'Launch at Login',
         type: 'checkbox',
         checked: !!startOnBoot,
         click: (menuItem) => {
@@ -1451,8 +1572,6 @@ function updateTrayMenu() {
           updateTrayMenu();
         }
       },
-      { type: 'separator' },
-      
     ];
     
     // Add update menu items
@@ -1461,16 +1580,16 @@ function updateTrayMenu() {
         label: `Update Available (v${latestVersion})`,
         click: installUpdate
       });
+    } else {
+      menuTemplate.push({
+        label: 'Check for Updates',
+        click: checkForUpdates
+      });
     }
-    
-    menuTemplate.push({
-      label: 'Check for Updates…',
-      click: checkForUpdates
-    });
     
     menuTemplate.push({ type: 'separator' });
     menuTemplate.push({
-      label: 'Quit',
+      label: 'Quit PhotoLynk',
       click: () => {
         stopServer();
         app.quit();
@@ -1493,10 +1612,10 @@ function updateTrayMenu() {
 app.whenReady().then(() => {
   initPaths();
   // Create tray icon
-  // Use template icon (black/white, auto-inverts) on macOS 10.14+ for dark mode support
-  // Use color icon on older macOS and other platforms
   let trayIcon;
   const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  const isLinux = process.platform === 'linux';
   const macVersion = isMac ? parseInt(require('os').release().split('.')[0], 10) : 0;
   const supportsDarkMode = isMac && macVersion >= 18; // macOS 10.14 Mojave = Darwin 18
   
@@ -1506,8 +1625,15 @@ app.whenReady().then(() => {
     const templateIcon = nativeImage.createFromPath(templatePath);
     trayIcon = templateIcon.resize({ width: 22, height: 22 });
     trayIcon.setTemplateImage(true);
+  } else if (isWin) {
+    const iconPath = path.join(__dirname, 'icon.png');
+    const icon = nativeImage.createFromPath(iconPath);
+    trayIcon = icon.resize({ width: 16, height: 16 });
+  } else if (isLinux) {
+    const iconPath = path.join(__dirname, 'icon.png');
+    const icon = nativeImage.createFromPath(iconPath);
+    trayIcon = icon.resize({ width: 24, height: 24 });
   } else {
-    // Color icon for older macOS and other platforms
     const iconPath = path.join(__dirname, 'icon.png');
     const icon = nativeImage.createFromPath(iconPath);
     trayIcon = icon.resize({ width: 22, height: 22 });
@@ -1546,10 +1672,15 @@ app.on('window-all-closed', (e) => {
 });
 
 app.on('before-quit', () => {
+  stopBackupPowerSaveBlocker();
   stopServer();
 });
 
 // Hide dock icon on macOS
-if (process.platform === 'darwin') {
-  app.dock.hide();
+if (process.platform === 'darwin' && app.dock) {
+  try {
+    app.dock.hide();
+  } catch (e) {
+    // Ignore - dock may not be available
+  }
 }

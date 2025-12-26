@@ -15,6 +15,36 @@ const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks (same as mobile)
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
 const UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'; // Same as mobile app
 
+const MAX_PARALLEL_CHUNK_UPLOADS = 4;
+const MAX_PARALLEL_FILE_UPLOADS = 2;
+
+function createConcurrencyLimiter(maxParallel) {
+  const max = Math.max(1, Number(maxParallel) || 1);
+  const queue = [];
+  let active = 0;
+  const pump = () => {
+    while (active < max && queue.length) {
+      const next = queue.shift();
+      if (!next) break;
+      active += 1;
+      Promise.resolve().then(next.fn).then(next.resolve, next.reject).finally(() => { active -= 1; pump(); });
+    }
+  };
+  return (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); pump(); });
+}
+
+async function trackInFlightPromise(inFlight, p, maxInFlight) {
+  inFlight.add(p);
+  const cleanup = () => { try { inFlight.delete(p); } catch (e) {} };
+  p.then(cleanup, cleanup);
+  if (inFlight.size >= maxInFlight) await Promise.race(inFlight);
+}
+
+async function drainInFlightPromises(inFlight) {
+  if (!inFlight || inFlight.size === 0) return;
+  await Promise.all(Array.from(inFlight));
+}
+
 // UUID v5 implementation (SHA-1 based, same as mobile app's uuidv5)
 function uuidv5(name, namespace) {
   // Parse namespace UUID to bytes
@@ -91,6 +121,85 @@ class DesktopBackupClient {
         throw new Error('Invalid email or password');
       }
       throw new Error('Login failed: ' + (error.message || 'Unknown error'));
+    }
+  }
+
+  // Check subscription status before allowing backup
+  async checkSubscription() {
+    const baseUrl = this.getBaseUrl();
+    this.progressCallback({ message: 'Checking subscription...', progress: 0.03 });
+
+    try {
+      const response = await axios.get(`${baseUrl}/api/cloud/usage`, {
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'X-Device-UUID': this.deviceUuid
+        },
+        timeout: 30000
+      });
+
+      const data = response.data || {};
+      const subscription = data.subscription || {};
+      const planGb = data.planGb;
+      const status = subscription.status;
+
+      // Check if user has an active subscription or trial
+      if (status === 'active' || status === 'trial') {
+        return {
+          allowed: true,
+          planGb,
+          status,
+          usedBytes: data.usedBytes || 0,
+          remainingBytes: data.remainingBytes || 0,
+          quotaBytes: data.quotaBytes || 0
+        };
+      }
+
+      // No active subscription
+      return {
+        allowed: false,
+        planGb: null,
+        status: status || 'none',
+        reason: this.getSubscriptionMessage(status),
+        remainingBytes: 0
+      };
+    } catch (error) {
+      // If we can't check subscription, allow backup to proceed (fail gracefully)
+      console.error('Subscription check failed:', error.message);
+      return { allowed: true, status: 'unknown', remainingBytes: null };
+    }
+  }
+
+  checkSpaceForFiles(files, remainingBytes) {
+    if (remainingBytes === null || remainingBytes === undefined) {
+      return { hasSpace: true, totalSize: 0, remainingBytes: null };
+    }
+
+    const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
+    // Add 10% buffer for encryption overhead
+    const requiredSpace = Math.ceil(totalSize * 1.1);
+
+    return {
+      hasSpace: requiredSpace <= remainingBytes,
+      totalSize,
+      requiredSpace,
+      remainingBytes
+    };
+  }
+
+  getSubscriptionMessage(status) {
+    switch (status) {
+      case 'none':
+        return 'No active subscription. Open PhotoLynk on your mobile device to subscribe.';
+      case 'trial_expired':
+        return 'Your free trial has expired. Open PhotoLynk on your mobile device to subscribe.';
+      case 'grace':
+      case 'grace_expired':
+        return 'Your subscription has expired. Open PhotoLynk on your mobile device to renew.';
+      case 'deleted':
+        return 'Your account data has been deleted due to expired subscription.';
+      default:
+        return 'Subscription required. Open PhotoLynk on your mobile device to subscribe.';
     }
   }
 
@@ -244,7 +353,6 @@ class DesktopBackupClient {
     }
   }
 
-  // Upload a single file with encryption (same logic as mobile app)
   async uploadFile(file, fileIndex, totalFiles) {
     const filePath = file.path;
     const fileName = file.name;
@@ -264,45 +372,54 @@ class DesktopBackupClient {
     crypto.randomFillSync(wrapNonce);
     const wrappedKey = nacl.secretbox(fileKey, wrapNonce, this.masterKey);
 
-    // Read file and encrypt chunks
-    const fileBuffer = fs.readFileSync(filePath);
     const chunkIds = [];
     const chunkSizes = [];
+    const runChunkUpload = this._runChunkUpload || (this._runChunkUpload = createConcurrencyLimiter(MAX_PARALLEL_CHUNK_UPLOADS));
+    const inFlight = new Set();
     let chunkIndex = 0;
     let position = 0;
+    let uploadedChunks = 0;
+    const totalChunks = Math.max(1, Math.ceil(fileSize / CHUNK_SIZE));
 
-    while (position < fileBuffer.length) {
-      if (this.cancelled) {
-        throw new Error('Backup cancelled');
-      }
+    await new Promise((resolve, reject) => {
+      const stream = fs.createReadStream(filePath, { highWaterMark: CHUNK_SIZE });
+      stream.on('error', reject);
+      stream.on('data', (buf) => {
+        stream.pause();
+        (async () => {
+          if (this.cancelled) throw new Error('Backup cancelled');
 
-      const end = Math.min(position + CHUNK_SIZE, fileBuffer.length);
-      const plaintext = new Uint8Array(fileBuffer.slice(position, end));
+          const plaintext = new Uint8Array(buf);
+          const nonce = this.makeChunkNonce(baseNonce16, chunkIndex);
+          const boxed = nacl.secretbox(plaintext, nonce, fileKey);
+          const chunkId = crypto.createHash('sha256').update(Buffer.from(boxed)).digest('hex');
 
-      // Encrypt chunk with NaCl secretbox
-      const nonce = this.makeChunkNonce(baseNonce16, chunkIndex);
-      const boxed = nacl.secretbox(plaintext, nonce, fileKey);
+          chunkIds.push(chunkId);
+          chunkSizes.push(plaintext.length);
 
-      // Chunk ID = SHA256 of encrypted data
-      const chunkId = crypto.createHash('sha256').update(Buffer.from(boxed)).digest('hex');
+          const p = runChunkUpload(async () => {
+            await this.uploadChunk(chunkId, boxed);
+            uploadedChunks++;
+            this.progressCallback({
+              message: `Uploading ${fileName} (${uploadedChunks}/${totalChunks} chunks)`,
+              progress: 0.1 + ((fileIndex + Math.min(1, (position / Math.max(1, fileSize)))) / Math.max(1, totalFiles)) * 0.85
+            });
+          });
 
-      // Upload chunk
-      this.progressCallback({
-        message: `Uploading ${fileName} (chunk ${chunkIndex + 1})`,
-        progress: 0.1 + ((fileIndex + (position / fileSize)) / totalFiles) * 0.9
+          await trackInFlightPromise(inFlight, p, MAX_PARALLEL_CHUNK_UPLOADS);
+
+          chunkIndex++;
+          position += plaintext.length;
+          stream.resume();
+        })().catch((e) => {
+          try { stream.destroy(); } catch (e2) {}
+          reject(e);
+        });
       });
+      stream.on('end', () => resolve());
+    });
 
-      await this.uploadChunk(chunkId, boxed);
-
-      chunkIds.push(chunkId);
-      chunkSizes.push(plaintext.length);
-      chunkIndex++;
-      position = end;
-    }
-
-    if (chunkIds.length === 0) {
-      throw new Error('No chunks created for file');
-    }
+    await drainInFlightPromises(inFlight);
 
     // Build manifest
     const manifest = {
@@ -368,43 +485,55 @@ class DesktopBackupClient {
     let skipped = 0;
     let failed = 0;
 
+    const toUpload = [];
     for (let i = 0; i < mediaFiles.length; i++) {
-      if (this.cancelled) {
-        break;
-      }
-
       const file = mediaFiles[i];
+      if (!file) continue;
 
       if (isStealthCloud) {
         const manifestId = crypto.createHash('sha256').update(`desktop:${file.path}`).digest('hex');
         if (existingIds && existingIds.has(manifestId)) {
           skipped++;
-          this.progressCallback({
-            message: `Skipping ${file.name} (already backed up)`,
-            progress: 0.1 + (i / mediaFiles.length) * 0.9
-          });
           continue;
         }
-      } else {
-        const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
-        if (normalized && existingClassic && existingClassic.has(normalized)) {
-          skipped++;
-          this.progressCallback({
-            message: `Skipping ${file.name} (already backed up)`,
-            progress: 0.1 + (i / mediaFiles.length) * 0.9
-          });
-          continue;
-        }
+        toUpload.push(file);
+        continue;
       }
 
+      const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
+      if (normalized && existingClassic && existingClassic.has(normalized)) {
+        skipped++;
+        continue;
+      }
+      toUpload.push(file);
+    }
+
+    if (isStealthCloud && this.config && this.config._subscriptionStatus) {
+      const remainingBytes = this.config._subscriptionStatus.remainingBytes;
+      const spaceCheck = this.checkSpaceForFiles(toUpload, remainingBytes);
+      if (!spaceCheck.hasSpace) {
+        const err = new Error('Not enough cloud storage. Please upgrade your plan in the PhotoLynk mobile app.');
+        err.code = 'INSUFFICIENT_SPACE';
+        err.requiredSpace = spaceCheck.requiredSpace;
+        err.remainingBytes = spaceCheck.remainingBytes;
+        throw err;
+      }
+    }
+
+    const totalFiles = Math.max(1, toUpload.length);
+    const runFileUpload = createConcurrencyLimiter(MAX_PARALLEL_FILE_UPLOADS);
+    let processed = 0;
+
+    const tasks = toUpload.map((file, idx) => runFileUpload(async () => {
+      if (this.cancelled) return;
       try {
         if (isStealthCloud) {
-          const res = await this.uploadFile(file, i, mediaFiles.length);
+          const res = await this.uploadFile(file, idx, totalFiles);
           if (existingIds && res && res.manifestId) existingIds.add(res.manifestId);
         } else {
           this.progressCallback({
             message: `Uploading ${file.name}`,
-            progress: 0.1 + (i / mediaFiles.length) * 0.9
+            progress: 0.1 + (idx / totalFiles) * 0.9
           });
           await this.uploadClassicRawFile(file);
           const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
@@ -414,13 +543,16 @@ class DesktopBackupClient {
       } catch (error) {
         console.error(`Failed to upload ${file.name}:`, error.message);
         failed++;
+      } finally {
+        processed++;
+        this.progressCallback({
+          message: `Processed ${Math.min(processed + skipped, mediaFiles.length)}/${mediaFiles.length} files`,
+          progress: 0.1 + (processed / totalFiles) * 0.9
+        });
       }
+    }));
 
-      this.progressCallback({
-        message: `Processed ${i + 1}/${mediaFiles.length} files`,
-        progress: 0.1 + ((i + 1) / mediaFiles.length) * 0.9
-      });
-    }
+    await Promise.all(tasks);
 
     return {
       total: mediaFiles.length,

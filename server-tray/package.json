@@ -26,7 +26,10 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
+      "backup-client.js",
       "icon.png",
+      "iconTemplate.png",
+      "iconTemplate@2x.png",
       "package.json",
       "node_modules/**/*"
     ],
