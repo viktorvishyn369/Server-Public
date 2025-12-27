@@ -272,7 +272,7 @@ class DesktopBackupClient {
     if (!filePath || !fileName) throw new Error('Invalid file');
 
     const stream = fs.createReadStream(filePath);
-    await axios.post(url, stream, {
+    const response = await axios.post(url, stream, {
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'X-Device-UUID': this.deviceUuid,
@@ -283,6 +283,12 @@ class DesktopBackupClient {
       maxContentLength: Infinity,
       maxBodyLength: Infinity
     });
+
+    // Check for server-side hash duplicate
+    if (response.data && response.data.duplicate) {
+      return { duplicate: true };
+    }
+    return { duplicate: false };
   }
 
   async getExistingClassicFilenames() {
@@ -530,29 +536,41 @@ class DesktopBackupClient {
         if (isStealthCloud) {
           const res = await this.uploadFile(file, idx, totalFiles);
           if (existingIds && res && res.manifestId) existingIds.add(res.manifestId);
+          uploaded++;
         } else {
           this.progressCallback({
             message: `Uploading ${file.name}`,
             progress: 0.1 + (idx / totalFiles) * 0.9
           });
-          await this.uploadClassicRawFile(file);
+          const res = await this.uploadClassicRawFile(file);
           const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
           if (normalized && existingClassic) existingClassic.add(normalized);
+          // Server-side hash duplicate detection
+          if (res && res.duplicate) {
+            skipped++;
+          } else {
+            uploaded++;
+          }
         }
-        uploaded++;
       } catch (error) {
         console.error(`Failed to upload ${file.name}:`, error.message);
         failed++;
       } finally {
         processed++;
         this.progressCallback({
-          message: `Processed ${Math.min(processed + skipped, mediaFiles.length)}/${mediaFiles.length} files`,
+          message: `Uploading ${processed}/${totalFiles}`,
           progress: 0.1 + (processed / totalFiles) * 0.9
         });
       }
     }));
 
     await Promise.all(tasks);
+
+    // Final progress callback with complete stats
+    this.progressCallback({
+      message: `Uploaded: ${uploaded} | Skipped: ${skipped} | Failed: ${failed}`,
+      progress: 1.0
+    });
 
     return {
       total: mediaFiles.length,

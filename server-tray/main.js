@@ -1061,6 +1061,8 @@ function showBackupWindow() {
       font-size: clamp(11px, 2.8vw, 12px);
       color: var(--text-primary);
       margin-bottom: 8px;
+      white-space: pre-line;
+      text-align: center;
     }
     .progress-bar {
       height: 4px;
@@ -1378,7 +1380,7 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
     stopBackupPowerSaveBlocker();
     
     event.reply('backup-complete', { 
-      message: 'Backup complete! Uploaded: ' + result.uploaded + ', Skipped: ' + result.skipped + ', Failed: ' + result.failed
+      message: `Backup Complete\nUploaded: ${result.uploaded}\nSkipped: ${result.skipped}\nFailed: ${result.failed}`
     });
     
   } catch (error) {
