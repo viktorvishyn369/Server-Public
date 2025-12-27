@@ -87,9 +87,25 @@ class DesktopBackupClient {
     if (this.config.destination === 'stealthcloud') {
       return STEALTHCLOUD_BASE_URL;
     } else if (this.config.destination === 'remote') {
-      const host = this.config.remoteAddress;
+      const host = this.config.remoteAddress || '';
       const port = this.config.remotePort || '3000';
-      return `https://${host}:${port}`;
+      
+      // Detect if host is an IP address (use HTTP with port) or domain (use HTTPS without port)
+      // IP addresses connect directly to server on port 3000 (HTTP)
+      // Domains go through Nginx reverse proxy on port 443 (HTTPS)
+      const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(host) || 
+                          host === 'localhost' || 
+                          host.startsWith('192.168.') ||
+                          host.startsWith('10.') ||
+                          host.startsWith('172.');
+      
+      if (isIpAddress) {
+        // Direct connection to server - HTTP with port
+        return `http://${host}:${port}`;
+      } else {
+        // Domain with Nginx/Certbot - HTTPS on standard port 443 (no port in URL)
+        return `https://${host}`;
+      }
     } else {
       throw new Error('Invalid destination (expected remote or stealthcloud)');
     }
