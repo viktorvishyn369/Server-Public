@@ -822,10 +822,10 @@ function showBackupWindow() {
   const photoFolders = getPhotoFolders();
   
   backupWindow = new BrowserWindow({
-    width: 420,
-    height: 580,
-    minWidth: 360,
-    minHeight: 480,
+    width: 440,
+    height: 720,
+    minWidth: 400,
+    minHeight: 600,
     resizable: true,
     minimizable: true,
     maximizable: false,
@@ -989,7 +989,7 @@ function showBackupWindow() {
     .folder-list {
       flex: 1;
       overflow-y: auto;
-      max-height: clamp(60px, 15vh, 100px);
+      max-height: clamp(80px, 20vh, 140px);
     }
     .folder-item {
       display: flex;
@@ -1053,6 +1053,7 @@ function showBackupWindow() {
       border-radius: 8px;
       padding: clamp(10px, 2.5vw, 12px);
       margin-top: clamp(8px, 2vw, 10px);
+      margin-bottom: clamp(8px, 2vw, 10px);
       display: none;
       flex-shrink: 0;
     }
@@ -1063,6 +1064,8 @@ function showBackupWindow() {
       margin-bottom: 8px;
       white-space: pre-line;
       text-align: center;
+      max-height: 80px;
+      overflow-y: auto;
     }
     .progress-bar {
       height: 4px;
