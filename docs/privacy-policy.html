@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Privacy Policy - PhotoSync</title>
+    <title>Privacy Policy - PhotoLynk</title>
     <style>
       :root { color-scheme: light; }
       body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #0b0b0c; color: #f2f2f2; }
@@ -12,11 +12,14 @@
       h1 { margin: 0 0 6px 0; font-size: 26px; }
       .meta { color: #9a9aa4; font-size: 13px; margin-bottom: 18px; }
       h2 { margin-top: 22px; font-size: 18px; }
+      h3 { margin-top: 16px; font-size: 15px; color: #e0e0e0; }
       p, li { color: #cfcfd6; line-height: 1.7; }
       a { color: #a78bfa; text-decoration: none; font-weight: 650; }
       a:hover { text-decoration: underline; }
       code { background: #0f0f12; padding: 2px 6px; border-radius: 6px; }
       .topnav { margin-bottom: 14px; }
+      .warning { background: #2a1a1a; border: 1px solid #4a2a2a; border-radius: 8px; padding: 14px; margin: 16px 0; }
+      .warning p { color: #ff9999; margin: 0; }
     </style>
   </head>
   <body>
@@ -24,81 +27,94 @@
       <div class="topnav"><a href="index.html">← Back</a></div>
       <div class="card">
         <h1>Privacy Policy</h1>
-        <div class="meta">Last Updated: December 4, 2024</div>
+        <div class="meta">Last Updated: December 27, 2024</div>
 
-        <h2>Overview</h2>
-        <p>PhotoLynk / PhotoSync is a self-hosted photo backup application. We do not collect, store, or share any personal data on external servers.</p>
+        <p><strong>StealthLynk LLC</strong> ("Company," "we," "us," or "our") operates the PhotoLynk application (the "Service"). This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Service.</p>
 
-        <h2>Data Collection</h2>
-        <p>PhotoLynk collects and stores the following data <strong>only on YOUR server</strong>:</p>
+        <h2>1. Service Overview</h2>
+        <p>PhotoLynk is a photo and video backup application that operates in three distinct modes:</p>
         <ul>
-          <li><strong>Photos and Videos</strong>: Stored on the server you control</li>
-          <li><strong>Email Address</strong>: Used for authentication, stored locally on your server</li>
-          <li><strong>Device UUID</strong>: Used for device binding and security, stored on your server</li>
-          <li><strong>File Metadata</strong>: Filenames, sizes, and hashes for deduplication</li>
+          <li><strong>Local Mode</strong>: Your data is stored on a server you own and operate on your local network.</li>
+          <li><strong>Remote Mode</strong>: Your data is stored on a server you own and operate, accessible over the internet.</li>
+          <li><strong>StealthCloud Mode</strong>: Your data is encrypted on your device before upload and stored on StealthLynk-operated infrastructure.</li>
         </ul>
 
-        <h2>Permissions</h2>
+        <h2>2. Information We Collect</h2>
+        <h3>2.1 Local and Remote Modes</h3>
+        <p>When using Local or Remote modes, <strong>all data remains on servers you own and control</strong>. StealthLynk LLC does not have access to, collect, or store your photos, videos, email address, password, device identifiers, or any file metadata.</p>
+        <p><strong>You are solely responsible</strong> for the security, maintenance, and backup of your self-hosted server and all data stored thereon.</p>
+
+        <h3>2.2 StealthCloud Mode</h3>
+        <p>When using StealthCloud mode, we collect and process:</p>
+        <ul>
+          <li><strong>Account Information</strong>: Email address for authentication purposes</li>
+          <li><strong>Device Identifiers</strong>: Hardware device identifiers for security and account recovery</li>
+          <li><strong>Encrypted Data</strong>: Photos and videos encrypted on your device before transmission</li>
+          <li><strong>Subscription Information</strong>: Payment and subscription status (processed by third-party payment processors)</li>
+        </ul>
+        <p><strong>Important</strong>: All media files and metadata are encrypted on your device using industry-standard encryption (XSalsa20-Poly1305) before transmission. StealthLynk LLC stores only encrypted data and <strong>does not possess the decryption keys</strong>. We cannot access, view, or decrypt your files.</p>
+
+        <h2>3. Permissions</h2>
         <ul>
           <li><strong>Camera</strong>: Used only to scan QR codes for server pairing / local setup.</li>
           <li><strong>Photos/Videos</strong>: Used to back up your media, restore it, and scan for duplicates.</li>
-          <li><strong>Network</strong>: Used to connect to your local server or StealthCloud (if enabled).</li>
+          <li><strong>Network</strong>: Used to connect to your local server, remote server, or StealthCloud.</li>
         </ul>
 
-        <h2>Data Storage</h2>
-        <p>All data is stored on the server YOU control. We (the app developers) have <strong>no access</strong> to your data. Your photos, credentials, and metadata never leave your server unless you explicitly configure remote access.</p>
-
-        <h2>Data Usage</h2>
+        <h2>4. Data Encryption and Security</h2>
+        <p>StealthCloud implements end-to-end encryption:</p>
         <ul>
-          <li><strong>Authentication</strong>: Email and password are used solely for login</li>
-          <li><strong>Device Binding</strong>: Device UUID ensures only your device can access your account</li>
-          <li><strong>File Deduplication</strong>: File hashes prevent duplicate uploads</li>
-          <li><strong>No Analytics</strong>: We do not collect usage statistics or analytics</li>
+          <li>Files are encrypted on your device before upload using TweetNaCl secretbox (XSalsa20-Poly1305)</li>
+          <li>Each file is split into encrypted chunks</li>
+          <li>Encryption keys are derived from your credentials and stored only on your device</li>
+          <li>StealthLynk LLC cannot decrypt your data</li>
         </ul>
+        <p><strong>However</strong>, no method of transmission over the Internet or electronic storage is 100% secure. We cannot guarantee absolute security.</p>
 
-        <h2>Third-Party Services</h2>
-        <p>PhotoLynk does <strong>not</strong> use any third-party services, analytics, or tracking tools. Your data stays on your server.</p>
+        <h2>5. Third-Party Services</h2>
+        <p>Subscription payments are processed by third-party payment processors (Apple App Store, Google Play Store). We use RevenueCat for subscription management. We do <strong>not</strong> use third-party analytics, advertising networks, or tracking services.</p>
 
-        <h2>Data Sharing</h2>
-        <p>We do not share any data with third parties because we do not have access to your data. All data remains on your self-hosted server.</p>
+        <h2>6. Data Retention</h2>
+        <p>For Local and Remote modes, data retention is entirely under your control. For StealthCloud mode, encrypted data is retained while your subscription is active, plus a grace period after expiration. Upon account deletion, all associated encrypted data will be permanently deleted within 30 days.</p>
 
-        <h2>Your Rights</h2>
-        <p>You have complete control over your data:</p>
-        <ul>
-          <li><strong>Access</strong>: All data is on your server</li>
-          <li><strong>Deletion</strong>: Delete your server or user account to remove all data</li>
-          <li><strong>Portability</strong>: All files are stored in standard formats</li>
-          <li><strong>Control</strong>: You own and control the server</li>
-        </ul>
+        <h2>7. Your Rights</h2>
+        <p>You have the right to access, correct, delete, and export your data. To exercise these rights, contact us at <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
 
-        <h2>Security</h2>
-        <ul>
-          <li>Device-bound authentication prevents unauthorized access</li>
-          <li>HTTPS support for encrypted data transmission</li>
-          <li>Password hashing with bcrypt</li>
-          <li>No data stored on external servers</li>
-        </ul>
+        <h2>8. Children's Privacy</h2>
+        <p>The Service is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13.</p>
 
-        <h2>Children's Privacy</h2>
-        <p>PhotoLynk does not knowingly collect data from children under 13. Since all data is self-hosted, parents have full control over what data is stored.</p>
+        <h2>9. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last Updated" date.</p>
 
-        <h2>Changes to This Policy</h2>
-        <p>We may update this privacy policy from time to time. Updates will be posted on our GitHub repository.</p>
+        <h2>10. Contact</h2>
+        <p>For questions about this Privacy Policy, contact:</p>
+        <p><strong>StealthLynk LLC</strong><br>Email: <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a></p>
 
-        <h2>Contact</h2>
-        <p>For questions about this privacy policy:</p>
-        <ul>
-          <li><strong>Email</strong>: viktor.vishyn.369@gmail.com</li>
-          <li><strong>GitHub</strong>: <a href="https://github.com/viktorvishyn369/PhotoSync">https://github.com/viktorvishyn369/PhotoSync</a></li>
-        </ul>
+        <h2>11. Disclaimer and Limitation of Liability</h2>
+        <div class="warning">
+          <p><strong>PLEASE READ THIS SECTION CAREFULLY. IT LIMITS OUR LIABILITY AND AFFECTS YOUR LEGAL RIGHTS.</strong></p>
+        </div>
+        
+        <h3>11.1 No Warranty</h3>
+        <p>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.</p>
 
-        <h2>Disclaimer and Limitation of Liability</h2>
-        <p><strong>USE AT YOUR OWN RISK</strong>: PhotoLynk is provided "AS IS" without warranty of any kind, express or implied.</p>
-        <p><strong>NO LIABILITY</strong>: In no event shall the developers be liable for any data loss, corruption, deletion, security breaches, server failures, or any indirect damages.</p>
-        <p><strong>YOUR RESPONSIBILITY</strong>: You are solely responsible for maintaining backups, securing your server/network, and compliance with applicable laws.</p>
+        <h3>11.2 Limitation of Liability</h3>
+        <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, STEALTHLYNK LLC SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE, OR EXEMPLARY DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, REVENUE, DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, REGARDLESS OF CAUSE.</p>
 
-        <h2>Open Source</h2>
-        <p>You can review the code to verify our privacy practices: <a href="https://github.com/viktorvishyn369/PhotoSync">https://github.com/viktorvishyn369/PhotoSync</a></p>
+        <h3>11.3 Local and Remote Mode Disclaimer</h3>
+        <p>FOR LOCAL AND REMOTE MODES: You are solely responsible for your self-hosted server infrastructure, all data stored on your server, server security, maintenance, and backups. StealthLynk LLC has no access to, control over, or responsibility for your server or data. StealthLynk LLC is not liable for any data loss, corruption, or security breaches on your server.</p>
+
+        <h3>11.4 StealthCloud Mode Disclaimer</h3>
+        <p>FOR STEALTHCLOUD MODE: StealthLynk LLC stores only encrypted data and cannot access your files. You are solely responsible for maintaining your account credentials. Loss of your credentials may result in permanent loss of access to your data. StealthLynk LLC is not liable for data loss due to encryption key loss or service interruptions due to force majeure events.</p>
+
+        <h3>11.5 Force Majeure</h3>
+        <p>StealthLynk LLC shall not be liable for any failure or delay in performing its obligations due to circumstances beyond its reasonable control, including but not limited to natural disasters, war, terrorism, government actions, epidemics, pandemics, power outages, telecommunications failures, cyberattacks, or third-party service provider failures.</p>
+
+        <h3>11.6 Maximum Liability</h3>
+        <p>IN ANY EVENT, STEALTHLYNK LLC'S TOTAL CUMULATIVE LIABILITY SHALL NOT EXCEED THE GREATER OF: (A) THE AMOUNTS YOU HAVE PAID TO STEALTHLYNK LLC IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM, OR (B) ONE HUNDRED US DOLLARS ($100.00).</p>
+
+        <hr style="border: none; border-top: 1px solid #333; margin: 30px 0;">
+        <p style="font-size: 13px; color: #888;"><strong>Summary</strong>: For Local/Remote modes, your data stays on your server—we have no access. For StealthCloud, we store only encrypted data we cannot decrypt. We are not liable for data loss in any mode. Use at your own risk and maintain your own backups.</p>
       </div>
     </div>
   </body>
