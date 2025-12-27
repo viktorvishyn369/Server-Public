@@ -357,21 +357,37 @@ class DesktopBackupClient {
     });
   }
 
-  // Get existing manifests to skip already backed up files
+  // Get existing manifests to skip already backed up files (with pagination)
   async getExistingManifests() {
     const baseUrl = this.getBaseUrl();
+    const allManifests = [];
+    const pageLimit = 500;
+    let offset = 0;
+
     try {
-      const response = await axios.get(`${baseUrl}/api/cloud/manifests`, {
-        headers: { 
-          'Authorization': `Bearer ${this.token}`,
-          'X-Device-UUID': this.deviceUuid
-        },
-        timeout: 30000
-      });
-      return (response.data && response.data.manifests) || [];
+      while (true) {
+        const response = await axios.get(`${baseUrl}/api/cloud/manifests`, {
+          headers: { 
+            'Authorization': `Bearer ${this.token}`,
+            'X-Device-UUID': this.deviceUuid
+          },
+          params: { offset, limit: pageLimit },
+          timeout: 30000
+        });
+
+        const manifests = (response.data && response.data.manifests) || [];
+        allManifests.push(...manifests);
+
+        if (!manifests || manifests.length < pageLimit) break;
+        offset += manifests.length;
+        const total = typeof response.data?.total === 'number' ? response.data.total : null;
+        if (typeof total === 'number' && offset >= total) break;
+      }
+
+      return allManifests;
     } catch (error) {
       console.error('Failed to get existing manifests:', error.message);
-      return [];
+      return allManifests; // Return what we have so far
     }
   }
 
