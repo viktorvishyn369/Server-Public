@@ -455,7 +455,9 @@ class DesktopBackupClient {
     }
   }
 
-  // Build sets of existing filenames, file hashes, and perceptual hashes for deduplication (same as mobile)
+  // Build deduplication sets by decrypting manifests (for cross-device duplicate detection)
+  // Images: use perceptualHash only (ignore fileHash)
+  // Videos: use fileHash only (no perceptualHash)
   async buildDeduplicationSets(existingManifests) {
     const baseUrl = this.getBaseUrl();
     const alreadyFilenames = new Set();
@@ -488,11 +490,12 @@ class DesktopBackupClient {
           if (manifest.filename) {
             alreadyFilenames.add(this.normalizeFilenameForCompare(manifest.filename));
           }
-          if (manifest.fileHash) {
-            alreadyFileHashes.add(manifest.fileHash);
-          }
+          // If manifest has perceptualHash, it's an image - use perceptual hash only
           if (manifest.perceptualHash) {
             alreadyPerceptualHashes.add(manifest.perceptualHash);
+          } else if (manifest.fileHash) {
+            // No perceptualHash means it's a video - use file hash
+            alreadyFileHashes.add(manifest.fileHash);
           }
         }
       } catch (e) {
@@ -500,7 +503,7 @@ class DesktopBackupClient {
       }
     }
 
-    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyFileHashes.size} file hashes, ${alreadyPerceptualHashes.size} perceptual hashes for deduplication`);
+    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyFileHashes.size} video hashes, ${alreadyPerceptualHashes.size} image hashes for deduplication`);
     return { alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes };
   }
 
