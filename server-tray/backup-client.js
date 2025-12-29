@@ -67,8 +67,47 @@ async function computeExactFileHash(filePath) {
   });
 }
 
+// Hamming distance for 16-char hex hash (64 bits) - for dHash cross-platform deduplication
+function hammingDistance64(a, b) {
+  if (!a || !b || a.length !== 16 || b.length !== 16) return Number.MAX_SAFE_INTEGER;
+  let dist = 0;
+  for (let i = 0; i < 16; i += 8) {
+    const valA = parseInt(a.substring(i, i + 8), 16);
+    const valB = parseInt(b.substring(i, i + 8), 16);
+    let x = valA ^ valB;
+    while (x) {
+      dist += x & 1;
+      x >>>= 1;
+    }
+  }
+  return dist;
+}
+
+// Cross-platform deduplication threshold for 64-bit dHash
+// Allow up to 5 bits difference to account for JPEG decoder variations
+const CROSS_PLATFORM_DHASH_THRESHOLD = 5;
+
+// Find a matching perceptual hash using Hamming distance (fuzzy matching)
+function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH_THRESHOLD) {
+  if (!hash || hash.length !== 16 || !hashSet || hashSet.size === 0) return false;
+  
+  // First check exact match (fast path)
+  if (hashSet.has(hash)) return true;
+  
+  // Check Hamming distance for fuzzy match
+  for (const existingHash of hashSet) {
+    if (existingHash && existingHash.length === 16) {
+      const dist = hammingDistance64(hash, existingHash);
+      if (dist <= threshold) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // Compute perceptual hash (dHash) for images - transcoding-resistant visual deduplication
-// Same logic as mobile app's computePerceptualHash
+// IDENTICAL implementation to mobile iOS/Android - custom bilinear scaling
 async function computePerceptualHash(filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase();
@@ -78,30 +117,86 @@ async function computePerceptualHash(filePath) {
       return null; // Only process images
     }
 
-    // Resize to 9x8 grayscale for dHash computation
-    const { data, info } = await sharp(filePath)
-      .resize(9, 8, { fit: 'fill' })
-      .grayscale()
+    // Load source image at full resolution
+    const { data: srcData, info } = await sharp(filePath)
       .raw()
       .toBuffer({ resolveWithObject: true });
-
-    // Compute dHash: compare adjacent pixels horizontally
-    const hash = [];
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        const leftPixel = data[row * 9 + col];
-        const rightPixel = data[row * 9 + col + 1];
-        hash.push(leftPixel < rightPixel ? 1 : 0);
+    
+    const srcWidth = info.width;
+    const srcHeight = info.height;
+    const srcChannels = info.channels;
+    
+    // Custom bilinear scaling to 9x8 (IDENTICAL to iOS/Android implementation)
+    const hashWidth = 9;
+    const hashHeight = 8;
+    const scaledPixels = new Uint8Array(hashWidth * hashHeight * 3); // RGB
+    
+    const xRatio = (srcWidth - 1) / (hashWidth - 1);
+    const yRatio = (srcHeight - 1) / (hashHeight - 1);
+    
+    for (let y = 0; y < hashHeight; y++) {
+      for (let x = 0; x < hashWidth; x++) {
+        const srcX = x * xRatio;
+        const srcY = y * yRatio;
+        
+        const x1 = Math.floor(srcX);
+        const y1 = Math.floor(srcY);
+        const x2 = Math.min(x1 + 1, srcWidth - 1);
+        const y2 = Math.min(y1 + 1, srcHeight - 1);
+        
+        const xWeight = srcX - x1;
+        const yWeight = srcY - y1;
+        
+        for (let c = 0; c < 3; c++) {
+          const p11 = srcData[(y1 * srcWidth + x1) * srcChannels + c];
+          const p21 = srcData[(y1 * srcWidth + x2) * srcChannels + c];
+          const p12 = srcData[(y2 * srcWidth + x1) * srcChannels + c];
+          const p22 = srcData[(y2 * srcWidth + x2) * srcChannels + c];
+          
+          const value = 
+            p11 * (1 - xWeight) * (1 - yWeight) +
+            p21 * xWeight * (1 - yWeight) +
+            p12 * (1 - xWeight) * yWeight +
+            p22 * xWeight * yWeight;
+          
+          scaledPixels[(y * hashWidth + x) * 3 + c] = Math.round(value);
+        }
       }
     }
-
-    // Convert bit array to hex string
-    let hexHash = '';
-    for (let i = 0; i < hash.length; i += 4) {
-      const nibble = (hash[i] << 3) | (hash[i + 1] << 2) | (hash[i + 2] << 1) | hash[i + 3];
-      hexHash += nibble.toString(16);
+    
+    // Compute grayscale values (IDENTICAL to iOS/Android)
+    const grayValues = new Uint8Array(hashWidth * hashHeight);
+    for (let i = 0; i < hashWidth * hashHeight; i++) {
+      const r = scaledPixels[i * 3];
+      const g = scaledPixels[i * 3 + 1];
+      const b = scaledPixels[i * 3 + 2];
+      grayValues[i] = Math.floor((r * 299 + g * 587 + b * 114) / 1000);
     }
-
+    
+    // Build dHash: compare each pixel to its right neighbor (IDENTICAL to iOS/Android)
+    const hashBytes = new Uint8Array(8);
+    let bitIndex = 0;
+    
+    for (let y = 0; y < hashHeight; y++) {
+      for (let x = 0; x < hashWidth - 1; x++) {
+        const leftPixel = grayValues[y * hashWidth + x];
+        const rightPixel = grayValues[y * hashWidth + x + 1];
+        
+        if (leftPixel < rightPixel) {
+          const byteIndex = Math.floor(bitIndex / 8);
+          const bitPos = 7 - (bitIndex % 8);
+          hashBytes[byteIndex] |= (1 << bitPos);
+        }
+        bitIndex++;
+      }
+    }
+    
+    // Convert to hex string
+    let hexHash = '';
+    for (let i = 0; i < hashBytes.length; i++) {
+      hexHash += hashBytes[i].toString(16).padStart(2, '0');
+    }
+    
     return hexHash;
   } catch (e) {
     console.warn('computePerceptualHash failed:', filePath, e.message);
