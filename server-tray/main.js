@@ -645,7 +645,7 @@ function showQRCodeWindow() {
     :root {
       --bg-primary: #0A0A0A;
       --bg-card: #1E1E1E;
-      --accent: #BB86FC;
+      --accent: #4A9FE8;
       --accent-secondary: #03DAC6;
       --text-primary: #FFFFFF;
       --text-secondary: #AAAAAA;
@@ -847,8 +847,8 @@ function showBackupWindow() {
       --bg-primary: #0A0A0A;
       --bg-card: #1E1E1E;
       --bg-input: #1A1A1A;
-      --accent: #BB86FC;
-      --accent-hover: #9B66DC;
+      --accent: #4A9FE8;
+      --accent-hover: #3B8BD4;
       --accent-secondary: #03DAC6;
       --text-primary: #FFFFFF;
       --text-secondary: #AAAAAA;

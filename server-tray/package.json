@@ -30,6 +30,7 @@
       "icon.png",
       "iconTemplate.png",
       "iconTemplate@2x.png",
+      "assets/**/*",
       "package.json",
       "node_modules/**/*"
     ],

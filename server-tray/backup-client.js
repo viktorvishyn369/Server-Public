@@ -400,7 +400,7 @@ class DesktopBackupClient {
   // Derive master key from password (same as mobile app)
   deriveMasterKey(password, email) {
     const salt = email.toLowerCase().trim();
-    const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+    const key = crypto.pbkdf2Sync(password, salt, 30000, 32, 'sha256');
     return new Uint8Array(key);
   }
 
