@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
+const sharp = require('sharp');
 
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks (same as mobile)
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
@@ -43,6 +44,69 @@ async function trackInFlightPromise(inFlight, p, maxInFlight) {
 async function drainInFlightPromises(inFlight) {
   if (!inFlight || inFlight.size === 0) return;
   await Promise.all(Array.from(inFlight));
+}
+
+// Compute stable file identity from filename + size (same as mobile)
+function computeFileIdentity(filename, originalSize) {
+  if (!filename || typeof filename !== 'string') return null;
+  const normalized = filename.trim().toLowerCase();
+  if (!normalized) return null;
+  const sizeStr = typeof originalSize === 'number' && !Number.isNaN(originalSize) ? String(originalSize) : '';
+  return `${normalized}:${sizeStr}`;
+}
+
+// Compute exact file hash (SHA-256 of plaintext bytes) for deduplication
+// Same logic as mobile app's computeExactFileHash
+async function computeExactFileHash(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', (err) => reject(err));
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+// Compute perceptual hash (dHash) for images - transcoding-resistant visual deduplication
+// Same logic as mobile app's computePerceptualHash
+async function computePerceptualHash(filePath) {
+  try {
+    const ext = path.extname(filePath).toLowerCase();
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'];
+    
+    if (!imageExts.includes(ext)) {
+      return null; // Only process images
+    }
+
+    // Resize to 9x8 grayscale for dHash computation
+    const { data, info } = await sharp(filePath)
+      .resize(9, 8, { fit: 'fill' })
+      .grayscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Compute dHash: compare adjacent pixels horizontally
+    const hash = [];
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const leftPixel = data[row * 9 + col];
+        const rightPixel = data[row * 9 + col + 1];
+        hash.push(leftPixel < rightPixel ? 1 : 0);
+      }
+    }
+
+    // Convert bit array to hex string
+    let hexHash = '';
+    for (let i = 0; i < hash.length; i += 4) {
+      const nibble = (hash[i] << 3) | (hash[i + 1] << 2) | (hash[i + 2] << 1) | hash[i + 3];
+      hexHash += nibble.toString(16);
+    }
+
+    return hexHash;
+  } catch (e) {
+    console.warn('computePerceptualHash failed:', filePath, e.message);
+    return null;
+  }
 }
 
 // UUID v5 implementation (SHA-1 based, same as mobile app's uuidv5)
@@ -391,13 +455,109 @@ class DesktopBackupClient {
     }
   }
 
-  async uploadFile(file, fileIndex, totalFiles) {
+  // Build sets of existing filenames, file hashes, and perceptual hashes for deduplication (same as mobile)
+  async buildDeduplicationSets(existingManifests) {
+    const baseUrl = this.getBaseUrl();
+    const alreadyFilenames = new Set();
+    const alreadyFileHashes = new Set();
+    const alreadyPerceptualHashes = new Set();
+
+    if (!existingManifests || existingManifests.length === 0) {
+      return { alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes };
+    }
+
+    for (const m of existingManifests) {
+      try {
+        const response = await axios.get(`${baseUrl}/api/cloud/manifests/${m.manifestId}`, {
+          headers: {
+            'Authorization': `Bearer ${this.token}`,
+            'X-Device-UUID': this.deviceUuid
+          },
+          timeout: 15000
+        });
+
+        const payload = response.data;
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        const enc = JSON.parse(parsed.encryptedManifest);
+        const manifestNonce = naclUtil.decodeBase64(enc.manifestNonce);
+        const manifestBox = naclUtil.decodeBase64(enc.manifestBox);
+        const manifestPlain = nacl.secretbox.open(manifestBox, manifestNonce, this.masterKey);
+
+        if (manifestPlain) {
+          const manifest = JSON.parse(naclUtil.encodeUTF8(manifestPlain));
+          if (manifest.filename) {
+            alreadyFilenames.add(this.normalizeFilenameForCompare(manifest.filename));
+          }
+          if (manifest.fileHash) {
+            alreadyFileHashes.add(manifest.fileHash);
+          }
+          if (manifest.perceptualHash) {
+            alreadyPerceptualHashes.add(manifest.perceptualHash);
+          }
+        }
+      } catch (e) {
+        // Skip manifests we can't decrypt
+      }
+    }
+
+    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyFileHashes.size} file hashes, ${alreadyPerceptualHashes.size} perceptual hashes for deduplication`);
+    return { alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes };
+  }
+
+  async uploadFile(file, fileIndex, totalFiles, alreadyManifestIds, alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes) {
     const filePath = file.path;
     const fileName = file.name;
     const fileSize = file.size;
 
-    // Generate manifest ID from file path (deterministic)
-    const manifestId = crypto.createHash('sha256').update(`desktop:${filePath}`).digest('hex');
+    // Generate stable cross-device manifestId from filename + size (same as mobile)
+    const fileIdentity = computeFileIdentity(fileName, fileSize);
+    const manifestId = fileIdentity ? crypto.createHash('sha256').update(`file:${fileIdentity}`).digest('hex') : crypto.createHash('sha256').update(`desktop:${filePath}`).digest('hex');
+
+    // Skip if already uploaded (by stable manifestId)
+    if (alreadyManifestIds && alreadyManifestIds.has(manifestId)) {
+      console.log(`Skipping ${fileName} - manifestId already on server`);
+      return { skipped: true, reason: 'manifestId' };
+    }
+
+    // Skip if filename already exists on server (fallback for old manifests without fileHash)
+    const normalizedFilename = this.normalizeFilenameForCompare(fileName);
+    if (normalizedFilename && alreadyFilenames && alreadyFilenames.has(normalizedFilename)) {
+      console.log(`Skipping ${fileName} - filename already on server`);
+      return { skipped: true, reason: 'filename' };
+    }
+
+    // Compute exact file hash for content-based deduplication
+    let exactFileHash = null;
+    try {
+      exactFileHash = await computeExactFileHash(filePath);
+    } catch (e) {
+      console.warn(`computeExactFileHash failed for ${fileName}:`, e.message);
+      exactFileHash = null;
+    }
+
+    // Skip if exact file hash already exists on server (cross-device dedupe)
+    if (exactFileHash && alreadyFileHashes && alreadyFileHashes.has(exactFileHash)) {
+      console.log(`Skipping ${fileName} - exact file hash already on server`);
+      return { skipped: true, reason: 'fileHash' };
+    }
+
+    // Compute perceptual hash for images (visual content-based deduplication, transcoding-resistant)
+    let perceptualHash = null;
+    try {
+      perceptualHash = await computePerceptualHash(filePath);
+      if (perceptualHash) {
+        console.log(`[PerceptualHash] ${fileName}: ${perceptualHash.substring(0, 16)}...`);
+      }
+    } catch (e) {
+      console.warn(`computePerceptualHash failed for ${fileName}:`, e.message);
+      perceptualHash = null;
+    }
+
+    // Skip if perceptual hash already exists on server (catches transcoded duplicates)
+    if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.has(perceptualHash)) {
+      console.log(`Skipping ${fileName} - visually identical image already on server (transcoded duplicate)`);
+      return { skipped: true, reason: 'perceptualHash' };
+    }
 
     // Generate per-file key and base nonce
     const fileKey = new Uint8Array(32);
@@ -459,7 +619,7 @@ class DesktopBackupClient {
 
     await drainInFlightPromises(inFlight);
 
-    // Build manifest
+    // Build manifest with fileHash and perceptualHash for cross-device deduplication
     const manifest = {
       v: 1,
       assetId: `desktop:${filePath}`,
@@ -470,7 +630,9 @@ class DesktopBackupClient {
       wrapNonce: naclUtil.encodeBase64(wrapNonce),
       wrappedFileKey: naclUtil.encodeBase64(wrappedKey),
       chunkIds,
-      chunkSizes
+      chunkSizes,
+      fileHash: exactFileHash,
+      perceptualHash: perceptualHash,
     };
 
     // Encrypt manifest with masterKey
@@ -486,7 +648,7 @@ class DesktopBackupClient {
     // Upload manifest
     await this.uploadManifest(manifestId, encryptedManifest, chunkIds.length);
 
-    return { uploaded: true, manifestId };
+    return { uploaded: true, manifestId, fileHash: exactFileHash, perceptualHash: perceptualHash };
   }
 
   getMediaType(filename) {
@@ -507,6 +669,9 @@ class DesktopBackupClient {
 
     let existingIds = null;
     let existingClassic = null;
+    let alreadyFilenames = null;
+    let alreadyFileHashes = null;
+    let alreadyPerceptualHashes = null;
 
     if (isStealthCloud) {
       // Derive master key (same as mobile app)
@@ -514,6 +679,12 @@ class DesktopBackupClient {
       this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
       const existingManifests = await this.getExistingManifests();
       existingIds = new Set(existingManifests.map(m => m.manifestId));
+      
+      // Build deduplication sets by decrypting manifests (same as mobile)
+      const dedupeSets = await this.buildDeduplicationSets(existingManifests);
+      alreadyFilenames = dedupeSets.alreadyFilenames;
+      alreadyFileHashes = dedupeSets.alreadyFileHashes;
+      alreadyPerceptualHashes = dedupeSets.alreadyPerceptualHashes;
     } else {
       this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
       existingClassic = await this.getExistingClassicFilenames();
@@ -529,11 +700,7 @@ class DesktopBackupClient {
       if (!file) continue;
 
       if (isStealthCloud) {
-        const manifestId = crypto.createHash('sha256').update(`desktop:${file.path}`).digest('hex');
-        if (existingIds && existingIds.has(manifestId)) {
-          skipped++;
-          continue;
-        }
+        // Don't pre-filter by manifestId - let uploadFile handle all deduplication
         toUpload.push(file);
         continue;
       }
@@ -566,18 +733,24 @@ class DesktopBackupClient {
       if (this.cancelled) return;
       try {
         if (isStealthCloud) {
-          const res = await this.uploadFile(file, idx, totalFiles);
-          if (existingIds && res && res.manifestId) existingIds.add(res.manifestId);
-          uploaded++;
+          const result = await this.uploadFile(file, idx, totalFiles, existingIds, alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes);
+          if (result && result.skipped) {
+            skipped++;
+          } else {
+            uploaded++;
+            // Update in-memory sets to prevent duplicates within same run
+            if (result && result.manifestId) {
+              existingIds.add(result.manifestId);
+            }
+            if (result && result.fileHash) {
+              alreadyFileHashes.add(result.fileHash);
+            }
+            if (result && result.perceptualHash) {
+              alreadyPerceptualHashes.add(result.perceptualHash);
+            }
+          }
         } else {
-          this.progressCallback({
-            message: `Uploading ${file.name}`,
-            progress: 0.1 + (idx / totalFiles) * 0.9
-          });
           const res = await this.uploadClassicRawFile(file);
-          const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
-          if (normalized && existingClassic) existingClassic.add(normalized);
-          // Server-side hash duplicate detection
           if (res && res.duplicate) {
             skipped++;
           } else {

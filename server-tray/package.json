@@ -105,6 +105,7 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "qrcode": "^1.5.3",
+    "sharp": "^0.33.0",
     "sqlite3": "^5.1.7",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
