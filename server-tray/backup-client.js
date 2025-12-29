@@ -526,37 +526,55 @@ class DesktopBackupClient {
       return { skipped: true, reason: 'filename' };
     }
 
-    // Compute exact file hash for content-based deduplication
+    // Determine if this is an image or video
+    const ext = path.extname(fileName).toLowerCase();
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'];
+    const isImage = imageExts.includes(ext);
+
+    // For IMAGES: use perceptual hash (transcoding-resistant)
+    // For VIDEOS: use exact file hash (byte-for-byte comparison)
     let exactFileHash = null;
-    try {
-      exactFileHash = await computeExactFileHash(filePath);
-    } catch (e) {
-      console.warn(`computeExactFileHash failed for ${fileName}:`, e.message);
-      exactFileHash = null;
-    }
-
-    // Skip if exact file hash already exists on server (cross-device dedupe)
-    if (exactFileHash && alreadyFileHashes && alreadyFileHashes.has(exactFileHash)) {
-      console.log(`Skipping ${fileName} - exact file hash already on server`);
-      return { skipped: true, reason: 'fileHash' };
-    }
-
-    // Compute perceptual hash for images (visual content-based deduplication, transcoding-resistant)
     let perceptualHash = null;
-    try {
-      perceptualHash = await computePerceptualHash(filePath);
-      if (perceptualHash) {
-        console.log(`[PerceptualHash] ${fileName}: ${perceptualHash.substring(0, 16)}...`);
-      }
-    } catch (e) {
-      console.warn(`computePerceptualHash failed for ${fileName}:`, e.message);
-      perceptualHash = null;
-    }
 
-    // Skip if perceptual hash already exists on server (catches transcoded duplicates)
-    if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.has(perceptualHash)) {
-      console.log(`Skipping ${fileName} - visually identical image already on server (transcoded duplicate)`);
-      return { skipped: true, reason: 'perceptualHash' };
+    if (isImage) {
+      // Images: compute perceptual hash for transcoding-resistant deduplication
+      try {
+        perceptualHash = await computePerceptualHash(filePath);
+        if (perceptualHash) {
+          console.log(`[PerceptualHash] ${fileName}: ${perceptualHash.substring(0, 16)}...`);
+        }
+      } catch (e) {
+        console.warn(`computePerceptualHash failed for ${fileName}:`, e.message);
+        perceptualHash = null;
+      }
+
+      // Skip if perceptual hash already exists on server (catches transcoded duplicates)
+      if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.has(perceptualHash)) {
+        console.log(`Skipping ${fileName} - visually identical image already on server (perceptual match)`);
+        return { skipped: true, reason: 'perceptualHash' };
+      }
+
+      // Also compute exact hash for storage in manifest (but don't use for deduplication)
+      try {
+        exactFileHash = await computeExactFileHash(filePath);
+      } catch (e) {
+        console.warn(`computeExactFileHash failed for ${fileName}:`, e.message);
+      }
+    } else {
+      // Videos: compute exact file hash for byte-for-byte deduplication
+      try {
+        exactFileHash = await computeExactFileHash(filePath);
+        console.log(`[FileHash] ${fileName}: ${exactFileHash ? exactFileHash.substring(0, 16) + '...' : 'null'}`);
+      } catch (e) {
+        console.warn(`computeExactFileHash failed for ${fileName}:`, e.message);
+        exactFileHash = null;
+      }
+
+      // Skip if exact file hash already exists on server
+      if (exactFileHash && alreadyFileHashes && alreadyFileHashes.has(exactFileHash)) {
+        console.log(`Skipping ${fileName} - exact file hash already on server`);
+        return { skipped: true, reason: 'fileHash' };
+      }
     }
 
     // Generate per-file key and base nonce
