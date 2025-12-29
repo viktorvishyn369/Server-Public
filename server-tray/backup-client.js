@@ -84,8 +84,9 @@ function hammingDistance64(a, b) {
 }
 
 // Cross-platform deduplication threshold for 64-bit dHash
-// Allow up to 5 bits difference to account for JPEG decoder variations
-const CROSS_PLATFORM_DHASH_THRESHOLD = 5;
+// Allow up to 3 bits difference to account for JPEG decoder variations
+// (Testing shows iOS/Android differ by 0-2 bits for same image)
+const CROSS_PLATFORM_DHASH_THRESHOLD = 3;
 
 // Find a matching perceptual hash using Hamming distance (fuzzy matching)
 function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH_THRESHOLD) {
@@ -117,8 +118,11 @@ async function computePerceptualHash(filePath) {
       return null; // Only process images
     }
 
-    // Load source image at full resolution
-    const { data: srcData, info } = await sharp(filePath)
+    // Load source image at full resolution WITHOUT EXIF rotation
+    // This matches Android BitmapFactory.decodeStream() and iOS CGImageSourceCreateWithURL behavior
+    // Sharp does NOT auto-rotate by default (unlike iOS UIImage), so raw pixels are consistent
+    const { data: srcData, info } = await sharp(filePath, { failOn: 'none' })
+      .rotate(0) // Explicitly disable EXIF auto-rotation
       .raw()
       .toBuffer({ resolveWithObject: true });
     
@@ -647,7 +651,8 @@ class DesktopBackupClient {
       }
 
       // Skip if perceptual hash already exists on server (catches transcoded duplicates)
-      if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.has(perceptualHash)) {
+      // Use fuzzy matching (Hamming distance ≤3 bits) to handle minor JPEG decoder differences
+      if (perceptualHash && alreadyPerceptualHashes && findPerceptualHashMatch(perceptualHash, alreadyPerceptualHashes, 3)) {
         console.log(`Skipping ${fileName} - visually identical image already on server (perceptual match)`);
         return { skipped: true, reason: 'perceptualHash' };
       }
