@@ -1,4 +1,4 @@
-const { app, Tray, Menu, shell, nativeImage, Notification, clipboard, BrowserWindow, ipcMain, powerSaveBlocker } = require('electron');
+const { app, Tray, Menu, shell, nativeImage, Notification, clipboard, BrowserWindow, ipcMain, powerSaveBlocker, dialog } = require('electron');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -644,13 +644,15 @@ function showQRCodeWindow() {
   <style>
     :root {
       --bg-primary: #0A0A0A;
-      --bg-card: #1E1E1E;
+      --bg-card: rgba(30, 30, 30, 0.85);
       --accent: #4A9FE8;
       --accent-secondary: #03DAC6;
       --text-primary: #FFFFFF;
       --text-secondary: #AAAAAA;
       --text-muted: #666666;
-      --border: #333333;
+      --border: rgba(255, 255, 255, 0.15);
+      --glow-white: 0 2px 12px rgba(255, 255, 255, 0.08);
+      --glow-accent: 0 2px 10px rgba(74, 159, 232, 0.25);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -685,7 +687,8 @@ function showQRCodeWindow() {
       background: #fff;
       padding: clamp(10px, 3vw, 16px);
       border-radius: clamp(10px, 3vw, 14px);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 24px rgba(74, 159, 232, 0.3), 0 0 40px rgba(74, 159, 232, 0.15);
+      border: 2px solid rgba(74, 159, 232, 0.4);
     }
     .qr-code {
       display: block;
@@ -703,8 +706,9 @@ function showQRCodeWindow() {
       margin-bottom: clamp(6px, 1.5vw, 10px);
     }
     .step-num {
-      background: var(--accent);
-      color: #000;
+      background: rgba(74, 159, 232, 0.2);
+      border: 1px solid rgba(74, 159, 232, 0.6);
+      color: var(--accent);
       width: clamp(18px, 5vw, 22px);
       height: clamp(18px, 5vw, 22px);
       border-radius: 50%;
@@ -723,9 +727,12 @@ function showQRCodeWindow() {
     .ip-badge {
       margin-top: clamp(10px, 2.5vw, 16px);
       padding: clamp(8px, 2vw, 10px) clamp(12px, 3vw, 16px);
-      background: rgba(187,134,252,0.15);
+      background: rgba(74, 159, 232, 0.1);
+      border: 1px solid rgba(74, 159, 232, 0.3);
       border-radius: 8px;
       font-size: clamp(11px, 3vw, 12px);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
     .ip-badge span { color: var(--accent-secondary); font-weight: 600; }
   </style>
@@ -777,33 +784,9 @@ function showQRCodeWindow() {
 // ============================================================================
 
 function getPhotoFolders() {
-  const folders = [];
-  const home = os.homedir();
-  
-  if (process.platform === 'darwin') {
-    // macOS
-    folders.push(path.join(home, 'Pictures'));
-    folders.push(path.join(home, 'Photos Library.photoslibrary')); // Apple Photos
-    folders.push(path.join(home, 'Desktop'));
-    folders.push(path.join(home, 'Downloads'));
-  } else if (process.platform === 'win32') {
-    // Windows
-    folders.push(path.join(home, 'Pictures'));
-    folders.push(path.join(home, 'Videos'));
-    folders.push(path.join(home, 'Desktop'));
-    folders.push(path.join(home, 'Downloads'));
-    // OneDrive Pictures
-    const oneDrive = path.join(home, 'OneDrive', 'Pictures');
-    if (fs.existsSync(oneDrive)) folders.push(oneDrive);
-  } else {
-    // Linux
-    folders.push(path.join(home, 'Pictures'));
-    folders.push(path.join(home, 'Videos'));
-    folders.push(path.join(home, 'Desktop'));
-    folders.push(path.join(home, 'Downloads'));
-  }
-  
-  return folders.filter(f => {
+  // Return user's custom folders if set, otherwise return empty array
+  const customFolders = store.get('backupFolders') || [];
+  return customFolders.filter(f => {
     try {
       return fs.existsSync(f) && fs.statSync(f).isDirectory();
     } catch (e) {
@@ -811,6 +794,27 @@ function getPhotoFolders() {
     }
   });
 }
+
+// IPC handler for adding folders via dialog
+ipcMain.handle('select-folder', async () => {
+  const result = await dialog.showOpenDialog(backupWindow, {
+    properties: ['openDirectory', 'multiSelections'],
+    title: 'Select Folders to Backup'
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths;
+});
+
+ipcMain.on('save-backup-folders', (event, folders) => {
+  store.set('backupFolders', folders);
+});
+
+ipcMain.on('get-backup-folders', (event) => {
+  const folders = store.get('backupFolders') || [];
+  event.reply('backup-folders', folders);
+});
 
 function showBackupWindow() {
   if (backupWindow && !backupWindow.isDestroyed()) {
@@ -845,17 +849,19 @@ function showBackupWindow() {
   <style>
     :root {
       --bg-primary: #0A0A0A;
-      --bg-card: #1E1E1E;
-      --bg-input: #1A1A1A;
+      --bg-card: rgba(30, 30, 30, 0.85);
+      --bg-input: rgba(26, 26, 26, 0.9);
       --accent: #4A9FE8;
       --accent-hover: #3B8BD4;
       --accent-secondary: #03DAC6;
       --text-primary: #FFFFFF;
       --text-secondary: #AAAAAA;
       --text-muted: #666666;
-      --border: #333333;
+      --border: rgba(255, 255, 255, 0.15);
       --success: #03DAC6;
       --error: #CF6679;
+      --glow-white: 0 2px 12px rgba(255, 255, 255, 0.08);
+      --glow-accent: 0 2px 10px rgba(74, 159, 232, 0.25);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -891,12 +897,18 @@ function showBackupWindow() {
       flex-direction: column;
       gap: clamp(8px, 2vw, 12px);
       min-height: 0;
+      overflow-y: auto;
+      padding-bottom: clamp(8px, 2vw, 12px);
     }
     .section {
       background: var(--bg-card);
       border-radius: 10px;
       padding: clamp(10px, 2.5vw, 14px);
       flex-shrink: 0;
+      border: 1px solid var(--border);
+      box-shadow: var(--glow-white);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
     .section-title {
       font-size: clamp(12px, 3vw, 14px);
@@ -914,15 +926,16 @@ function showBackupWindow() {
       align-items: center;
       padding: clamp(8px, 2vw, 10px) clamp(10px, 2.5vw, 12px);
       background: var(--bg-input);
-      border: 1px solid transparent;
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.2s;
     }
-    .radio-option:hover { background: rgba(255,255,255,0.08); }
+    .radio-option:hover { background: rgba(255,255,255,0.12); border-color: rgba(255, 255, 255, 0.2); }
     .radio-option.selected {
-      background: rgba(187,134,252,0.15);
-      border-color: var(--accent);
+      background: rgba(74, 159, 232, 0.15);
+      border-color: rgba(74, 159, 232, 0.6);
+      box-shadow: var(--glow-accent);
     }
     .radio-option input { display: none; }
     .radio-dot {
@@ -969,10 +982,12 @@ function showBackupWindow() {
       background: var(--bg-input);
       color: var(--text-primary);
       font-size: clamp(12px, 3vw, 13px);
+      transition: all 0.2s;
     }
     .form-group input:focus {
       outline: none;
-      border-color: var(--accent);
+      border-color: rgba(74, 159, 232, 0.6);
+      box-shadow: 0 0 8px rgba(74, 159, 232, 0.2);
     }
     .form-group input::placeholder { color: var(--text-muted); }
     .note {
@@ -991,16 +1006,22 @@ function showBackupWindow() {
       overflow-y: auto;
       max-height: clamp(80px, 20vh, 140px);
     }
+    .folder-buttons {
+      margin-top: auto;
+      padding-top: 8px;
+    }
     .folder-item {
       display: flex;
       align-items: center;
       padding: clamp(6px, 1.5vw, 8px) clamp(8px, 2vw, 10px);
       background: var(--bg-input);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 6px;
       margin-bottom: 4px;
       cursor: pointer;
+      transition: all 0.2s;
     }
-    .folder-item:hover { background: rgba(255,255,255,0.1); }
+    .folder-item:hover { background: rgba(255,255,255,0.12); border-color: rgba(255, 255, 255, 0.15); }
     .folder-item input[type="checkbox"] {
       width: 16px;
       height: 16px;
@@ -1020,6 +1041,7 @@ function showBackupWindow() {
       gap: clamp(8px, 2vw, 10px);
       padding-top: clamp(10px, 2.5vw, 14px);
       flex-shrink: 0;
+      margin-top: auto;
     }
     .btn {
       flex: 1;
@@ -1032,15 +1054,18 @@ function showBackupWindow() {
       transition: all 0.2s;
     }
     .btn-secondary {
-      background: var(--bg-input);
+      background: rgba(255, 255, 255, 0.1);
       color: var(--text-primary);
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
-    .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+    .btn-secondary:hover { background: rgba(255,255,255,0.15); border-color: rgba(255, 255, 255, 0.3); }
     .btn-primary {
-      background: var(--accent);
+      background: rgba(74, 159, 232, 0.2);
       color: #fff;
+      border: 1px solid rgba(74, 159, 232, 0.6);
+      box-shadow: var(--glow-accent);
     }
-    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:hover { background: rgba(74, 159, 232, 0.3); border-color: rgba(74, 159, 232, 0.8); }
     .btn-primary:disabled {
       background: #444;
       cursor: not-allowed;
@@ -1049,7 +1074,8 @@ function showBackupWindow() {
       background: var(--success);
     }
     .status {
-      background: rgba(187,134,252,0.1);
+      background: rgba(74, 159, 232, 0.1);
+      border: 1px solid rgba(74, 159, 232, 0.3);
       border-radius: 8px;
       padding: clamp(10px, 2.5vw, 12px);
       margin-top: clamp(8px, 2vw, 10px);
@@ -1146,14 +1172,13 @@ function showBackupWindow() {
     </div>
     
     <div class="section folders-section">
-      <div class="section-title">Folders</div>
-      <div class="folder-list">
-        ${photoFolders.map((f, i) => `
-          <label class="folder-item">
-            <input type="checkbox" value="${f}" ${i === 0 ? 'checked' : ''}>
-            <span class="folder-path" title="${f}">${f}</span>
-          </label>
-        `).join('')}
+      <div class="section-title">Folders to Backup</div>
+      <div class="folder-list" id="folder-list">
+        <!-- Folders will be populated dynamically -->
+      </div>
+      <div class="folder-buttons" style="display: flex; gap: 8px;">
+        <button class="btn btn-secondary" style="flex: 1; padding: 8px;" onclick="addFolder()">+ Add Folder</button>
+        <button class="btn btn-secondary" style="padding: 8px; min-width: 80px;" onclick="clearFolders()">Clear All</button>
       </div>
     </div>
     
@@ -1173,6 +1198,49 @@ function showBackupWindow() {
   <script>
     const { ipcRenderer } = require('electron');
     let isBackingUp = false;
+    let selectedFolders = ${JSON.stringify(photoFolders)};
+    
+    // Initialize folder list on load
+    renderFolders();
+    
+    function renderFolders() {
+      const list = document.getElementById('folder-list');
+      if (selectedFolders.length === 0) {
+        list.innerHTML = '<div style="color: var(--text-muted); padding: 12px; text-align: center;">No folders selected. Click "Add Folder" to choose folders to backup.</div>';
+      } else {
+        list.innerHTML = selectedFolders.map((f, i) => \`
+          <div class="folder-item" style="display: flex; align-items: center; justify-content: space-between;">
+            <span class="folder-path" title="\${f}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">\${f}</span>
+            <button onclick="removeFolder(\${i})" style="background: none; border: none; color: var(--error); cursor: pointer; padding: 4px 8px; font-size: 14px;">✕</button>
+          </div>
+        \`).join('');
+      }
+    }
+    
+    async function addFolder() {
+      const paths = await ipcRenderer.invoke('select-folder');
+      if (paths && paths.length > 0) {
+        paths.forEach(p => {
+          if (!selectedFolders.includes(p)) {
+            selectedFolders.push(p);
+          }
+        });
+        ipcRenderer.send('save-backup-folders', selectedFolders);
+        renderFolders();
+      }
+    }
+    
+    function removeFolder(index) {
+      selectedFolders.splice(index, 1);
+      ipcRenderer.send('save-backup-folders', selectedFolders);
+      renderFolders();
+    }
+    
+    function clearFolders() {
+      selectedFolders = [];
+      ipcRenderer.send('save-backup-folders', selectedFolders);
+      renderFolders();
+    }
     
     document.querySelectorAll('input[name="destination"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
@@ -1206,15 +1274,12 @@ function showBackupWindow() {
         return;
       }
       
-      const folders = [];
-      document.querySelectorAll('.folder-item input:checked').forEach(cb => {
-        folders.push(cb.value);
-      });
-      
-      if (folders.length === 0) {
-        showError('Select at least one folder');
+      if (selectedFolders.length === 0) {
+        showError('Add at least one folder to backup');
         return;
       }
+      
+      const folders = selectedFolders;
       
       const config = {
         destination,
@@ -1254,9 +1319,8 @@ function showBackupWindow() {
       document.getElementById('status').classList.add('success');
       document.getElementById('status-text').textContent = data.message;
       document.getElementById('progress-fill').style.width = '100%';
-      document.getElementById('backup-btn').disabled = false;
-      document.getElementById('backup-btn').textContent = 'Done ✓';
-      document.getElementById('backup-btn').classList.add('btn-success');
+      document.getElementById('backup-btn').disabled = true;
+      document.getElementById('backup-btn').textContent = 'Done';
       document.getElementById('cancel-btn').textContent = 'Close';
     });
     

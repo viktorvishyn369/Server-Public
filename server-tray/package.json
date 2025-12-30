@@ -42,8 +42,7 @@
           "**/*",
           "!uploads",
           "!backup.db",
-          "!cloud",
-          "!node_modules"
+          "!cloud"
         ]
       }
     ],

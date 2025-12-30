@@ -16,8 +16,39 @@ const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks (same as mobile)
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
 const UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'; // Same as mobile app
 
-const MAX_PARALLEL_CHUNK_UPLOADS = 4;
-const MAX_PARALLEL_FILE_UPLOADS = 2;
+const MAX_PARALLEL_CHUNK_UPLOADS = 8;
+const MAX_PARALLEL_FILE_UPLOADS = 6;
+const MAX_PARALLEL_MANIFEST_FETCHES = 10;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+// Retry helper with exponential backoff
+async function withRetry(fn, maxRetries = MAX_RETRIES, baseDelay = RETRY_DELAY_MS) {
+  let lastError;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const isRetryable = error.code === 'ETIMEDOUT' || 
+                          error.code === 'ECONNRESET' || 
+                          error.code === 'ECONNREFUSED' ||
+                          error.code === 'ENOTFOUND' ||
+                          error.message?.includes('timeout') ||
+                          error.message?.includes('ETIMEDOUT') ||
+                          (error.response && error.response.status >= 500);
+      
+      if (!isRetryable || attempt === maxRetries - 1) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`Retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
+}
 
 function createConcurrencyLimiter(maxParallel) {
   const max = Math.max(1, Number(maxParallel) || 1);
@@ -278,29 +309,31 @@ class DesktopBackupClient {
     const baseUrl = this.getBaseUrl();
     this.progressCallback({ message: 'Logging in...', progress: 0.02 });
 
-    try {
-      const response = await axios.post(`${baseUrl}/api/login`, {
-        email: this.config.email,
-        password: this.config.password,
-        device_uuid: this.getDeviceId(),
-        device_name: this.getDeviceName()
-      }, {
-        timeout: 30000,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    return withRetry(async () => {
+      try {
+        const response = await axios.post(`${baseUrl}/api/login`, {
+          email: this.config.email,
+          password: this.config.password,
+          device_uuid: this.getDeviceId(),
+          device_name: this.getDeviceName()
+        }, {
+          timeout: 45000,
+          headers: { 'Content-Type': 'application/json' }
+        });
 
-      if (response.data && response.data.token) {
-        this.token = response.data.token;
-        this.deviceUuid = this.getDeviceId(); // Store UUID for subsequent requests
-        return true;
+        if (response.data && response.data.token) {
+          this.token = response.data.token;
+          this.deviceUuid = this.getDeviceId(); // Store UUID for subsequent requests
+          return true;
+        }
+        throw new Error('No token received');
+      } catch (error) {
+        if (error.response && error.response.status === 401) {
+          throw new Error('Invalid email or password');
+        }
+        throw new Error('Login failed: ' + (error.message || 'Unknown error'));
       }
-      throw new Error('No token received');
-    } catch (error) {
-      if (error.response && error.response.status === 401) {
-        throw new Error('Invalid email or password');
-      }
-      throw new Error('Login failed: ' + (error.message || 'Unknown error'));
-    }
+    });
   }
 
   // Check subscription status before allowing backup
@@ -418,29 +451,31 @@ class DesktopBackupClient {
     return nonce;
   }
 
-  // Upload encrypted chunk to StealthCloud
+  // Upload encrypted chunk to StealthCloud with retry
   async uploadChunk(chunkId, encryptedBytes) {
     const baseUrl = this.getBaseUrl();
     const url = `${baseUrl}/api/cloud/chunks`;
 
-    try {
-      await axios.post(url, Buffer.from(encryptedBytes), {
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/octet-stream',
-          'X-Chunk-Id': chunkId,
-          'X-Device-UUID': this.deviceUuid
-        },
-        timeout: 120000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
-      });
-    } catch (error) {
-      if (error.response) {
-        console.error('Chunk upload error:', error.response.status, error.response.data);
+    return withRetry(async () => {
+      try {
+        await axios.post(url, Buffer.from(encryptedBytes), {
+          headers: {
+            'Authorization': `Bearer ${this.token}`,
+            'Content-Type': 'application/octet-stream',
+            'X-Chunk-Id': chunkId,
+            'X-Device-UUID': this.deviceUuid
+          },
+          timeout: 120000,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity
+        });
+      } catch (error) {
+        if (error.response) {
+          console.error('Chunk upload error:', error.response.status, error.response.data);
+        }
+        throw error;
       }
-      throw error;
-    }
+    }, 3, 2000); // 3 retries with 2s base delay for chunks
   }
 
   async uploadClassicRawFile(file) {
@@ -450,24 +485,26 @@ class DesktopBackupClient {
     const fileName = file && file.name ? file.name : null;
     if (!filePath || !fileName) throw new Error('Invalid file');
 
-    const stream = fs.createReadStream(filePath);
-    const response = await axios.post(url, stream, {
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'X-Device-UUID': this.deviceUuid,
-        'X-Filename': fileName,
-        'Content-Type': 'application/octet-stream'
-      },
-      timeout: 5 * 60 * 1000,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
-    });
+    return withRetry(async () => {
+      const stream = fs.createReadStream(filePath);
+      const response = await axios.post(url, stream, {
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'X-Device-UUID': this.deviceUuid,
+          'X-Filename': fileName,
+          'Content-Type': 'application/octet-stream'
+        },
+        timeout: 5 * 60 * 1000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
+      });
 
-    // Check for server-side hash duplicate
-    if (response.data && response.data.duplicate) {
-      return { duplicate: true };
-    }
-    return { duplicate: false };
+      // Check for server-side hash duplicate
+      if (response.data && response.data.duplicate) {
+        return { duplicate: true };
+      }
+      return { duplicate: false };
+    }, 3, 2000); // 3 retries with 2s base delay
   }
 
   async getExistingClassicFilenames() {
@@ -520,7 +557,7 @@ class DesktopBackupClient {
     });
   }
 
-  // Get existing manifests to skip already backed up files (with pagination)
+  // Get existing manifests to skip already backed up files (with pagination and retry)
   async getExistingManifests() {
     const baseUrl = this.getBaseUrl();
     const allManifests = [];
@@ -529,17 +566,21 @@ class DesktopBackupClient {
 
     try {
       while (true) {
-        const response = await axios.get(`${baseUrl}/api/cloud/manifests`, {
-          headers: { 
-            'Authorization': `Bearer ${this.token}`,
-            'X-Device-UUID': this.deviceUuid
-          },
-          params: { offset, limit: pageLimit },
-          timeout: 30000
+        const response = await withRetry(async () => {
+          return axios.get(`${baseUrl}/api/cloud/manifests`, {
+            headers: { 
+              'Authorization': `Bearer ${this.token}`,
+              'X-Device-UUID': this.deviceUuid
+            },
+            params: { offset, limit: pageLimit },
+            timeout: 60000
+          });
         });
 
         const manifests = (response.data && response.data.manifests) || [];
         allManifests.push(...manifests);
+        
+        this.progressCallback({ message: `Found ${allManifests.length} existing backups...`, progress: 0.04 });
 
         if (!manifests || manifests.length < pageLimit) break;
         offset += manifests.length;
@@ -557,6 +598,7 @@ class DesktopBackupClient {
   // Build deduplication sets by decrypting manifests (for cross-device duplicate detection)
   // Images: use perceptualHash only (ignore fileHash)
   // Videos: use fileHash only (no perceptualHash)
+  // Uses parallel fetching for speed
   async buildDeduplicationSets(existingManifests) {
     const baseUrl = this.getBaseUrl();
     const alreadyFilenames = new Set();
@@ -567,15 +609,21 @@ class DesktopBackupClient {
       return { alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes };
     }
 
-    for (const m of existingManifests) {
+    const total = existingManifests.length;
+    let processed = 0;
+    const runFetch = createConcurrencyLimiter(MAX_PARALLEL_MANIFEST_FETCHES);
+
+    const fetchManifest = async (m) => {
       try {
-        const response = await axios.get(`${baseUrl}/api/cloud/manifests/${m.manifestId}`, {
-          headers: {
-            'Authorization': `Bearer ${this.token}`,
-            'X-Device-UUID': this.deviceUuid
-          },
-          timeout: 15000
-        });
+        const response = await withRetry(async () => {
+          return axios.get(`${baseUrl}/api/cloud/manifests/${m.manifestId}`, {
+            headers: {
+              'Authorization': `Bearer ${this.token}`,
+              'X-Device-UUID': this.deviceUuid
+            },
+            timeout: 30000
+          });
+        }, 2, 500); // 2 retries with 500ms base delay for individual manifests
 
         const payload = response.data;
         const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
@@ -586,19 +634,38 @@ class DesktopBackupClient {
 
         if (manifestPlain) {
           const manifest = JSON.parse(naclUtil.encodeUTF8(manifestPlain));
-          if (manifest.filename) {
-            alreadyFilenames.add(this.normalizeFilenameForCompare(manifest.filename));
-          }
-          // If manifest has perceptualHash, it's an image - use perceptual hash only
-          if (manifest.perceptualHash) {
-            alreadyPerceptualHashes.add(manifest.perceptualHash);
-          } else if (manifest.fileHash) {
-            // No perceptualHash means it's a video - use file hash
-            alreadyFileHashes.add(manifest.fileHash);
-          }
+          return manifest;
         }
       } catch (e) {
-        // Skip manifests we can't decrypt
+        // Skip manifests we can't decrypt or fetch
+      }
+      return null;
+    };
+
+    // Fetch all manifests in parallel with concurrency limit
+    const tasks = existingManifests.map((m) => runFetch(async () => {
+      const manifest = await fetchManifest(m);
+      processed++;
+      if (processed % 50 === 0 || processed === total) {
+        this.progressCallback({ message: `Checking existing backups... ${processed}/${total}`, progress: 0.05 + (processed / total) * 0.03 });
+      }
+      return manifest;
+    }));
+
+    const results = await Promise.all(tasks);
+
+    // Process results
+    for (const manifest of results) {
+      if (!manifest) continue;
+      if (manifest.filename) {
+        alreadyFilenames.add(this.normalizeFilenameForCompare(manifest.filename));
+      }
+      // If manifest has perceptualHash, it's an image - use perceptual hash only
+      if (manifest.perceptualHash) {
+        alreadyPerceptualHashes.add(manifest.perceptualHash);
+      } else if (manifest.fileHash) {
+        // No perceptualHash means it's a video - use file hash
+        alreadyFileHashes.add(manifest.fileHash);
       }
     }
 
