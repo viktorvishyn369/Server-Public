@@ -5,23 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PhotoLynk Account Deletion</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        h1 { color: #333; }
-        ol { line-height: 1.6; }
+        :root { color-scheme: light dark; }
+        body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #0b0b0c; color: #f2f2f2; }
+        .wrap { max-width: 700px; margin: 0 auto; padding: 48px 18px; }
+        .card { background: #141416; border: 1px solid #242428; border-radius: 14px; padding: 28px; }
+        h1 { margin: 0 0 8px 0; font-size: 24px; color: #fff; }
+        h2 { margin-top: 24px; font-size: 17px; color: #e0e0e0; }
+        p, li { color: #cfcfd6; line-height: 1.7; }
+        a { color: #a78bfa; text-decoration: none; font-weight: 600; }
+        a:hover { text-decoration: underline; }
+        .topnav { margin-bottom: 14px; }
+        .warning { background: #2a1a1a; border: 1px solid #4a2a2a; border-radius: 8px; padding: 14px; margin: 16px 0; }
+        .warning p { color: #ff9999; margin: 0; }
+        .info-box { background: #1a1a1c; border-radius: 8px; padding: 16px; margin: 16px 0; }
+        .btn { display: inline-block; background: #a78bfa; color: #000; padding: 14px 28px; border-radius: 8px; font-weight: 600; text-decoration: none; margin-top: 16px; }
+        .btn:hover { background: #8b6fdb; text-decoration: none; }
+        .manual { background: #1c1c1e; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-top: 20px; }
+        .manual code { background: #0f0f12; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+        ul { padding-left: 20px; }
     </style>
 </head>
 <body>
-    <h1>PhotoLynk Account Deletion Request</h1>
-    <p>To permanently delete your PhotoLynk account and all associated data:</p>
-    <ol>
-        <li>Open the PhotoLynk app on your device</li>
-        <li>Go to Settings → Account → Delete Account</li>
-        <li>Follow the confirmation prompts</li>
-        <li>Contact support if you encounter issues: support@photolynk.app</li>
-    </ol>
-    <p><strong>What gets deleted:</strong> Your account, all photos/videos, backup data, encryption keys, and account metadata.</p>
-    <p><strong>Timeline:</strong> Deletion is permanent and occurs within 30 days of your request.</p>
-    <p><strong>Important:</strong> This action cannot be undone. All your data will be permanently removed.</p>
-    <p><strong>Contact:</strong> support@photolynk.app for any questions.</p>
+    <div class="wrap">
+        <div class="topnav"><a href="index.html">← Back to PhotoLynk</a></div>
+        <div class="card">
+            <h1>Delete Your PhotoLynk Account</h1>
+            <p>Request permanent deletion of your StealthCloud account and all associated data.</p>
+
+            <h2>What Gets Deleted</h2>
+            <ul>
+                <li><strong>Account</strong> — Your email and authentication credentials</li>
+                <li><strong>Photos & Videos</strong> — All encrypted backups on StealthCloud</li>
+                <li><strong>Encryption Keys</strong> — Your encrypted file manifests</li>
+                <li><strong>Device Data</strong> — All device associations and sync history</li>
+            </ul>
+
+            <div class="warning">
+                <p><strong>Warning:</strong> This action is permanent and cannot be undone. All data will be deleted within 30 days.</p>
+            </div>
+
+            <h2>Request Account Deletion</h2>
+            <p>To verify your identity and delete your account, please email us with the following information:</p>
+            <div class="info-box">
+                <p><strong>Required information:</strong></p>
+                <ul>
+                    <li><strong>Email</strong> — The email address used for your PhotoLynk account</li>
+                    <li><strong>Password</strong> — Your account password (for verification)</li>
+                    <li><strong>Device UUID</strong> — Found in PhotoLynk app: Settings → About → Device UUID</li>
+                </ul>
+            </div>
+
+            <a class="btn" href="mailto:support@stealthlynk.io?subject=Account%20Deletion%20Request&body=I%20request%20deletion%20of%20my%20PhotoLynk%20account.%0A%0AEmail%3A%20%0APassword%3A%20%0ADevice%20UUID%3A%20%0A%0AI%20understand%20this%20action%20is%20permanent%20and%20all%20my%20data%20will%20be%20deleted.">
+                Request Account Deletion
+            </a>
+
+            <div class="manual">
+                <p><strong>No email app?</strong> Send an email manually to:</p>
+                <p><code>support@stealthlynk.io</code></p>
+                <p>Subject: <code>Account Deletion Request</code></p>
+                <p>Include your email, password, and Device UUID in the body.</p>
+            </div>
+
+            <h2>Timeline</h2>
+            <p>We will verify your identity and process your deletion request within <strong>30 days</strong>. You will receive a confirmation email once complete.</p>
+
+            <h2>Questions?</h2>
+            <p>Contact us at <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a></p>
+        </div>
+    </div>
 </body>
 </html>
