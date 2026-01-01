@@ -710,7 +710,7 @@ class DesktopBackupClient {
       try {
         perceptualHash = await computePerceptualHash(filePath);
         if (perceptualHash) {
-          console.log(`[PerceptualHash] ${fileName}: ${perceptualHash.substring(0, 16)}...`);
+          console.log(`[PerceptualHash] ${fileName}: ${perceptualHash} (${perceptualHash.length} chars)`);
         }
       } catch (e) {
         console.warn(`computePerceptualHash failed for ${fileName}:`, e.message);
