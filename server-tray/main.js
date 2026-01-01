@@ -1405,8 +1405,8 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
     
     // Scan folders for media files
     const mediaFiles = [];
-    const extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.bmp', '.webp', 
-                        '.mp4', '.mov', '.avi', '.mkv', '.m4v', '.3gp'];
+    const extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.avif', '.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.rw2', '.orf',
+                        '.mp4', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.webm'];
     
     for (const folder of config.folders) {
       try {

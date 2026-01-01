@@ -11,6 +11,7 @@ const axios = require('axios');
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
 const sharp = require('sharp');
+const heicConvert = require('heic-convert');
 
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks (same as mobile)
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
@@ -143,17 +144,36 @@ function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH
 async function computePerceptualHash(filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase();
-    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'];
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif', '.avif', '.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.rw2', '.orf'];
     
     if (!imageExts.includes(ext)) {
       return null; // Only process images
     }
 
+    let imageBuffer;
+    
+    // HEIC/HEIF files need conversion first - Sharp doesn't have native HEIC decoding
+    if (ext === '.heic' || ext === '.heif') {
+      try {
+        const inputBuffer = fs.readFileSync(filePath);
+        const jpegBuffer = await heicConvert({
+          buffer: inputBuffer,
+          format: 'JPEG',
+          quality: 0.95
+        });
+        imageBuffer = jpegBuffer;
+        console.log(`[HEIC] Converted ${path.basename(filePath)} to JPEG for hashing`);
+      } catch (heicErr) {
+        console.warn(`[HEIC] Failed to convert ${path.basename(filePath)}:`, heicErr.message);
+        return null;
+      }
+    }
+
     // Load source image at full resolution WITHOUT EXIF rotation
-    // This matches Android BitmapFactory.decodeStream() and iOS CGImageSourceCreateWithURL behavior
-    // Sharp does NOT auto-rotate by default (unlike iOS UIImage), so raw pixels are consistent
-    const { data: srcData, info } = await sharp(filePath, { failOn: 'none' })
-      .rotate(0) // Explicitly disable EXIF auto-rotation
+    // This matches iOS CGImageSourceCreateImageAtIndex behavior which ignores EXIF orientation
+    const sharpInput = imageBuffer || filePath;
+    const { data: srcData, info } = await sharp(sharpInput, { failOn: 'none' })
+      .rotate() // Auto-rotate based on EXIF orientation (matches iOS UIImage)
       .raw()
       .toBuffer({ resolveWithObject: true });
     
@@ -697,7 +717,7 @@ class DesktopBackupClient {
 
     // Determine if this is an image or video
     const ext = path.extname(fileName).toLowerCase();
-    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif'];
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif', '.avif', '.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.rw2', '.orf'];
     const isImage = imageExts.includes(ext);
 
     // For IMAGES: use perceptual hash (transcoding-resistant)
