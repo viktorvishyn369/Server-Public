@@ -171,9 +171,9 @@ async function computePerceptualHash(filePath) {
 
     // Load source image at full resolution WITHOUT EXIF rotation
     // This matches iOS CGImageSourceCreateImageAtIndex behavior which ignores EXIF orientation
+    // Sharp by default does NOT auto-rotate, which is what we want
     const sharpInput = imageBuffer || filePath;
     const { data: srcData, info } = await sharp(sharpInput, { failOn: 'none' })
-      .rotate() // Auto-rotate based on EXIF orientation (matches iOS UIImage)
       .raw()
       .toBuffer({ resolveWithObject: true });
     
