@@ -416,13 +416,6 @@ class DesktopBackupClient {
         const ExifReader = require('exifreader');
         tags = await ExifReader.load(filePath);
         
-        // Debug: log available EXIF tags for HEIC
-        const tagKeys = Object.keys(tags).slice(0, 20);
-        console.log(`[EXIF-DEBUG] ${fileName}: tags found:`, tagKeys.join(', '));
-        if (tags['DateTimeOriginal']) console.log(`[EXIF-DEBUG] ${fileName}: DateTimeOriginal:`, tags['DateTimeOriginal']);
-        if (tags['Make']) console.log(`[EXIF-DEBUG] ${fileName}: Make:`, tags['Make']);
-        if (tags['Model']) console.log(`[EXIF-DEBUG] ${fileName}: Model:`, tags['Model']);
-        
         // Extract DateTimeOriginal
         const dateTimeOriginal = tags['DateTimeOriginal']?.description || tags['DateTime']?.description;
         if (dateTimeOriginal) {
@@ -1161,6 +1154,8 @@ class DesktopBackupClient {
     const exifData = await this.extractExifForDedup(filePath);
     if (exifData.captureTime) {
       console.log(`[EXIF] ${fileName}: time=${exifData.captureTime}, make=${exifData.make}, model=${exifData.model}`);
+    } else if (ext === '.heic' || ext === '.heif') {
+      console.log(`[EXIF] ${fileName}: no EXIF metadata found (file may have been stripped during transfer)`);
     }
 
     // Build manifest with fileHash and perceptualHash for cross-device deduplication
