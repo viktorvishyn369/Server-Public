@@ -116,27 +116,30 @@ function hammingDistance64(a, b) {
 }
 
 // Cross-platform deduplication threshold for 64-bit dHash
-// Allow up to 3 bits difference to account for JPEG decoder variations
-// (Testing shows iOS/Android differ by 0-2 bits for same image)
+// Strict threshold of 3 bits - only catches truly identical images
+// Overnight re-compression and platform differences are handled by filename+size and filename+date fallbacks
 const CROSS_PLATFORM_DHASH_THRESHOLD = 3;
 
 // Find a matching perceptual hash using Hamming distance (fuzzy matching)
+// Returns { match: boolean, distance: number } for logging
 function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH_THRESHOLD) {
-  if (!hash || hash.length !== 16 || !hashSet || hashSet.size === 0) return false;
+  if (!hash || hash.length !== 16 || !hashSet || hashSet.size === 0) return { match: false, distance: -1 };
   
   // First check exact match (fast path)
-  if (hashSet.has(hash)) return true;
+  if (hashSet.has(hash)) return { match: true, distance: 0 };
   
   // Check Hamming distance for fuzzy match
+  let bestDistance = Number.MAX_SAFE_INTEGER;
   for (const existingHash of hashSet) {
     if (existingHash && existingHash.length === 16) {
       const dist = hammingDistance64(hash, existingHash);
+      if (dist < bestDistance) bestDistance = dist;
       if (dist <= threshold) {
-        return true;
+        return { match: true, distance: dist };
       }
     }
   }
-  return false;
+  return { match: false, distance: bestDistance };
 }
 
 // Compute perceptual hash (dHash) for images - transcoding-resistant visual deduplication
@@ -295,6 +298,78 @@ class DesktopBackupClient {
     const trimmed = (base || '').trim();
     if (!trimmed) return null;
     return trimmed.toLowerCase();
+  }
+
+  // Extract base filename for cross-platform variant deduplication
+  // Handles iOS, Android/Google Photos, Windows, and Linux naming patterns:
+  // iOS: IMG_1234_1_105_c.jpeg, IMG_1234_4_5005_c.jpeg
+  // Android/Google: IMG_20231225_123456_1.jpg, PXL_20231225_123456~2.jpg
+  // Windows: IMG_1234 (2).jpg, IMG_1234 - Copy.jpg
+  // Linux: IMG_1234 (copy).jpg, IMG_1234_copy.jpg
+  extractBaseFilename(name) {
+    if (!name || typeof name !== 'string') return null;
+    const base = path.basename(name);
+    const trimmed = (base || '').trim().toLowerCase();
+    if (!trimmed) return null;
+    
+    // Remove extension first
+    const extMatch = trimmed.match(/^(.+)\.(\w+)$/);
+    if (!extMatch) return trimmed;
+    let nameWithoutExt = extMatch[1];
+    
+    // iOS variant patterns: _1_105_c, _4_5005_c, _1_201_a, _2_100_a, etc.
+    // These are iOS thumbnail/preview suffixes - always strip
+    nameWithoutExt = nameWithoutExt.replace(/_\d+_\d+_[a-z]$/, '');
+    
+    // Android/Google Photos burst/edit patterns:
+    // Only match patterns that are clearly copy indicators, NOT image numbers
+    // IMG_20231225_123456_1 -> IMG_20231225_123456 (burst copy after timestamp)
+    // But IMG_5730 should stay as IMG_5730 (that's the image number, not a copy)
+    nameWithoutExt = nameWithoutExt.replace(/(_\d{6,})_\d{1,2}$/, '$1'); // Strip _1, _2 only after 6+ digit timestamp
+    nameWithoutExt = nameWithoutExt.replace(/~\d+$/, '');           // ~2, ~3 (Google edited)
+    nameWithoutExt = nameWithoutExt.replace(/-(edit|edited|collage|animation)$/i, '');
+    nameWithoutExt = nameWithoutExt.replace(/_burst\d*$/i, '');     // _BURST001
+    
+    // Windows patterns:
+    nameWithoutExt = nameWithoutExt.replace(/ \(\d+\)$/, '');       // " (2)" with space
+    nameWithoutExt = nameWithoutExt.replace(/\(\d+\)$/, '');        // "(2)" no space
+    nameWithoutExt = nameWithoutExt.replace(/ - copy( \(\d+\))?$/i, ''); // " - Copy" or " - Copy (2)"
+    
+    // Linux patterns:
+    nameWithoutExt = nameWithoutExt.replace(/ \(copy\)$/i, '');     // " (copy)"
+    nameWithoutExt = nameWithoutExt.replace(/_copy\d*$/i, '');      // "_copy", "_copy2"
+    nameWithoutExt = nameWithoutExt.replace(/\.bak$/i, '');         // ".bak" backup suffix
+    
+    // Generic patterns (all platforms):
+    nameWithoutExt = nameWithoutExt.replace(/_backup$/i, '');       // "_backup"
+    nameWithoutExt = nameWithoutExt.replace(/-backup$/i, '');       // "-backup"
+    nameWithoutExt = nameWithoutExt.replace(/_original$/i, '');     // "_original"
+    
+    return nameWithoutExt.trim();
+  }
+
+  // Normalize date for comparison - extracts YYYY-MM-DD format
+  // Handles various date formats: ISO strings, timestamps, Date objects
+  normalizeDateForCompare(dateVal) {
+    if (!dateVal) return null;
+    try {
+      let date;
+      if (typeof dateVal === 'number') {
+        // Unix timestamp (seconds or milliseconds)
+        date = new Date(dateVal > 9999999999 ? dateVal : dateVal * 1000);
+      } else if (typeof dateVal === 'string') {
+        date = new Date(dateVal);
+      } else if (dateVal instanceof Date) {
+        date = dateVal;
+      } else {
+        return null;
+      }
+      if (isNaN(date.getTime())) return null;
+      // Return YYYY-MM-DD format for comparison
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return null;
+    }
   }
 
   getBaseUrl() {
@@ -618,15 +693,19 @@ class DesktopBackupClient {
   // Build deduplication sets by decrypting manifests (for cross-device duplicate detection)
   // Images: use perceptualHash only (ignore fileHash)
   // Videos: use fileHash only (no perceptualHash)
+  // Also builds baseFilename+size and baseFilename+date maps for fallback matching
   // Uses parallel fetching for speed
   async buildDeduplicationSets(existingManifests) {
     const baseUrl = this.getBaseUrl();
     const alreadyFilenames = new Set();
+    const alreadyBaseFilenames = new Set(); // For variant deduplication (iOS/Android/Windows/Linux)
     const alreadyFileHashes = new Set();
     const alreadyPerceptualHashes = new Set();
+    const alreadyBaseNameSizes = new Map(); // baseFilename -> Set of sizes (fallback matching)
+    const alreadyBaseNameDates = new Map(); // baseFilename -> Set of date strings (fallback matching)
 
     if (!existingManifests || existingManifests.length === 0) {
-      return { alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes };
+      return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates };
     }
 
     const total = existingManifests.length;
@@ -679,6 +758,32 @@ class DesktopBackupClient {
       if (!manifest) continue;
       if (manifest.filename) {
         alreadyFilenames.add(this.normalizeFilenameForCompare(manifest.filename));
+        // Extract base filename for variant matching (iOS/Android/Windows/Linux)
+        const baseName = this.extractBaseFilename(manifest.filename);
+        if (baseName) {
+          alreadyBaseFilenames.add(baseName);
+          
+          // Build baseFilename -> sizes map for fallback matching
+          if (manifest.originalSize || manifest.size) {
+            if (!alreadyBaseNameSizes.has(baseName)) {
+              alreadyBaseNameSizes.set(baseName, new Set());
+            }
+            alreadyBaseNameSizes.get(baseName).add(manifest.originalSize || manifest.size);
+          }
+          
+          // Build baseFilename -> dates map for fallback matching
+          // Use creationTime, modificationTime, or takenAt if available
+          const dateVal = manifest.creationTime || manifest.modificationTime || manifest.takenAt;
+          if (dateVal) {
+            const dateStr = this.normalizeDateForCompare(dateVal);
+            if (dateStr) {
+              if (!alreadyBaseNameDates.has(baseName)) {
+                alreadyBaseNameDates.set(baseName, new Set());
+              }
+              alreadyBaseNameDates.get(baseName).add(dateStr);
+            }
+          }
+        }
       }
       // If manifest has perceptualHash, it's an image - use perceptual hash only
       if (manifest.perceptualHash) {
@@ -689,14 +794,15 @@ class DesktopBackupClient {
       }
     }
 
-    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyFileHashes.size} video hashes, ${alreadyPerceptualHashes.size} image hashes for deduplication`);
-    return { alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes };
+    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyBaseFilenames.size} base names, ${alreadyBaseNameSizes.size} name+size entries, ${alreadyBaseNameDates.size} name+date entries, ${alreadyFileHashes.size} video hashes, ${alreadyPerceptualHashes.size} image hashes for deduplication`);
+    return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates };
   }
 
-  async uploadFile(file, fileIndex, totalFiles, alreadyManifestIds, alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes) {
+  async uploadFile(file, fileIndex, totalFiles, alreadyManifestIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates) {
     const filePath = file.path;
     const fileName = file.name;
     const fileSize = file.size;
+    const fileModified = file.modified; // File modification date from scan
 
     // Generate stable cross-device manifestId from filename + size (same as mobile)
     const fileIdentity = computeFileIdentity(fileName, fileSize);
@@ -713,6 +819,42 @@ class DesktopBackupClient {
     if (normalizedFilename && alreadyFilenames && alreadyFilenames.has(normalizedFilename)) {
       console.log(`Skipping ${fileName} - filename already on server`);
       return { skipped: true, reason: 'filename' };
+    }
+
+    // Extract base filename for variant matching (iOS/Android/Windows/Linux patterns)
+    const baseFilename = this.extractBaseFilename(fileName);
+    
+    // Skip if base filename already exists on server (catches all platform variants)
+    if (baseFilename && alreadyBaseFilenames && alreadyBaseFilenames.has(baseFilename)) {
+      console.log(`Skipping ${fileName} - variant of ${baseFilename} already on server`);
+      return { skipped: true, reason: 'baseFilename' };
+    }
+
+    // FALLBACK 1: Skip if baseFilename + similar size exists on server
+    // This catches files re-compressed by iOS/Android overnight (size changes slightly)
+    if (baseFilename && alreadyBaseNameSizes && alreadyBaseNameSizes.has(baseFilename)) {
+      const existingSizes = alreadyBaseNameSizes.get(baseFilename);
+      for (const existingSize of existingSizes) {
+        // Allow 20% size tolerance for re-compression
+        const sizeDiff = Math.abs(fileSize - existingSize) / Math.max(fileSize, existingSize);
+        if (sizeDiff < 0.20) {
+          console.log(`Skipping ${fileName} - baseFilename+size match (${baseFilename}, size diff ${(sizeDiff * 100).toFixed(1)}%)`);
+          return { skipped: true, reason: 'baseNameSize' };
+        }
+      }
+    }
+
+    // FALLBACK 2: Skip if baseFilename + same date exists on server
+    // This catches files with same name taken on same day (most reliable for overnight changes)
+    if (baseFilename && fileModified && alreadyBaseNameDates && alreadyBaseNameDates.has(baseFilename)) {
+      const fileDateStr = this.normalizeDateForCompare(fileModified);
+      if (fileDateStr) {
+        const existingDates = alreadyBaseNameDates.get(baseFilename);
+        if (existingDates.has(fileDateStr)) {
+          console.log(`Skipping ${fileName} - baseFilename+date match (${baseFilename}, date ${fileDateStr})`);
+          return { skipped: true, reason: 'baseNameDate' };
+        }
+      }
     }
 
     // Determine if this is an image or video
@@ -738,10 +880,16 @@ class DesktopBackupClient {
       }
 
       // Skip if perceptual hash already exists on server (catches transcoded duplicates)
-      // Use fuzzy matching (Hamming distance ≤3 bits) to handle minor JPEG decoder differences
-      if (perceptualHash && alreadyPerceptualHashes && findPerceptualHashMatch(perceptualHash, alreadyPerceptualHashes, 3)) {
-        console.log(`Skipping ${fileName} - visually identical image already on server (perceptual match)`);
-        return { skipped: true, reason: 'perceptualHash' };
+      // Use fuzzy matching with cross-platform threshold to handle decoder differences
+      if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.size > 0) {
+        const matchResult = findPerceptualHashMatch(perceptualHash, alreadyPerceptualHashes, CROSS_PLATFORM_DHASH_THRESHOLD);
+        if (matchResult.match) {
+          console.log(`Skipping ${fileName} - visually identical image already on server (perceptual match, distance=${matchResult.distance})`);
+          return { skipped: true, reason: 'perceptualHash' };
+        } else if (matchResult.distance > 0 && matchResult.distance <= 20) {
+          // Log near-misses for debugging (distance > threshold but close)
+          console.log(`[NearMiss] ${fileName}: closest match distance=${matchResult.distance} (threshold=${CROSS_PLATFORM_DHASH_THRESHOLD})`);
+        }
       }
 
       // Also compute exact hash for storage in manifest (but don't use for deduplication)
@@ -878,8 +1026,11 @@ class DesktopBackupClient {
     let existingIds = null;
     let existingClassic = null;
     let alreadyFilenames = null;
+    let alreadyBaseFilenames = null;
     let alreadyFileHashes = null;
     let alreadyPerceptualHashes = null;
+    let alreadyBaseNameSizes = null;
+    let alreadyBaseNameDates = null;
 
     if (isStealthCloud) {
       // Derive master key (same as mobile app)
@@ -891,8 +1042,11 @@ class DesktopBackupClient {
       // Build deduplication sets by decrypting manifests (same as mobile)
       const dedupeSets = await this.buildDeduplicationSets(existingManifests);
       alreadyFilenames = dedupeSets.alreadyFilenames;
+      alreadyBaseFilenames = dedupeSets.alreadyBaseFilenames;
       alreadyFileHashes = dedupeSets.alreadyFileHashes;
       alreadyPerceptualHashes = dedupeSets.alreadyPerceptualHashes;
+      alreadyBaseNameSizes = dedupeSets.alreadyBaseNameSizes;
+      alreadyBaseNameDates = dedupeSets.alreadyBaseNameDates;
     } else {
       this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
       existingClassic = await this.getExistingClassicFilenames();
@@ -941,27 +1095,32 @@ class DesktopBackupClient {
       if (this.cancelled) return;
       try {
         if (isStealthCloud) {
-          const result = await this.uploadFile(file, idx, totalFiles, existingIds, alreadyFilenames, alreadyFileHashes, alreadyPerceptualHashes);
+          const result = await this.uploadFile(file, idx, totalFiles, existingIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates);
           if (result && result.skipped) {
             skipped++;
-          } else {
+          } else if (result) {
             uploaded++;
             // Update in-memory sets to prevent duplicates within same run
-            if (result && result.manifestId) {
+            if (result.manifestId) {
               existingIds.add(result.manifestId);
             }
-            if (result && result.fileHash) {
+            if (result.fileHash) {
               alreadyFileHashes.add(result.fileHash);
             }
-            if (result && result.perceptualHash) {
+            if (result.perceptualHash) {
               alreadyPerceptualHashes.add(result.perceptualHash);
+            }
+            // Also add base filename for iOS variant deduplication within same run
+            if (file.name && alreadyBaseFilenames) {
+              const baseName = this.extractBaseFilename(file.name);
+              if (baseName) alreadyBaseFilenames.add(baseName);
             }
           }
         } else {
           const res = await this.uploadClassicRawFile(file);
           if (res && res.duplicate) {
             skipped++;
-          } else {
+          } else if (res) {
             uploaded++;
           }
         }

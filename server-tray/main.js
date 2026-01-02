@@ -826,10 +826,10 @@ function showBackupWindow() {
   const photoFolders = getPhotoFolders();
   
   backupWindow = new BrowserWindow({
-    width: 440,
-    height: 720,
-    minWidth: 400,
-    minHeight: 600,
+    width: 400,
+    height: 580,
+    minWidth: 360,
+    minHeight: 480,
     resizable: true,
     minimizable: true,
     maximizable: false,
@@ -875,35 +875,37 @@ function showBackupWindow() {
       display: flex;
       flex-direction: column;
       height: 100vh;
-      padding: clamp(12px, 3vw, 20px);
+      padding: clamp(8px, 2vw, 12px);
     }
     .header {
       text-align: center;
-      padding-bottom: clamp(8px, 2vw, 12px);
+      padding: clamp(6px, 1.5vw, 8px) clamp(8px, 2vw, 10px) clamp(4px, 1vw, 6px);
       flex-shrink: 0;
     }
     .header h1 {
-      font-size: clamp(16px, 4vw, 20px);
-      font-weight: 600;
-      margin-bottom: 2px;
+      font-size: clamp(12px, 3vw, 16px);
+      margin: 0;
+      color: var(--text-primary);
     }
-    .header .subtitle {
-      font-size: clamp(11px, 2.5vw, 12px);
+    .subtitle {
+      font-size: clamp(8px, 2vw, 10px);
       color: var(--text-secondary);
+      margin-top: 1px;
     }
     .content {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: clamp(8px, 2vw, 12px);
+      gap: clamp(6px, 1.5vw, 8px);
+      padding: 0 clamp(8px, 2vw, 12px);
       min-height: 0;
       overflow-y: auto;
-      padding-bottom: clamp(8px, 2vw, 12px);
+      padding-bottom: clamp(6px, 1.5vw, 8px);
     }
     .section {
       background: var(--bg-card);
-      border-radius: 10px;
-      padding: clamp(10px, 2.5vw, 14px);
+      border-radius: 8px;
+      padding: clamp(8px, 2vw, 12px);
       flex-shrink: 0;
       border: 1px solid var(--border);
       box-shadow: var(--glow-white);
@@ -911,9 +913,9 @@ function showBackupWindow() {
       -webkit-backdrop-filter: blur(10px);
     }
     .section-title {
-      font-size: clamp(12px, 3vw, 14px);
+      font-size: clamp(11px, 2.8vw, 13px);
       font-weight: 600;
-      margin-bottom: clamp(8px, 2vw, 10px);
+      margin-bottom: clamp(6px, 1.5vw, 8px);
       color: var(--accent);
     }
     .radio-group {
@@ -1004,7 +1006,7 @@ function showBackupWindow() {
     .folder-list {
       flex: 1;
       overflow-y: auto;
-      max-height: clamp(80px, 20vh, 140px);
+      max-height: clamp(60px, 15vh, 100px);
     }
     .folder-buttons {
       margin-top: auto;
@@ -1038,17 +1040,17 @@ function showBackupWindow() {
     }
     .footer {
       display: flex;
-      gap: clamp(8px, 2vw, 10px);
-      padding-top: clamp(10px, 2.5vw, 14px);
+      gap: clamp(6px, 1.5vw, 8px);
+      padding: clamp(8px, 2vw, 10px) clamp(10px, 2.5vw, 14px);
       flex-shrink: 0;
       margin-top: auto;
     }
     .btn {
       flex: 1;
-      padding: clamp(10px, 2.5vw, 12px);
+      padding: clamp(8px, 2vw, 10px);
       border: none;
-      border-radius: 8px;
-      font-size: clamp(12px, 3vw, 14px);
+      border-radius: 6px;
+      font-size: clamp(11px, 2.8vw, 13px);
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
@@ -1076,22 +1078,21 @@ function showBackupWindow() {
     .status {
       background: rgba(74, 159, 232, 0.1);
       border: 1px solid rgba(74, 159, 232, 0.3);
-      border-radius: 8px;
-      padding: clamp(10px, 2.5vw, 12px);
-      margin-top: clamp(8px, 2vw, 10px);
-      margin-bottom: clamp(8px, 2vw, 10px);
+      border-radius: 6px;
+      padding: 6px 8px;
+      margin: 0 clamp(8px, 2vw, 12px) 6px;
       display: none;
       flex-shrink: 0;
     }
     .status.visible { display: block; }
     .status-text {
-      font-size: clamp(11px, 2.8vw, 12px);
+      font-size: 10px;
       color: var(--text-primary);
-      margin-bottom: 8px;
-      white-space: pre-line;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       text-align: center;
-      max-height: 80px;
-      overflow-y: auto;
     }
     .progress-bar {
       height: 4px;
@@ -1173,6 +1174,9 @@ function showBackupWindow() {
     
     <div class="section folders-section">
       <div class="section-title">Folders to Backup</div>
+      <div style="background: rgba(255, 180, 0, 0.08); border: 1px solid rgba(255, 180, 0, 0.25); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; font-size: 10px; color: #d4a000; line-height: 1.4;">
+        <strong>⚠️</strong> Avoid system folders (Photos Library, Pictures). Export to a dedicated folder instead.
+      </div>
       <div class="folder-list" id="folder-list">
         <!-- Folders will be populated dynamically -->
       </div>
@@ -1182,11 +1186,12 @@ function showBackupWindow() {
       </div>
     </div>
     
-    <div class="status" id="status">
-      <div class="status-text" id="status-text">Preparing...</div>
-      <div class="progress-bar">
-        <div class="progress-fill" id="progress-fill"></div>
-      </div>
+  </div>
+  
+  <div class="status" id="status">
+    <div class="status-text" id="status-text">Preparing...</div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
     </div>
   </div>
   
