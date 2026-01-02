@@ -416,6 +416,13 @@ class DesktopBackupClient {
         const ExifReader = require('exifreader');
         tags = await ExifReader.load(filePath);
         
+        // Debug: log available EXIF tags for HEIC
+        const tagKeys = Object.keys(tags).slice(0, 20);
+        console.log(`[EXIF-DEBUG] ${fileName}: tags found:`, tagKeys.join(', '));
+        if (tags['DateTimeOriginal']) console.log(`[EXIF-DEBUG] ${fileName}: DateTimeOriginal:`, tags['DateTimeOriginal']);
+        if (tags['Make']) console.log(`[EXIF-DEBUG] ${fileName}: Make:`, tags['Make']);
+        if (tags['Model']) console.log(`[EXIF-DEBUG] ${fileName}: Model:`, tags['Model']);
+        
         // Extract DateTimeOriginal
         const dateTimeOriginal = tags['DateTimeOriginal']?.description || tags['DateTime']?.description;
         if (dateTimeOriginal) {
