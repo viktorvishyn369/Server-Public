@@ -155,40 +155,26 @@ async function computePerceptualHash(filePath) {
       return null; // Only process images
     }
 
-    let srcData, srcWidth, srcHeight, srcChannels;
-    
-    // HEIC/HEIF files: use heic-decode for direct pixel access (no JPEG conversion)
-    // Match iOS CGImageSourceCreateImageAtIndex + CGContext behavior exactly
+    // Skip perceptual hash for HEIC files - use exact binary hash instead
+    // HEIC decoders (iOS ImageIO, Android ImageDecoder, desktop heic-decode) produce
+    // different pixel values, making perceptual hashing unreliable across platforms.
+    // For HEIC, we rely on exact file hash for deduplication.
     if (ext === '.heic' || ext === '.heif') {
-      try {
-        const inputBuffer = fs.readFileSync(filePath);
-        const decoded = await heicDecode({ buffer: inputBuffer });
-        
-        // heic-decode returns Uint8ClampedArray with RGBA pixels (straight alpha)
-        // iOS uses CGContext with premultipliedLast, but since alpha is always 255 for HEIC,
-        // premultiplied vs straight makes no difference: RGB_premul = RGB * (255/255) = RGB
-        // Convert to Buffer for consistency with Sharp path
-        srcData = Buffer.from(decoded.data);
-        srcWidth = decoded.width;
-        srcHeight = decoded.height;
-        srcChannels = 4; // RGBA
-      } catch (heicErr) {
-        console.warn(`[HEIC] Failed to decode ${path.basename(filePath)}:`, heicErr.message);
-        return null;
-      }
-    } else {
-      // For other formats, use Sharp
-      // Load source image at full resolution WITHOUT EXIF rotation
-      // This matches iOS CGImageSourceCreateImageAtIndex behavior which ignores EXIF orientation
-      // Sharp by default does NOT auto-rotate, which is what we want
-      const { data, info } = await sharp(filePath, { failOn: 'none' })
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      srcData = data;
-      srcWidth = info.width;
-      srcHeight = info.height;
-      srcChannels = info.channels;
+      console.log(`[PerceptualHash] Skipping HEIC file - will use exact binary hash instead`);
+      return null;
     }
+
+    // For non-HEIC images: use Sharp for pixel access
+    // Load source image at full resolution WITHOUT EXIF rotation
+    // This matches iOS CGImageSourceCreateImageAtIndex behavior which ignores EXIF orientation
+    // Sharp by default does NOT auto-rotate, which is what we want
+    const { data, info } = await sharp(filePath, { failOn: 'none' })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const srcData = data;
+    const srcWidth = info.width;
+    const srcHeight = info.height;
+    const srcChannels = info.channels;
     
     // Custom bilinear scaling to 9x8 (IDENTICAL to iOS/Android implementation)
     const hashWidth = 9;
