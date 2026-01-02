@@ -144,6 +144,7 @@ function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH
 
 // Compute perceptual hash (dHash) for images - transcoding-resistant visual deduplication
 // IDENTICAL implementation to mobile iOS/Android - custom bilinear scaling
+// Returns { hash, jpegBuffer } where jpegBuffer is set for HEIC files (for EXIF extraction)
 async function computePerceptualHash(filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase();
@@ -153,7 +154,8 @@ async function computePerceptualHash(filePath) {
       return null; // Only process images
     }
 
-    let imageBuffer;
+    let imageBuffer = null;
+    let jpegBufferForExif = null;
     
     // HEIC/HEIF files need conversion first - Sharp doesn't have native HEIC decoding
     if (ext === '.heic' || ext === '.heif') {
@@ -165,6 +167,7 @@ async function computePerceptualHash(filePath) {
           quality: 0.95
         });
         imageBuffer = jpegBuffer;
+        jpegBufferForExif = jpegBuffer; // Save for EXIF extraction
         console.log(`[HEIC] Converted ${path.basename(filePath)} to JPEG for hashing`);
       } catch (heicErr) {
         console.warn(`[HEIC] Failed to convert ${path.basename(filePath)}:`, heicErr.message);
@@ -255,7 +258,7 @@ async function computePerceptualHash(filePath) {
       hexHash += hashBytes[i].toString(16).padStart(2, '0');
     }
     
-    return hexHash;
+    return { hash: hexHash, jpegBuffer: jpegBufferForExif };
   } catch (e) {
     console.warn('computePerceptualHash failed:', filePath, e.message);
     return null;
@@ -399,10 +402,12 @@ class DesktopBackupClient {
 
   // Extract real EXIF data from image file for cross-platform deduplication
   // Returns { captureTime, make, model } - the actual EXIF metadata from the file
-  async extractExifForDedup(filePath) {
+  // jpegBuffer: optional JPEG buffer for HEIC files (Sharp can't read EXIF from HEIC directly)
+  async extractExifForDedup(filePath, jpegBuffer = null) {
     const result = { captureTime: null, make: null, model: null };
     try {
-      const metadata = await sharp(filePath).metadata();
+      // Use JPEG buffer if provided (for HEIC files), otherwise use file path
+      const metadata = await sharp(jpegBuffer || filePath).metadata();
       
       if (metadata.exif) {
         // Parse EXIF buffer using exif-reader (Sharp's dependency)
@@ -1004,12 +1009,15 @@ class DesktopBackupClient {
     // For VIDEOS: use exact file hash (byte-for-byte comparison)
     let exactFileHash = null;
     let perceptualHash = null;
+    let jpegBufferForExif = null;
 
     if (isImage) {
       // Images: compute perceptual hash for transcoding-resistant deduplication
       try {
-        perceptualHash = await computePerceptualHash(filePath);
-        if (perceptualHash) {
+        const hashResult = await computePerceptualHash(filePath);
+        if (hashResult) {
+          perceptualHash = hashResult.hash;
+          jpegBufferForExif = hashResult.jpegBuffer; // Save for EXIF extraction
           console.log(`[PerceptualHash] ${fileName}: ${perceptualHash} (${perceptualHash.length} chars)`);
         }
       } catch (e) {
@@ -1119,7 +1127,8 @@ class DesktopBackupClient {
     await drainInFlightPromises(inFlight);
 
     // Extract real EXIF data from file for cross-platform deduplication
-    const exifData = await this.extractExifForDedup(filePath);
+    // For HEIC files, use the converted JPEG buffer (Sharp can't read EXIF from HEIC directly)
+    const exifData = await this.extractExifForDedup(filePath, jpegBufferForExif);
     if (exifData.captureTime) {
       console.log(`[EXIF] ${fileName}: time=${exifData.captureTime}, make=${exifData.make}, model=${exifData.model}`);
     }
