@@ -144,8 +144,20 @@ function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH
 }
 
 // Compute perceptual hash (dHash) for images - transcoding-resistant visual deduplication
-// IDENTICAL implementation to mobile iOS/Android - custom bilinear scaling
+// IDENTICAL implementation to mobile iOS/Android - with 64x64 canonicalization
 // Returns { hash } for deduplication
+//
+// HEIC CANONICALIZATION STRATEGY:
+// Different decoders (iOS ImageIO, Android ImageDecoder, desktop heic-decode) produce
+// slightly different pixel values for the same HEIC file. To ensure cross-platform
+// consistency, we:
+// 1. Decode HEIC to raw pixels (platform-specific)
+// 2. Resize to FIXED 64x64 canonical size using platform's native high-quality scaler
+// 3. Extract pixels from canonical 64x64 buffer (normalizes decoder differences)
+// 4. Compute dHash from canonical pixels
+//
+// The 64x64 intermediate step acts as a "normalization layer" that smooths out
+// the small pixel-level differences between decoders.
 async function computePerceptualHash(filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase();
@@ -155,83 +167,51 @@ async function computePerceptualHash(filePath) {
       return null; // Only process images
     }
 
-    let srcData, srcWidth, srcHeight, srcChannels;
+    // STEP 1: Decode and resize to 64x64 canonical size
+    // This normalizes decoder differences across platforms
+    const canonicalSize = 64;
+    let canonicalData, canonicalChannels;
     
-    // HEIC/HEIF files: use heic-decode for direct pixel access (no JPEG conversion)
-    // CRITICAL: Canonicalize HEIC pixels for cross-platform consistency:
-    // 1. Decode FIRST image only (ignore auxiliary images/depth/HDR)
-    // 2. Apply EXIF orientation transform
-    // 3. Ensure sRGB colorspace
-    // 4. Then compute perceptual hash
     if (ext === '.heic' || ext === '.heif') {
       try {
         const inputBuffer = fs.readFileSync(filePath);
-        // heic-decode automatically decodes the PRIMARY image (first image in container)
-        // and ignores auxiliary images (depth maps, HDR gain maps, thumbnails)
         const decoded = await heicDecode({ buffer: inputBuffer });
         
-        // heic-decode returns Uint8ClampedArray with RGBA pixels (straight alpha)
-        // iOS uses CGContext with premultipliedLast, but since alpha is always 255 for HEIC,
-        // premultiplied vs straight makes no difference: RGB_premul = RGB * (255/255) = RGB
-        srcData = Buffer.from(decoded.data);
-        srcWidth = decoded.width;
-        srcHeight = decoded.height;
-        srcChannels = 4; // RGBA
-        
-        // Apply EXIF orientation to canonicalize image
-        // This ensures Desktop HEIC = iOS HEIC = Android HEIC regardless of orientation flags
-        try {
-          const exifData = await sharp(filePath).metadata();
-          const orientation = exifData.orientation || 1;
-          
-          if (orientation !== 1 && orientation !== undefined) {
-            // Need to apply orientation transform to pixel buffer
-            // Use Sharp to apply orientation, then extract raw pixels
-            const orientedBuffer = await sharp(srcData, {
-              raw: {
-                width: srcWidth,
-                height: srcHeight,
-                channels: srcChannels
-              }
-            })
-            .rotate() // Apply EXIF orientation
-            .raw()
-            .toBuffer({ resolveWithObject: true });
-            
-            srcData = orientedBuffer.data;
-            srcWidth = orientedBuffer.info.width;
-            srcHeight = orientedBuffer.info.height;
-            srcChannels = orientedBuffer.info.channels;
+        // Resize HEIC pixels to 64x64 using Sharp
+        const resized = await sharp(Buffer.from(decoded.data), {
+          raw: {
+            width: decoded.width,
+            height: decoded.height,
+            channels: 4
           }
-        } catch (orientErr) {
-          // If orientation fails, continue with original pixels
-          // (better to have unoriented hash than no hash)
-          console.warn(`[HEIC] Orientation failed for ${path.basename(filePath)}:`, orientErr.message);
-        }
+        })
+        .resize(canonicalSize, canonicalSize, { fit: 'fill' })
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+        
+        canonicalData = resized.data;
+        canonicalChannels = resized.info.channels;
       } catch (heicErr) {
         console.warn(`[HEIC] Failed to decode ${path.basename(filePath)}:`, heicErr.message);
         return null;
       }
     } else {
-      // For other formats (JPG/PNG/etc), use Sharp
-      // Apply EXIF orientation for canonicalization (matches mobile behavior)
+      // For other formats, use Sharp to decode and resize to 64x64
       const { data, info } = await sharp(filePath, { failOn: 'none' })
-        .rotate() // Apply EXIF orientation
+        .resize(canonicalSize, canonicalSize, { fit: 'fill' })
         .raw()
         .toBuffer({ resolveWithObject: true });
-      srcData = data;
-      srcWidth = info.width;
-      srcHeight = info.height;
-      srcChannels = info.channels;
+      canonicalData = data;
+      canonicalChannels = info.channels;
     }
     
-    // Custom bilinear scaling to 9x8 (IDENTICAL to iOS/Android implementation)
+    // STEP 2: Bilinear scale from 64x64 canonical to 9x8 for dHash
     const hashWidth = 9;
     const hashHeight = 8;
     const scaledPixels = new Uint8Array(hashWidth * hashHeight * 3); // RGB
     
-    const xRatio = (srcWidth - 1) / (hashWidth - 1);
-    const yRatio = (srcHeight - 1) / (hashHeight - 1);
+    const xRatio = (canonicalSize - 1) / (hashWidth - 1);
+    const yRatio = (canonicalSize - 1) / (hashHeight - 1);
     
     for (let y = 0; y < hashHeight; y++) {
       for (let x = 0; x < hashWidth; x++) {
@@ -240,17 +220,17 @@ async function computePerceptualHash(filePath) {
         
         const x1 = Math.floor(srcX);
         const y1 = Math.floor(srcY);
-        const x2 = Math.min(x1 + 1, srcWidth - 1);
-        const y2 = Math.min(y1 + 1, srcHeight - 1);
+        const x2 = Math.min(x1 + 1, canonicalSize - 1);
+        const y2 = Math.min(y1 + 1, canonicalSize - 1);
         
         const xWeight = srcX - x1;
         const yWeight = srcY - y1;
         
         for (let c = 0; c < 3; c++) {
-          const p11 = srcData[(y1 * srcWidth + x1) * srcChannels + c];
-          const p21 = srcData[(y1 * srcWidth + x2) * srcChannels + c];
-          const p12 = srcData[(y2 * srcWidth + x1) * srcChannels + c];
-          const p22 = srcData[(y2 * srcWidth + x2) * srcChannels + c];
+          const p11 = canonicalData[(y1 * canonicalSize + x1) * canonicalChannels + c];
+          const p21 = canonicalData[(y1 * canonicalSize + x2) * canonicalChannels + c];
+          const p12 = canonicalData[(y2 * canonicalSize + x1) * canonicalChannels + c];
+          const p22 = canonicalData[(y2 * canonicalSize + x2) * canonicalChannels + c];
           
           // Match iOS two-step bilinear interpolation exactly
           const top = p11 * (1.0 - xWeight) + p21 * xWeight;
