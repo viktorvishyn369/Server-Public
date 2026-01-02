@@ -158,30 +158,65 @@ async function computePerceptualHash(filePath) {
     let srcData, srcWidth, srcHeight, srcChannels;
     
     // HEIC/HEIF files: use heic-decode for direct pixel access (no JPEG conversion)
-    // Match iOS CGImageSourceCreateImageAtIndex + CGContext behavior exactly
+    // CRITICAL: Canonicalize HEIC pixels for cross-platform consistency:
+    // 1. Decode FIRST image only (ignore auxiliary images/depth/HDR)
+    // 2. Apply EXIF orientation transform
+    // 3. Ensure sRGB colorspace
+    // 4. Then compute perceptual hash
     if (ext === '.heic' || ext === '.heif') {
       try {
         const inputBuffer = fs.readFileSync(filePath);
+        // heic-decode automatically decodes the PRIMARY image (first image in container)
+        // and ignores auxiliary images (depth maps, HDR gain maps, thumbnails)
         const decoded = await heicDecode({ buffer: inputBuffer });
         
         // heic-decode returns Uint8ClampedArray with RGBA pixels (straight alpha)
         // iOS uses CGContext with premultipliedLast, but since alpha is always 255 for HEIC,
         // premultiplied vs straight makes no difference: RGB_premul = RGB * (255/255) = RGB
-        // Convert to Buffer for consistency with Sharp path
         srcData = Buffer.from(decoded.data);
         srcWidth = decoded.width;
         srcHeight = decoded.height;
         srcChannels = 4; // RGBA
+        
+        // Apply EXIF orientation to canonicalize image
+        // This ensures Desktop HEIC = iOS HEIC = Android HEIC regardless of orientation flags
+        try {
+          const exifData = await sharp(filePath).metadata();
+          const orientation = exifData.orientation || 1;
+          
+          if (orientation !== 1 && orientation !== undefined) {
+            // Need to apply orientation transform to pixel buffer
+            // Use Sharp to apply orientation, then extract raw pixels
+            const orientedBuffer = await sharp(srcData, {
+              raw: {
+                width: srcWidth,
+                height: srcHeight,
+                channels: srcChannels
+              }
+            })
+            .rotate() // Apply EXIF orientation
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+            
+            srcData = orientedBuffer.data;
+            srcWidth = orientedBuffer.info.width;
+            srcHeight = orientedBuffer.info.height;
+            srcChannels = orientedBuffer.info.channels;
+          }
+        } catch (orientErr) {
+          // If orientation fails, continue with original pixels
+          // (better to have unoriented hash than no hash)
+          console.warn(`[HEIC] Orientation failed for ${path.basename(filePath)}:`, orientErr.message);
+        }
       } catch (heicErr) {
         console.warn(`[HEIC] Failed to decode ${path.basename(filePath)}:`, heicErr.message);
         return null;
       }
     } else {
-      // For other formats, use Sharp
-      // Load source image at full resolution WITHOUT EXIF rotation
-      // This matches iOS CGImageSourceCreateImageAtIndex behavior which ignores EXIF orientation
-      // Sharp by default does NOT auto-rotate, which is what we want
+      // For other formats (JPG/PNG/etc), use Sharp
+      // Apply EXIF orientation for canonicalization (matches mobile behavior)
       const { data, info } = await sharp(filePath, { failOn: 'none' })
+        .rotate() // Apply EXIF orientation
         .raw()
         .toBuffer({ resolveWithObject: true });
       srcData = data;
