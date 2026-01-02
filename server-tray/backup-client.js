@@ -158,12 +158,17 @@ async function computePerceptualHash(filePath) {
     let srcData, srcWidth, srcHeight, srcChannels;
     
     // HEIC/HEIF files: use heic-decode for direct pixel access (no JPEG conversion)
-    // This produces more consistent results with iOS/Android native HEIC decoders
+    // Match iOS CGImageSourceCreateImageAtIndex + CGContext behavior exactly
     if (ext === '.heic' || ext === '.heif') {
       try {
         const inputBuffer = fs.readFileSync(filePath);
         const decoded = await heicDecode({ buffer: inputBuffer });
-        srcData = Buffer.from(decoded.data); // RGBA pixels
+        
+        // heic-decode returns Uint8ClampedArray with RGBA pixels (straight alpha)
+        // iOS uses CGContext with premultipliedLast, but since alpha is always 255 for HEIC,
+        // premultiplied vs straight makes no difference: RGB_premul = RGB * (255/255) = RGB
+        // Convert to Buffer for consistency with Sharp path
+        srcData = Buffer.from(decoded.data);
         srcWidth = decoded.width;
         srcHeight = decoded.height;
         srcChannels = 4; // RGBA
@@ -212,12 +217,12 @@ async function computePerceptualHash(filePath) {
           const p12 = srcData[(y2 * srcWidth + x1) * srcChannels + c];
           const p22 = srcData[(y2 * srcWidth + x2) * srcChannels + c];
           
-          const value = 
-            p11 * (1 - xWeight) * (1 - yWeight) +
-            p21 * xWeight * (1 - yWeight) +
-            p12 * (1 - xWeight) * yWeight +
-            p22 * xWeight * yWeight;
+          // Match iOS two-step bilinear interpolation exactly
+          const top = p11 * (1.0 - xWeight) + p21 * xWeight;
+          const bottom = p12 * (1.0 - xWeight) + p22 * xWeight;
+          const value = top * (1.0 - yWeight) + bottom * yWeight;
           
+          // Match iOS rounding: UInt8(value + 0.5) = floor(value + 0.5) = round(value)
           scaledPixels[(y * hashWidth + x) * 3 + c] = Math.round(value);
         }
       }
