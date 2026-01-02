@@ -1047,6 +1047,7 @@ class DesktopBackupClient {
       // Skip if perceptual hash already exists on server (catches transcoded duplicates)
       // Use fuzzy matching with cross-platform threshold to handle decoder differences
       if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.size > 0) {
+        console.log(`[PerceptualHash-Debug] ${fileName}: Comparing hash ${perceptualHash} against ${alreadyPerceptualHashes.size} server hashes`);
         const matchResult = findPerceptualHashMatch(perceptualHash, alreadyPerceptualHashes, CROSS_PLATFORM_DHASH_THRESHOLD);
         if (matchResult.match) {
           console.log(`Skipping ${fileName} - visually identical image already on server (perceptual match, distance=${matchResult.distance})`);
@@ -1054,7 +1055,11 @@ class DesktopBackupClient {
         } else if (matchResult.distance > 0 && matchResult.distance <= 20) {
           // Log near-misses for debugging (distance > threshold but close)
           console.log(`[NearMiss] ${fileName}: closest match distance=${matchResult.distance} (threshold=${CROSS_PLATFORM_DHASH_THRESHOLD})`);
+        } else {
+          console.log(`[PerceptualHash-Debug] ${fileName}: No match found, closest distance=${matchResult.distance}`);
         }
+      } else {
+        console.log(`[PerceptualHash-Debug] ${fileName}: No server hashes to compare (set size: ${alreadyPerceptualHashes ? alreadyPerceptualHashes.size : 0})`);
       }
 
       // Also compute exact hash for storage in manifest and byte-identical dedup (AirDrop)
