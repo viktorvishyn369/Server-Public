@@ -404,9 +404,16 @@ class DesktopBackupClient {
   // Returns { captureTime, make, model } - the actual EXIF metadata from the file
   async extractExifForDedup(filePath) {
     const result = { captureTime: null, make: null, model: null };
+    const fileName = path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    
     try {
       // Always read from original file path - Sharp can read EXIF from HEIC directly
       const metadata = await sharp(filePath).metadata();
+      
+      if (ext === '.heic' || ext === '.heif') {
+        console.log(`[EXIF-DEBUG] ${fileName}: has EXIF buffer:`, !!metadata.exif, 'length:', metadata.exif ? metadata.exif.length : 0);
+      }
       
       if (metadata.exif) {
         // Parse EXIF buffer using exif-reader (Sharp's dependency)
@@ -419,6 +426,10 @@ class DesktopBackupClient {
         }
         
         const exifData = exifReader(metadata.exif);
+        
+        if (ext === '.heic' || ext === '.heif') {
+          console.log(`[EXIF-DEBUG] ${fileName}: parsed EXIF, has image:`, !!exifData?.image, 'has exif:', !!exifData?.exif);
+        }
         
         // Extract DateTimeOriginal from EXIF
         const exifDate = exifData?.exif?.DateTimeOriginal || exifData?.exif?.DateTimeDigitized || exifData?.image?.ModifyDate;
@@ -434,6 +445,10 @@ class DesktopBackupClient {
         // Extract Model - normalize to lowercase
         if (exifData?.image?.Model && typeof exifData.image.Model === 'string') {
           result.model = exifData.image.Model.trim().toLowerCase();
+        }
+        
+        if (ext === '.heic' || ext === '.heif') {
+          console.log(`[EXIF-DEBUG] ${fileName}: extracted - time:`, result.captureTime, 'make:', result.make, 'model:', result.model);
         }
       }
     } catch (e) {
