@@ -11,7 +11,7 @@ const axios = require('axios');
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
 const sharp = require('sharp');
-const heicConvert = require('heic-convert');
+const heicDecode = require('heic-decode');
 
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks (same as mobile)
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
@@ -155,35 +155,35 @@ async function computePerceptualHash(filePath) {
       return null; // Only process images
     }
 
-    let imageBuffer = null;
+    let srcData, srcWidth, srcHeight, srcChannels;
     
-    // HEIC/HEIF files need conversion - Sharp's HEIC plugin may not be available
+    // HEIC/HEIF files: use heic-decode for direct pixel access (no JPEG conversion)
+    // This produces more consistent results with iOS/Android native HEIC decoders
     if (ext === '.heic' || ext === '.heif') {
       try {
         const inputBuffer = fs.readFileSync(filePath);
-        const jpegBuffer = await heicConvert({
-          buffer: inputBuffer,
-          format: 'JPEG',
-          quality: 1.0 // Use max quality to preserve pixel values
-        });
-        imageBuffer = jpegBuffer;
+        const decoded = await heicDecode({ buffer: inputBuffer });
+        srcData = Buffer.from(decoded.data); // RGBA pixels
+        srcWidth = decoded.width;
+        srcHeight = decoded.height;
+        srcChannels = 4; // RGBA
       } catch (heicErr) {
-        console.warn(`[HEIC] Failed to convert ${path.basename(filePath)}:`, heicErr.message);
+        console.warn(`[HEIC] Failed to decode ${path.basename(filePath)}:`, heicErr.message);
         return null;
       }
+    } else {
+      // For other formats, use Sharp
+      // Load source image at full resolution WITHOUT EXIF rotation
+      // This matches iOS CGImageSourceCreateImageAtIndex behavior which ignores EXIF orientation
+      // Sharp by default does NOT auto-rotate, which is what we want
+      const { data, info } = await sharp(filePath, { failOn: 'none' })
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      srcData = data;
+      srcWidth = info.width;
+      srcHeight = info.height;
+      srcChannels = info.channels;
     }
-
-    // Load source image at full resolution WITHOUT EXIF rotation
-    // This matches iOS CGImageSourceCreateImageAtIndex behavior which ignores EXIF orientation
-    // Sharp by default does NOT auto-rotate, which is what we want
-    const sharpInput = imageBuffer || filePath;
-    const { data: srcData, info } = await sharp(sharpInput, { failOn: 'none' })
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    
-    const srcWidth = info.width;
-    const srcHeight = info.height;
-    const srcChannels = info.channels;
     
     // Custom bilinear scaling to 9x8 (IDENTICAL to iOS/Android implementation)
     const hashWidth = 9;
