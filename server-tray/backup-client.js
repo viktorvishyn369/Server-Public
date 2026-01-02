@@ -747,7 +747,7 @@ class DesktopBackupClient {
     const baseUrl = this.getBaseUrl();
     const url = `${baseUrl}/api/cloud/manifests`;
 
-    await axios.post(url, {
+    const response = await axios.post(url, {
       manifestId,
       encryptedManifest,
       chunkCount
@@ -759,6 +759,9 @@ class DesktopBackupClient {
       },
       timeout: 30000
     });
+
+    // Return server response for duplicate detection
+    return response.data;
   }
 
   // Get existing manifests to skip already backed up files (with pagination and retry)
@@ -1195,8 +1198,14 @@ class DesktopBackupClient {
       manifestBox: naclUtil.encodeBase64(manifestBox)
     });
 
-    // Upload manifest
-    await this.uploadManifest(manifestId, encryptedManifest, chunkIds.length);
+    // Upload manifest and check server response
+    const manifestResponse = await this.uploadManifest(manifestId, encryptedManifest, chunkIds.length);
+
+    // Check if server rejected as duplicate (server-side deduplication)
+    if (manifestResponse && manifestResponse.skipped) {
+      console.log(`Server rejected ${fileName} as duplicate (reason: ${manifestResponse.reason || 'unknown'})`);
+      return { skipped: true, reason: manifestResponse.reason || 'server-side-duplicate' };
+    }
 
     return { uploaded: true, manifestId, fileHash: exactFileHash, perceptualHash: perceptualHash };
   }
