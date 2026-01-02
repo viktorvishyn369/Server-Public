@@ -116,9 +116,10 @@ function hammingDistance64(a, b) {
 }
 
 // Cross-platform deduplication threshold for 64-bit dHash
-// Strict threshold of 3 bits - only catches truly identical images
-// Overnight re-compression and platform differences are handled by filename+size and filename+date fallbacks
-const CROSS_PLATFORM_DHASH_THRESHOLD = 3;
+// Threshold of 6 bits to account for HEIC decoder differences across platforms
+// (heic-convert on desktop vs native ImageIO on iOS vs ImageDecoder on Android)
+// 6 bits = ~9% difference tolerance, still strict enough to avoid false positives
+const CROSS_PLATFORM_DHASH_THRESHOLD = 6;
 
 // Find a matching perceptual hash using Hamming distance (fuzzy matching)
 // Returns { match: boolean, distance: number } for logging
@@ -144,7 +145,7 @@ function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH
 
 // Compute perceptual hash (dHash) for images - transcoding-resistant visual deduplication
 // IDENTICAL implementation to mobile iOS/Android - custom bilinear scaling
-// Returns { hash, jpegBuffer } where jpegBuffer is set for HEIC files (for EXIF extraction)
+// Returns { hash } for deduplication
 async function computePerceptualHash(filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase();
@@ -155,20 +156,17 @@ async function computePerceptualHash(filePath) {
     }
 
     let imageBuffer = null;
-    let jpegBufferForExif = null;
     
-    // HEIC/HEIF files need conversion first - Sharp doesn't have native HEIC decoding
+    // HEIC/HEIF files need conversion - Sharp's HEIC plugin may not be available
     if (ext === '.heic' || ext === '.heif') {
       try {
         const inputBuffer = fs.readFileSync(filePath);
         const jpegBuffer = await heicConvert({
           buffer: inputBuffer,
           format: 'JPEG',
-          quality: 0.95
+          quality: 1.0 // Use max quality to preserve pixel values
         });
         imageBuffer = jpegBuffer;
-        jpegBufferForExif = jpegBuffer; // Save for EXIF extraction
-        console.log(`[HEIC] Converted ${path.basename(filePath)} to JPEG for hashing`);
       } catch (heicErr) {
         console.warn(`[HEIC] Failed to convert ${path.basename(filePath)}:`, heicErr.message);
         return null;
@@ -258,7 +256,7 @@ async function computePerceptualHash(filePath) {
       hexHash += hashBytes[i].toString(16).padStart(2, '0');
     }
     
-    return { hash: hexHash, jpegBuffer: jpegBufferForExif };
+    return { hash: hexHash };
   } catch (e) {
     console.warn('computePerceptualHash failed:', filePath, e.message);
     return null;
@@ -1032,7 +1030,6 @@ class DesktopBackupClient {
     // For VIDEOS: use exact file hash (byte-for-byte comparison)
     let exactFileHash = null;
     let perceptualHash = null;
-    let jpegBufferForExif = null;
 
     if (isImage) {
       // Images: compute perceptual hash for transcoding-resistant deduplication
@@ -1040,7 +1037,6 @@ class DesktopBackupClient {
         const hashResult = await computePerceptualHash(filePath);
         if (hashResult) {
           perceptualHash = hashResult.hash;
-          jpegBufferForExif = hashResult.jpegBuffer; // Save for EXIF extraction
           console.log(`[PerceptualHash] ${fileName}: ${perceptualHash} (${perceptualHash.length} chars)`);
         }
       } catch (e) {
