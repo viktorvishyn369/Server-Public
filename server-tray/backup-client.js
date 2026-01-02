@@ -402,12 +402,11 @@ class DesktopBackupClient {
 
   // Extract real EXIF data from image file for cross-platform deduplication
   // Returns { captureTime, make, model } - the actual EXIF metadata from the file
-  // jpegBuffer: optional JPEG buffer for HEIC files (Sharp can't read EXIF from HEIC directly)
-  async extractExifForDedup(filePath, jpegBuffer = null) {
+  async extractExifForDedup(filePath) {
     const result = { captureTime: null, make: null, model: null };
     try {
-      // Use JPEG buffer if provided (for HEIC files), otherwise use file path
-      const metadata = await sharp(jpegBuffer || filePath).metadata();
+      // Always read from original file path - Sharp can read EXIF from HEIC directly
+      const metadata = await sharp(filePath).metadata();
       
       if (metadata.exif) {
         // Parse EXIF buffer using exif-reader (Sharp's dependency)
@@ -1127,8 +1126,8 @@ class DesktopBackupClient {
     await drainInFlightPromises(inFlight);
 
     // Extract real EXIF data from file for cross-platform deduplication
-    // For HEIC files, use the converted JPEG buffer (Sharp can't read EXIF from HEIC directly)
-    const exifData = await this.extractExifForDedup(filePath, jpegBufferForExif);
+    // Sharp can read EXIF from HEIC files directly
+    const exifData = await this.extractExifForDedup(filePath);
     if (exifData.captureTime) {
       console.log(`[EXIF] ${fileName}: time=${exifData.captureTime}, make=${exifData.make}, model=${exifData.model}`);
     }
