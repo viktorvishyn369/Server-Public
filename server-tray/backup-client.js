@@ -372,6 +372,84 @@ class DesktopBackupClient {
     }
   }
 
+  // Normalize full timestamp for HEIC deduplication - extracts YYYY-MM-DDTHH:MM:SS format
+  // This provides second-level precision for matching HEIC files across platforms
+  // HEIC files from iPhone and desktop have identical EXIF timestamps even if bytes differ
+  normalizeFullTimestamp(dateVal) {
+    if (!dateVal) return null;
+    try {
+      let date;
+      if (typeof dateVal === 'number') {
+        // Unix timestamp (seconds or milliseconds)
+        date = new Date(dateVal > 9999999999 ? dateVal : dateVal * 1000);
+      } else if (typeof dateVal === 'string') {
+        date = new Date(dateVal);
+      } else if (dateVal instanceof Date) {
+        date = dateVal;
+      } else {
+        return null;
+      }
+      if (isNaN(date.getTime())) return null;
+      // Return YYYY-MM-DDTHH:MM:SS format (second-level precision, no milliseconds)
+      return date.toISOString().slice(0, 19);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Extract real EXIF data from image file for cross-platform deduplication
+  // Returns { captureTime, make, model } - the actual EXIF metadata from the file
+  async extractExifForDedup(filePath) {
+    const result = { captureTime: null, make: null, model: null };
+    try {
+      const metadata = await sharp(filePath).metadata();
+      
+      if (metadata.exif) {
+        // Parse EXIF buffer using exif-reader (Sharp's dependency)
+        let exifReader;
+        try {
+          exifReader = require('exif-reader');
+        } catch (e) {
+          // exif-reader not available, fall back to file modified time
+          return result;
+        }
+        
+        const exifData = exifReader(metadata.exif);
+        
+        // Extract DateTimeOriginal from EXIF
+        const exifDate = exifData?.exif?.DateTimeOriginal || exifData?.exif?.DateTimeDigitized || exifData?.image?.ModifyDate;
+        if (exifDate instanceof Date && !isNaN(exifDate.getTime())) {
+          result.captureTime = exifDate.toISOString().slice(0, 19);
+        }
+        
+        // Extract Make (manufacturer) - normalize to lowercase
+        if (exifData?.image?.Make && typeof exifData.image.Make === 'string') {
+          result.make = exifData.image.Make.trim().toLowerCase();
+        }
+        
+        // Extract Model - normalize to lowercase
+        if (exifData?.image?.Model && typeof exifData.image.Model === 'string') {
+          result.model = exifData.image.Model.trim().toLowerCase();
+        }
+      }
+    } catch (e) {
+      console.warn(`[EXIF] Extraction failed for ${filePath}:`, e.message);
+    }
+    return result;
+  }
+
+  // Generate EXIF-based deduplication keys for matching across platforms
+  // Priority: captureTime+make+model > captureTime+model > captureTime+make
+  generateExifDedupKeys(exifData) {
+    const { captureTime, make, model } = exifData || {};
+    return {
+      full: (captureTime && make && model) ? `${captureTime}|${make}|${model}` : null,
+      timeModel: (captureTime && model) ? `${captureTime}|${model}` : null,
+      timeMake: (captureTime && make) ? `${captureTime}|${make}` : null,
+      timeOnly: captureTime || null,
+    };
+  }
+
   getBaseUrl() {
     if (this.config.destination === 'stealthcloud') {
       return STEALTHCLOUD_BASE_URL;
@@ -702,10 +780,15 @@ class DesktopBackupClient {
     const alreadyFileHashes = new Set();
     const alreadyPerceptualHashes = new Set();
     const alreadyBaseNameSizes = new Map(); // baseFilename -> Set of sizes (fallback matching)
-    const alreadyBaseNameDates = new Map(); // baseFilename -> Set of date strings (fallback matching)
+    const alreadyBaseNameDates = new Map(); // baseFilename -> Set of date strings (YYYY-MM-DD)
+    const alreadyBaseNameTimestamps = new Map(); // baseFilename -> Set of full timestamps (YYYY-MM-DDTHH:MM:SS) for HEIC
+    // EXIF-based deduplication sets for cross-platform HEIC matching
+    const alreadyExifFull = new Set(); // captureTime|make|model (highest confidence)
+    const alreadyExifTimeModel = new Set(); // captureTime|model
+    const alreadyExifTimeMake = new Set(); // captureTime|make
 
     if (!existingManifests || existingManifests.length === 0) {
-      return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates };
+      return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake };
     }
 
     const total = existingManifests.length;
@@ -782,23 +865,44 @@ class DesktopBackupClient {
               }
               alreadyBaseNameDates.get(baseName).add(dateStr);
             }
+            // Build full timestamp map for HEIC deduplication (second-level precision)
+            const fullTimestamp = this.normalizeFullTimestamp(dateVal);
+            if (fullTimestamp) {
+              if (!alreadyBaseNameTimestamps.has(baseName)) {
+                alreadyBaseNameTimestamps.set(baseName, new Set());
+              }
+              alreadyBaseNameTimestamps.get(baseName).add(fullTimestamp);
+            }
           }
         }
       }
-      // If manifest has perceptualHash, it's an image - use perceptual hash only
+      // If manifest has perceptualHash, it's an image - use perceptual hash
       if (manifest.perceptualHash) {
         alreadyPerceptualHashes.add(manifest.perceptualHash);
-      } else if (manifest.fileHash) {
-        // No perceptualHash means it's a video - use file hash
+      }
+      // Always add fileHash if present (for both images and videos)
+      // Images need fileHash for byte-identical dedup (AirDrop, copies)
+      if (manifest.fileHash) {
         alreadyFileHashes.add(manifest.fileHash);
+      }
+      // Build EXIF-based deduplication keys from manifest
+      // These are the real EXIF values extracted from the original file during upload
+      if (manifest.exifCaptureTime) {
+        const ct = manifest.exifCaptureTime;
+        const mk = manifest.exifMake;
+        const md = manifest.exifModel;
+        // Generate dedup keys at different confidence levels
+        if (ct && mk && md) alreadyExifFull.add(`${ct}|${mk}|${md}`);
+        if (ct && md) alreadyExifTimeModel.add(`${ct}|${md}`);
+        if (ct && mk) alreadyExifTimeMake.add(`${ct}|${mk}`);
       }
     }
 
-    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyBaseFilenames.size} base names, ${alreadyBaseNameSizes.size} name+size entries, ${alreadyBaseNameDates.size} name+date entries, ${alreadyFileHashes.size} video hashes, ${alreadyPerceptualHashes.size} image hashes for deduplication`);
-    return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates };
+    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyBaseFilenames.size} base names, ${alreadyBaseNameSizes.size} name+size entries, ${alreadyBaseNameDates.size} name+date entries, ${alreadyBaseNameTimestamps.size} name+timestamp entries, ${alreadyFileHashes.size} file hashes, ${alreadyPerceptualHashes.size} perceptual hashes, ${alreadyExifFull.size} EXIF full keys for deduplication`);
+    return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake };
   }
 
-  async uploadFile(file, fileIndex, totalFiles, alreadyManifestIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates) {
+  async uploadFile(file, fileIndex, totalFiles, alreadyManifestIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake) {
     const filePath = file.path;
     const fileName = file.name;
     const fileSize = file.size;
@@ -828,6 +932,40 @@ class DesktopBackupClient {
     if (baseFilename && alreadyBaseFilenames && alreadyBaseFilenames.has(baseFilename)) {
       console.log(`Skipping ${fileName} - variant of ${baseFilename} already on server`);
       return { skipped: true, reason: 'baseFilename' };
+    }
+
+    // HEIC PRIORITY: Full timestamp match (most reliable for cross-platform HEIC dedup)
+    // HEIC files from iPhone and desktop have identical EXIF timestamps even if bytes differ
+    if (baseFilename && fileModified && alreadyBaseNameTimestamps && alreadyBaseNameTimestamps.has(baseFilename)) {
+      const fileTimestamp = this.normalizeFullTimestamp(fileModified);
+      if (fileTimestamp) {
+        const existingTimestamps = alreadyBaseNameTimestamps.get(baseFilename);
+        if (existingTimestamps.has(fileTimestamp)) {
+          console.log(`Skipping ${fileName} - baseFilename+timestamp match (${baseFilename}, ${fileTimestamp})`);
+          return { skipped: true, reason: 'baseNameTimestamp' };
+        }
+      }
+    }
+
+    // EXIF-BASED DEDUP: Extract real EXIF from file and compare with manifest EXIF
+    // This is the most reliable cross-platform HEIC dedup - uses actual camera metadata
+    const fileExif = await this.extractExifForDedup(file.path);
+    const fileExifKeys = this.generateExifDedupKeys(fileExif);
+    
+    // Priority 1: Full EXIF match (captureTime + make + model) - highest confidence
+    if (fileExifKeys.full && alreadyExifFull && alreadyExifFull.has(fileExifKeys.full)) {
+      console.log(`Skipping ${fileName} - EXIF full match (${fileExifKeys.full})`);
+      return { skipped: true, reason: 'exifFull' };
+    }
+    // Priority 2: captureTime + model match
+    if (fileExifKeys.timeModel && alreadyExifTimeModel && alreadyExifTimeModel.has(fileExifKeys.timeModel)) {
+      console.log(`Skipping ${fileName} - EXIF time+model match (${fileExifKeys.timeModel})`);
+      return { skipped: true, reason: 'exifTimeModel' };
+    }
+    // Priority 3: captureTime + make match
+    if (fileExifKeys.timeMake && alreadyExifTimeMake && alreadyExifTimeMake.has(fileExifKeys.timeMake)) {
+      console.log(`Skipping ${fileName} - EXIF time+make match (${fileExifKeys.timeMake})`);
+      return { skipped: true, reason: 'exifTimeMake' };
     }
 
     // FALLBACK 1: Skip if baseFilename + similar size exists on server
@@ -892,11 +1030,16 @@ class DesktopBackupClient {
         }
       }
 
-      // Also compute exact hash for storage in manifest (but don't use for deduplication)
+      // Also compute exact hash for storage in manifest and byte-identical dedup (AirDrop)
       try {
         exactFileHash = await computeExactFileHash(filePath);
       } catch (e) {
         console.warn(`computeExactFileHash failed for ${fileName}:`, e.message);
+      }
+      // Skip if exact file hash already exists on server (byte-identical, e.g. AirDrop)
+      if (exactFileHash && alreadyFileHashes && alreadyFileHashes.has(exactFileHash)) {
+        console.log(`Skipping ${fileName} - exact file hash already on server (byte-identical)`);
+        return { skipped: true, reason: 'fileHash' };
       }
     } else {
       // Videos: compute exact file hash for byte-for-byte deduplication
@@ -975,6 +1118,12 @@ class DesktopBackupClient {
 
     await drainInFlightPromises(inFlight);
 
+    // Extract real EXIF data from file for cross-platform deduplication
+    const exifData = await this.extractExifForDedup(filePath);
+    if (exifData.captureTime) {
+      console.log(`[EXIF] ${fileName}: time=${exifData.captureTime}, make=${exifData.make}, model=${exifData.model}`);
+    }
+
     // Build manifest with fileHash and perceptualHash for cross-device deduplication
     const manifest = {
       v: 1,
@@ -982,6 +1131,11 @@ class DesktopBackupClient {
       filename: fileName,
       mediaType: this.getMediaType(fileName),
       originalSize: fileSize,
+      creationTime: fileModified ? fileModified.getTime() : null,
+      // EXIF data for cross-platform HEIC deduplication
+      exifCaptureTime: exifData.captureTime || null,
+      exifMake: exifData.make || null,
+      exifModel: exifData.model || null,
       baseNonce16: naclUtil.encodeBase64(baseNonce16),
       wrapNonce: naclUtil.encodeBase64(wrapNonce),
       wrappedFileKey: naclUtil.encodeBase64(wrappedKey),
@@ -1031,6 +1185,10 @@ class DesktopBackupClient {
     let alreadyPerceptualHashes = null;
     let alreadyBaseNameSizes = null;
     let alreadyBaseNameDates = null;
+    let alreadyBaseNameTimestamps = null;
+    let alreadyExifFull = null;
+    let alreadyExifTimeModel = null;
+    let alreadyExifTimeMake = null;
 
     if (isStealthCloud) {
       // Derive master key (same as mobile app)
@@ -1047,6 +1205,10 @@ class DesktopBackupClient {
       alreadyPerceptualHashes = dedupeSets.alreadyPerceptualHashes;
       alreadyBaseNameSizes = dedupeSets.alreadyBaseNameSizes;
       alreadyBaseNameDates = dedupeSets.alreadyBaseNameDates;
+      alreadyBaseNameTimestamps = dedupeSets.alreadyBaseNameTimestamps;
+      alreadyExifFull = dedupeSets.alreadyExifFull;
+      alreadyExifTimeModel = dedupeSets.alreadyExifTimeModel;
+      alreadyExifTimeMake = dedupeSets.alreadyExifTimeMake;
     } else {
       this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
       existingClassic = await this.getExistingClassicFilenames();
@@ -1095,7 +1257,7 @@ class DesktopBackupClient {
       if (this.cancelled) return;
       try {
         if (isStealthCloud) {
-          const result = await this.uploadFile(file, idx, totalFiles, existingIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates);
+          const result = await this.uploadFile(file, idx, totalFiles, existingIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake);
           if (result && result.skipped) {
             skipped++;
           } else if (result) {
