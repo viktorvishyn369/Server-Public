@@ -105,6 +105,7 @@
     "dotenv": "^17.2.3",
     "electron-store": "^8.1.0",
     "exif-reader": "^2.0.3",
+    "exifreader": "^4.33.1",
     "express": "^5.2.1",
     "form-data": "^4.0.0",
     "heic-convert": "^2.1.0",

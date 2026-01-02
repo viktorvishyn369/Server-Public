@@ -408,47 +408,56 @@ class DesktopBackupClient {
     const ext = path.extname(filePath).toLowerCase();
     
     try {
-      // Always read from original file path - Sharp can read EXIF from HEIC directly
-      const metadata = await sharp(filePath).metadata();
+      // Use exifreader for HEIC files (Sharp can't read HEIC EXIF properly)
+      // Use Sharp + exif-reader for other formats
+      let tags;
       
       if (ext === '.heic' || ext === '.heif') {
-        console.log(`[EXIF-DEBUG] ${fileName}: has EXIF buffer:`, !!metadata.exif, 'length:', metadata.exif ? metadata.exif.length : 0);
-      }
-      
-      if (metadata.exif) {
-        // Parse EXIF buffer using exif-reader (Sharp's dependency)
-        let exifReader;
-        try {
-          exifReader = require('exif-reader');
-        } catch (e) {
-          // exif-reader not available, fall back to file modified time
-          return result;
+        const ExifReader = require('exifreader');
+        tags = await ExifReader.load(filePath);
+        
+        // Extract DateTimeOriginal
+        const dateTimeOriginal = tags['DateTimeOriginal']?.description || tags['DateTime']?.description;
+        if (dateTimeOriginal) {
+          // EXIF format: "YYYY:MM:DD HH:MM:SS" -> ISO format: "YYYY-MM-DDTHH:MM:SS"
+          const normalized = dateTimeOriginal.replace(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}:\d{2}:\d{2})/, '$1-$2-$3T$4');
+          result.captureTime = normalized;
         }
         
-        const exifData = exifReader(metadata.exif);
-        
-        if (ext === '.heic' || ext === '.heif') {
-          console.log(`[EXIF-DEBUG] ${fileName}: parsed EXIF, has image:`, !!exifData?.image, 'has exif:', !!exifData?.exif);
-        }
-        
-        // Extract DateTimeOriginal from EXIF
-        const exifDate = exifData?.exif?.DateTimeOriginal || exifData?.exif?.DateTimeDigitized || exifData?.image?.ModifyDate;
-        if (exifDate instanceof Date && !isNaN(exifDate.getTime())) {
-          result.captureTime = exifDate.toISOString().slice(0, 19);
-        }
-        
-        // Extract Make (manufacturer) - normalize to lowercase
-        if (exifData?.image?.Make && typeof exifData.image.Make === 'string') {
-          result.make = exifData.image.Make.trim().toLowerCase();
+        // Extract Make - normalize to lowercase
+        const make = tags['Make']?.description;
+        if (make && typeof make === 'string') {
+          result.make = make.trim().toLowerCase();
         }
         
         // Extract Model - normalize to lowercase
-        if (exifData?.image?.Model && typeof exifData.image.Model === 'string') {
-          result.model = exifData.image.Model.trim().toLowerCase();
+        const model = tags['Model']?.description;
+        if (model && typeof model === 'string') {
+          result.model = model.trim().toLowerCase();
         }
+      } else {
+        // For non-HEIC files, use Sharp + exif-reader
+        const metadata = await sharp(filePath).metadata();
         
-        if (ext === '.heic' || ext === '.heif') {
-          console.log(`[EXIF-DEBUG] ${fileName}: extracted - time:`, result.captureTime, 'make:', result.make, 'model:', result.model);
+        if (metadata.exif) {
+          const exifReader = require('exif-reader');
+          const exifData = exifReader(metadata.exif);
+          
+          // Extract DateTimeOriginal from EXIF
+          const exifDate = exifData?.exif?.DateTimeOriginal || exifData?.exif?.DateTimeDigitized || exifData?.image?.ModifyDate;
+          if (exifDate instanceof Date && !isNaN(exifDate.getTime())) {
+            result.captureTime = exifDate.toISOString().slice(0, 19);
+          }
+          
+          // Extract Make (manufacturer) - normalize to lowercase
+          if (exifData?.image?.Make && typeof exifData.image.Make === 'string') {
+            result.make = exifData.image.Make.trim().toLowerCase();
+          }
+          
+          // Extract Model - normalize to lowercase
+          if (exifData?.image?.Model && typeof exifData.image.Model === 'string') {
+            result.model = exifData.image.Model.trim().toLowerCase();
+          }
         }
       }
     } catch (e) {
