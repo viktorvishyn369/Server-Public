@@ -1737,10 +1737,12 @@ app.whenReady().then(() => {
 
   updateTrayMenu();
   
-  // Auto-refresh menu every 3 seconds
+  // Auto-refresh menu every 5 seconds (longer interval to reduce flickering on Linux)
+  // On Linux, avoid refreshing too frequently as it causes menu jumping
+  const refreshInterval = process.platform === 'linux' ? 10000 : 3000;
   setInterval(() => {
     updateTrayMenu();
-  }, 3000);
+  }, refreshInterval);
   
   // Start server automatically
   startServer();
