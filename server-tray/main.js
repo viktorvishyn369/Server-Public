@@ -531,8 +531,12 @@ function freePort3000ForPhotoLynk() {
   if (pids.length === 0) return !isPort3000InUse();
 
   let killedAny = false;
+  let foundNonOwnedProcess = false;
   for (const pid of pids) {
-    if (!isPhotoLynkOwnedPid(pid)) continue;
+    if (!isPhotoLynkOwnedPid(pid)) {
+      foundNonOwnedProcess = true;
+      continue;
+    }
     try {
       if (process.platform === 'win32') {
         execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
@@ -546,8 +550,10 @@ function freePort3000ForPhotoLynk() {
     }
   }
 
-  if (!killedAny) return false;
-
+  // If we found processes but none were PhotoLynk-owned, port is blocked by another app
+  if (!killedAny && foundNonOwnedProcess) return false;
+  
+  // If no processes were found at all, or we killed them, check if port is now free
   const remaining = getPort3000Listeners();
   if (remaining.length > 0) return false;
   return !isPort3000InUse();
