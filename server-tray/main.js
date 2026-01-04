@@ -149,7 +149,12 @@ function setAutostart(enabled) {
   if (process.platform === 'linux') {
     try {
       const autostartDir = path.join(os.homedir(), '.config', 'autostart');
-      const desktopFile = path.join(autostartDir, 'photosync-server.desktop');
+      const desktopFile = path.join(autostartDir, 'photolynk-server.desktop');
+      // Also remove old legacy desktop file if exists
+      const oldDesktopFile = path.join(autostartDir, 'photosync-server.desktop');
+      if (fs.existsSync(oldDesktopFile)) {
+        fs.unlinkSync(oldDesktopFile);
+      }
 
       if (!fs.existsSync(autostartDir)) {
         fs.mkdirSync(autostartDir, { recursive: true });
@@ -161,10 +166,11 @@ function setAutostart(enabled) {
           '[Desktop Entry]',
           'Type=Application',
           'Name=PhotoLynk Server',
-          `Exec="${execPath}"`,
+          `Exec="${execPath}" --no-sandbox`,
           'X-GNOME-Autostart-enabled=true',
           'NoDisplay=false',
           'Terminal=false',
+          'Comment=PhotoLynk Desktop Server for photo backup',
           ''
         ].join('\n');
         fs.writeFileSync(desktopFile, desktopContent, { encoding: 'utf8' });
@@ -192,7 +198,7 @@ function startServer() {
   }
 
   stopLegacyService();
-  const portIsFree = freePort3000ForPhotoSync();
+  const portIsFree = freePort3000ForPhotoLynk();
   if (!portIsFree) {
     try {
       new Notification({
@@ -279,7 +285,7 @@ function stopServer() {
     }
   }
   
-  freePort3000ForPhotoSync();
+  freePort3000ForPhotoLynk();
   
   // Update menu after a delay to ensure port is released
   setTimeout(() => {
@@ -368,7 +374,7 @@ function getLocalIpAddresses() {
 function stopLegacyService() {
   if (process.platform !== 'darwin') return;
   try {
-    const agentPath = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.photosync.server.plist');
+    const agentPath = path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.photolynk.server.plist');
     if (!fs.existsSync(agentPath)) return;
 
     const uid = typeof process.getuid === 'function' ? String(process.getuid()) : '';
@@ -383,7 +389,7 @@ function stopLegacyService() {
       // ignore
     }
     try {
-      execSync('launchctl remove com.photosync.server', { stdio: 'ignore' });
+      execSync('launchctl remove com.photolynk.server', { stdio: 'ignore' });
     } catch (e) {
       // ignore
     }
@@ -489,7 +495,7 @@ function isPort3000InUse() {
   }
 }
 
-function isPhotoSyncOwnedPid(pid) {
+function isPhotoLynkOwnedPid(pid) {
   try {
     const pidStr = String(pid);
     if (!/^\d+$/.test(pidStr)) return false;
@@ -498,26 +504,26 @@ function isPhotoSyncOwnedPid(pid) {
       const ps = `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pidStr}').CommandLine"`;
       const cmd = execSync(ps, { encoding: 'utf8' }).toString();
       const hay = String(cmd || '').toLowerCase();
-      if (hay.includes('photosync') && hay.includes('server')) return true;
-      if (hay.includes('server.js') && hay.includes('photosync')) return true;
+      if (hay.includes('photolynk') && hay.includes('server')) return true;
+      if (hay.includes('server.js') && hay.includes('photolynk')) return true;
       return false;
     }
 
     const cmd = execSync(`ps -p ${pidStr} -o command=`, { encoding: 'utf8' }).toString();
     const hay = String(cmd || '');
-    if (hay.includes('PhotoSync Server.app/Contents/Resources/server/server.js')) return true;
     if (hay.includes('PhotoLynk Server.app/Contents/Resources/server/server.js')) return true;
-    if (hay.includes('/PhotoSync/server/server.js')) return true;
+    if (hay.includes('PhotoLynk Server.app/Contents/Resources/server/server.js')) return true;
     if (hay.includes('/PhotoLynk/server/server.js')) return true;
-    if (hay.includes('com.photosync.server')) return true;
-    if (hay.toLowerCase().includes('photosync') && hay.includes('server.js')) return true;
+    if (hay.includes('/PhotoLynk/server/server.js')) return true;
+    if (hay.includes('com.photolynk.server')) return true;
+    if (hay.toLowerCase().includes('photolynk') && hay.includes('server.js')) return true;
     return false;
   } catch (e) {
     return false;
   }
 }
 
-function freePort3000ForPhotoSync() {
+function freePort3000ForPhotoLynk() {
   const pids = getPort3000Listeners();
 
   // If the port is in use but we cannot discover any PID (common on Linux without
@@ -526,7 +532,7 @@ function freePort3000ForPhotoSync() {
 
   let killedAny = false;
   for (const pid of pids) {
-    if (!isPhotoSyncOwnedPid(pid)) continue;
+    if (!isPhotoLynkOwnedPid(pid)) continue;
     try {
       if (process.platform === 'win32') {
         execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
