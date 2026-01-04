@@ -1747,18 +1747,15 @@ app.whenReady().then(() => {
 
   updateTrayMenu();
   
-  // Auto-refresh menu in background only when menu is not open
-  // This prevents annoying refreshes while user is reading the menu
-  const refreshInterval = process.platform === 'linux' ? 10000 : 5000;
-  setInterval(() => {
-    if (!menuOpen) {
-      updateTrayMenu();
-    }
-  }, refreshInterval);
-  
-  // Close menu tracking after any click (menu closes after selection)
-  tray.on('mouse-up', resetMenuOpen);
-  tray.on('mouse-leave', resetMenuOpen);
+  // Auto-refresh menu - disabled on Linux to prevent menu jumping
+  // On Linux, menu only updates on click/right-click
+  if (process.platform !== 'linux') {
+    setInterval(() => {
+      if (!menuOpen) {
+        updateTrayMenu();
+      }
+    }, 5000);
+  }
   
   // Start server automatically
   startServer();
