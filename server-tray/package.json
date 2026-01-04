@@ -51,7 +51,9 @@
     "asarUnpack": [
       "**/*.node",
       "**/node_modules/sqlite3/**",
-      "**/node_modules/bcrypt/**"
+      "**/node_modules/bcrypt/**",
+      "**/node_modules/sharp/**/*",
+      "**/node_modules/@img/**/*"
     ],
     "directories": {
       "output": "dist"
@@ -118,14 +120,14 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "qrcode": "^1.5.3",
-    "sharp": "0.32.6",
+    "sharp": "^0.33.5",
     "sqlite3": "^5.1.6",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "electron": "25.9.8",
+    "electron": "28.3.3",
     "electron-builder": "^24.9.1"
   }
 }
