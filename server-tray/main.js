@@ -1722,14 +1722,24 @@ app.whenReady().then(() => {
   tray = new Tray(trayIcon);
   tray.setToolTip('PhotoLynk Server');
   
+  // Track if menu is currently open to avoid refreshing while user is reading
+  let menuOpen = false;
+  
   // Update menu when clicked
   tray.on('click', () => {
+    menuOpen = true;
     updateTrayMenu();
   });
   
   tray.on('right-click', () => {
+    menuOpen = true;
     updateTrayMenu();
   });
+  
+  // Reset menuOpen after a delay (menu auto-closes after interaction)
+  const resetMenuOpen = () => {
+    setTimeout(() => { menuOpen = false; }, 500);
+  };
   
   // Load startOnBoot setting and apply autostart configuration once
   startOnBoot = store.get('startOnBoot', false);
@@ -1737,12 +1747,18 @@ app.whenReady().then(() => {
 
   updateTrayMenu();
   
-  // Auto-refresh menu every 5 seconds (longer interval to reduce flickering on Linux)
-  // On Linux, avoid refreshing too frequently as it causes menu jumping
-  const refreshInterval = process.platform === 'linux' ? 10000 : 3000;
+  // Auto-refresh menu in background only when menu is not open
+  // This prevents annoying refreshes while user is reading the menu
+  const refreshInterval = process.platform === 'linux' ? 10000 : 5000;
   setInterval(() => {
-    updateTrayMenu();
+    if (!menuOpen) {
+      updateTrayMenu();
+    }
   }, refreshInterval);
+  
+  // Close menu tracking after any click (menu closes after selection)
+  tray.on('mouse-up', resetMenuOpen);
+  tray.on('mouse-leave', resetMenuOpen);
   
   // Start server automatically
   startServer();
