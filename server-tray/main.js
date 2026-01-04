@@ -1186,9 +1186,6 @@ function showBackupWindow() {
     
     <div class="section folders-section">
       <div class="section-title">Folders to Backup</div>
-      <div style="background: rgba(255, 180, 0, 0.08); border: 1px solid rgba(255, 180, 0, 0.25); border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; font-size: 10px; color: #d4a000; line-height: 1.4;">
-        <strong>⚠️</strong> Avoid system folders (Photos Library, Pictures). Export to a dedicated folder instead.
-      </div>
       <div class="folder-list" id="folder-list">
         <!-- Folders will be populated dynamically -->
       </div>
