@@ -23,6 +23,12 @@ let backupPowerSaveBlockerId = null;
 
 const store = new Store({ name: 'photolynk-tray' });
 
+// Disable sandbox on Linux to prevent SIGTRAP crashes on Ubuntu 24.04+ / newer kernels
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+}
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();

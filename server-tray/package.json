@@ -95,7 +95,8 @@
       ],
       "icon": "icon.png",
       "category": "Utility",
-      "maintainer": "PhotoLynk <photosync@users.noreply.github.com>"
+      "maintainer": "PhotoLynk <photolynk@users.noreply.github.com>",
+      "executableArgs": ["--no-sandbox"]
     }
   },
   "dependencies": {
@@ -116,13 +117,13 @@
     "multer": "^2.0.2",
     "qrcode": "^1.5.3",
     "sharp": "^0.33.5",
-    "sqlite3": "^5.1.7",
+    "sqlite3": "^5.1.6",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "electron": "^39.2.7",
+    "electron": "25.9.8",
     "electron-builder": "^24.9.1"
   }
 }
