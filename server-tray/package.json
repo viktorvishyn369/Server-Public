@@ -53,7 +53,8 @@
       "**/node_modules/sqlite3/**",
       "**/node_modules/bcrypt/**",
       "**/node_modules/sharp/**/*",
-      "**/node_modules/@img/**/*"
+      "**/node_modules/@img/**/*",
+      "**/node_modules/ffmpeg-static/**/*"
     ],
     "directories": {
       "output": "dist"
@@ -106,6 +107,7 @@
   "dependencies": {
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
+    "ffmpeg-static": "^5.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "electron-store": "^8.1.0",
