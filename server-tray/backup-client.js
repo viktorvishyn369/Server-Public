@@ -952,82 +952,10 @@ class DesktopBackupClient {
       return { skipped: true, reason: 'manifestId' };
     }
 
-    // Skip if filename already exists on server (fallback for old manifests without fileHash)
-    const normalizedFilename = this.normalizeFilenameForCompare(fileName);
-    if (normalizedFilename && alreadyFilenames && alreadyFilenames.has(normalizedFilename)) {
-      console.log(`Skipping ${fileName} - filename already on server`);
-      return { skipped: true, reason: 'filename' };
-    }
-
-    // Extract base filename for variant matching (iOS/Android/Windows/Linux patterns)
-    const baseFilename = this.extractBaseFilename(fileName);
-    
-    // Skip if base filename already exists on server (catches all platform variants)
-    if (baseFilename && alreadyBaseFilenames && alreadyBaseFilenames.has(baseFilename)) {
-      console.log(`Skipping ${fileName} - variant of ${baseFilename} already on server`);
-      return { skipped: true, reason: 'baseFilename' };
-    }
-
-    // HEIC PRIORITY: Full timestamp match (most reliable for cross-platform HEIC dedup)
-    // HEIC files from iPhone and desktop have identical EXIF timestamps even if bytes differ
-    if (baseFilename && fileModified && alreadyBaseNameTimestamps && alreadyBaseNameTimestamps.has(baseFilename)) {
-      const fileTimestamp = this.normalizeFullTimestamp(fileModified);
-      if (fileTimestamp) {
-        const existingTimestamps = alreadyBaseNameTimestamps.get(baseFilename);
-        if (existingTimestamps.has(fileTimestamp)) {
-          console.log(`Skipping ${fileName} - baseFilename+timestamp match (${baseFilename}, ${fileTimestamp})`);
-          return { skipped: true, reason: 'baseNameTimestamp' };
-        }
-      }
-    }
-
-    // EXIF-BASED DEDUP: Extract real EXIF from file and compare with manifest EXIF
-    // This is the most reliable cross-platform HEIC dedup - uses actual camera metadata
-    const fileExif = await this.extractExifForDedup(file.path);
-    const fileExifKeys = this.generateExifDedupKeys(fileExif);
-    
-    // Priority 1: Full EXIF match (captureTime + make + model) - highest confidence
-    if (fileExifKeys.full && alreadyExifFull && alreadyExifFull.has(fileExifKeys.full)) {
-      console.log(`Skipping ${fileName} - EXIF full match (${fileExifKeys.full})`);
-      return { skipped: true, reason: 'exifFull' };
-    }
-    // Priority 2: captureTime + model match
-    if (fileExifKeys.timeModel && alreadyExifTimeModel && alreadyExifTimeModel.has(fileExifKeys.timeModel)) {
-      console.log(`Skipping ${fileName} - EXIF time+model match (${fileExifKeys.timeModel})`);
-      return { skipped: true, reason: 'exifTimeModel' };
-    }
-    // Priority 3: captureTime + make match
-    if (fileExifKeys.timeMake && alreadyExifTimeMake && alreadyExifTimeMake.has(fileExifKeys.timeMake)) {
-      console.log(`Skipping ${fileName} - EXIF time+make match (${fileExifKeys.timeMake})`);
-      return { skipped: true, reason: 'exifTimeMake' };
-    }
-
-    // FALLBACK 1: Skip if baseFilename + similar size exists on server
-    // This catches files re-compressed by iOS/Android overnight (size changes slightly)
-    if (baseFilename && alreadyBaseNameSizes && alreadyBaseNameSizes.has(baseFilename)) {
-      const existingSizes = alreadyBaseNameSizes.get(baseFilename);
-      for (const existingSize of existingSizes) {
-        // Allow 20% size tolerance for re-compression
-        const sizeDiff = Math.abs(fileSize - existingSize) / Math.max(fileSize, existingSize);
-        if (sizeDiff < 0.20) {
-          console.log(`Skipping ${fileName} - baseFilename+size match (${baseFilename}, size diff ${(sizeDiff * 100).toFixed(1)}%)`);
-          return { skipped: true, reason: 'baseNameSize' };
-        }
-      }
-    }
-
-    // FALLBACK 2: Skip if baseFilename + same date exists on server
-    // This catches files with same name taken on same day (most reliable for overnight changes)
-    if (baseFilename && fileModified && alreadyBaseNameDates && alreadyBaseNameDates.has(baseFilename)) {
-      const fileDateStr = this.normalizeDateForCompare(fileModified);
-      if (fileDateStr) {
-        const existingDates = alreadyBaseNameDates.get(baseFilename);
-        if (existingDates.has(fileDateStr)) {
-          console.log(`Skipping ${fileName} - baseFilename+date match (${baseFilename}, date ${fileDateStr})`);
-          return { skipped: true, reason: 'baseNameDate' };
-        }
-      }
-    }
+    // HASH-ONLY DEDUPLICATION:
+    // - Images: perceptual hash (transcoding-resistant visual matching)
+    // - Videos: exact file hash (byte-for-byte comparison)
+    // No filename, EXIF, or size-based matching to avoid false positives
 
     // Determine if this is an image or video
     const ext = path.extname(fileName).toLowerCase();
