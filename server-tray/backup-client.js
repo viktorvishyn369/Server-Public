@@ -116,9 +116,10 @@ function hammingDistance64(a, b) {
 }
 
 // Cross-platform deduplication threshold for 64-bit dHash
-// Threshold of 3 bits for stricter matching to avoid false positives
-// 3 bits = ~5% difference tolerance
-const CROSS_PLATFORM_DHASH_THRESHOLD = 3;
+// Threshold of 6 bits to account for HEIC decoder differences across platforms
+// (heic-convert on desktop vs native ImageIO on iOS vs ImageDecoder on Android)
+// 6 bits = ~9% difference tolerance, still strict enough to avoid false positives
+const CROSS_PLATFORM_DHASH_THRESHOLD = 6;
 
 // Find a matching perceptual hash using Hamming distance (fuzzy matching)
 // Returns { match: boolean, distance: number } for logging
