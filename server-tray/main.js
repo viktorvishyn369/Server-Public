@@ -1466,8 +1466,10 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
 
     stopBackupPowerSaveBlocker();
     
+    // Combine skipped + failed into single "Skipped" count for cleaner UI
+    const totalSkipped = (result.skipped || 0) + (result.failed || 0);
     event.reply('backup-complete', { 
-      message: `Backup Complete\nUploaded: ${result.uploaded}\nSkipped: ${result.skipped}\nFailed: ${result.failed}`
+      message: `Backup Complete\nUploaded: ${result.uploaded}\nSkipped: ${totalSkipped}`
     });
     
   } catch (error) {
