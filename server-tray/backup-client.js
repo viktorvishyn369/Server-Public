@@ -952,13 +952,75 @@ class DesktopBackupClient {
       return { skipped: true, reason: 'manifestId' };
     }
 
-    // HASH-ONLY DEDUPLICATION:
+    // Skip if exact filename already exists on server
+    const normalizedFilename = this.normalizeFilenameForCompare(fileName);
+    if (normalizedFilename && alreadyFilenames && alreadyFilenames.has(normalizedFilename)) {
+      console.log(`Skipping ${fileName} - filename already on server`);
+      return { skipped: true, reason: 'filename' };
+    }
+
+    // Extract base filename for variant matching
+    const baseName = this.extractBaseFilename(fileName);
+
+    // Skip if base filename + full timestamp matches (HEIC cross-platform dedup)
+    if (baseName && fileModified && alreadyBaseNameTimestamps && alreadyBaseNameTimestamps.has(baseName)) {
+      const fullTimestamp = this.normalizeFullTimestamp(fileModified);
+      if (fullTimestamp && alreadyBaseNameTimestamps.get(baseName).has(fullTimestamp)) {
+        console.log(`Skipping ${fileName} - base filename + timestamp already on server`);
+        return { skipped: true, reason: 'timestamp' };
+      }
+    }
+
+    // Skip if base filename + size matches (within 20% tolerance for transcoding)
+    if (baseName && fileSize && alreadyBaseNameSizes && alreadyBaseNameSizes.has(baseName)) {
+      for (const existingSize of alreadyBaseNameSizes.get(baseName)) {
+        const diff = Math.abs(fileSize - existingSize) / Math.max(fileSize, existingSize);
+        if (diff < 0.20) {
+          console.log(`Skipping ${fileName} - base filename + size already on server (diff=${(diff * 100).toFixed(1)}%)`);
+          return { skipped: true, reason: 'size' };
+        }
+      }
+    }
+
+    // Skip if base filename + date matches
+    if (baseName && fileModified && alreadyBaseNameDates && alreadyBaseNameDates.has(baseName)) {
+      const dateStr = this.normalizeDateForCompare(fileModified);
+      if (dateStr && alreadyBaseNameDates.get(baseName).has(dateStr)) {
+        console.log(`Skipping ${fileName} - base filename + date already on server`);
+        return { skipped: true, reason: 'date' };
+      }
+    }
+
+    // EXIF-based deduplication for cross-platform HEIC matching
+    // Extract EXIF before hash computation to enable early skip
+    const ext = path.extname(fileName).toLowerCase();
+    const exifData = await this.extractExifForDedup(filePath);
+    
+    if (exifData.captureTime) {
+      const exifKeys = this.generateExifDedupKeys(exifData);
+      
+      // Check EXIF full match (captureTime + make + model) - highest confidence
+      if (exifKeys.full && alreadyExifFull && alreadyExifFull.has(exifKeys.full)) {
+        console.log(`Skipping ${fileName} - EXIF full match (time+make+model) already on server`);
+        return { skipped: true, reason: 'exifFull' };
+      }
+      
+      // Check EXIF time+model match
+      if (exifKeys.timeModel && alreadyExifTimeModel && alreadyExifTimeModel.has(exifKeys.timeModel)) {
+        console.log(`Skipping ${fileName} - EXIF time+model match already on server`);
+        return { skipped: true, reason: 'exifTimeModel' };
+      }
+      
+      // Check EXIF time+make match
+      if (exifKeys.timeMake && alreadyExifTimeMake && alreadyExifTimeMake.has(exifKeys.timeMake)) {
+        console.log(`Skipping ${fileName} - EXIF time+make match already on server`);
+        return { skipped: true, reason: 'exifTimeMake' };
+      }
+    }
+
+    // HASH-BASED DEDUPLICATION:
     // - Images: perceptual hash (transcoding-resistant visual matching)
     // - Videos: exact file hash (byte-for-byte comparison)
-    // No filename, EXIF, or size-based matching to avoid false positives
-
-    // Determine if this is an image or video
-    const ext = path.extname(fileName).toLowerCase();
     const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.heic', '.heif', '.avif', '.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.rw2', '.orf'];
     const isImage = imageExts.includes(ext);
 
@@ -1086,9 +1148,8 @@ class DesktopBackupClient {
 
     await drainInFlightPromises(inFlight);
 
-    // Extract real EXIF data from file for cross-platform deduplication
-    // Sharp can read EXIF from HEIC files directly
-    const exifData = await this.extractExifForDedup(filePath);
+    // EXIF data was already extracted earlier for dedup checks - reuse it
+    // Log EXIF info for debugging
     if (exifData.captureTime) {
       console.log(`[EXIF] ${fileName}: time=${exifData.captureTime}, make=${exifData.make}, model=${exifData.model}`);
     } else if (ext === '.heic' || ext === '.heif') {
