@@ -701,13 +701,14 @@ function showMainWindow() {
       --bg-primary: #0A0A0A;
       --bg-card: rgba(30, 30, 30, 0.85);
       --bg-input: rgba(26, 26, 26, 0.9);
-      --accent: #4A9FE8;
-      --accent-secondary: #03DAC6;
+      --accent: #03E1FF;           /* Solana ocean blue */
+      --accent-secondary: #00FFA3; /* Solana bright mint/green */
+      --accent-cyan: #03E1FF;      /* Solana ocean blue/cyan */
       --text-primary: #FFFFFF;
       --text-secondary: #AAAAAA;
       --text-muted: #666666;
       --border: rgba(255, 255, 255, 0.15);
-      --success: #03DAC6;
+      --success: #00FFA3;          /* Solana mint green */
       --error: #CF6679;
       --warning: #FFB74D;
     }
@@ -989,9 +990,22 @@ function showMainWindow() {
     function openUploadsFolder() { ipcRenderer.send('open-folder', getUserUploadsPath()); }
     function copyUploadsPath() { 
       const pathToCopy = getUserUploadsPath();
-      console.log('Copying path:', pathToCopy);
+      const btn = event.target;
+      const originalText = btn.textContent;
+      
+      const showCopied = () => {
+        btn.textContent = 'Copied!';
+        btn.style.backgroundColor = 'var(--success)';
+        btn.style.color = '#000';
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.backgroundColor = '';
+          btn.style.color = '';
+        }, 1500);
+      };
+      
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(pathToCopy).then(() => console.log('Copied!')).catch(e => console.error('Copy failed:', e));
+        navigator.clipboard.writeText(pathToCopy).then(showCopied).catch(e => console.error('Copy failed:', e));
       } else {
         const ta = document.createElement('textarea');
         ta.value = pathToCopy;
@@ -999,6 +1013,7 @@ function showMainWindow() {
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
+        showCopied();
       }
     }
     function addUploadsToSources() { const p = getUserUploadsPath(); if (p && !selectedFolders.includes(p)) { selectedFolders.push(p); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); } }
@@ -1100,14 +1115,15 @@ function showQRCodeWindow() {
     :root {
       --bg-primary: #0A0A0A;
       --bg-card: rgba(30, 30, 30, 0.85);
-      --accent: #4A9FE8;
-      --accent-secondary: #03DAC6;
+      --accent: #03E1FF;           /* Solana ocean blue */
+      --accent-secondary: #00FFA3; /* Solana bright mint/green */
+      --accent-cyan: #03E1FF;      /* Solana ocean blue/cyan */
       --text-primary: #FFFFFF;
       --text-secondary: #AAAAAA;
       --text-muted: #666666;
       --border: rgba(255, 255, 255, 0.15);
       --glow-white: 0 2px 12px rgba(255, 255, 255, 0.08);
-      --glow-accent: 0 2px 10px rgba(74, 159, 232, 0.25);
+      --glow-accent: 0 2px 10px rgba(3, 225, 255, 0.25);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -1383,17 +1399,18 @@ function showBackupWindow() {
       --bg-primary: #0A0A0A;
       --bg-card: rgba(30, 30, 30, 0.85);
       --bg-input: rgba(26, 26, 26, 0.9);
-      --accent: #4A9FE8;
-      --accent-hover: #3B8BD4;
-      --accent-secondary: #03DAC6;
+      --accent: #03E1FF;           /* Solana ocean blue */
+      --accent-hover: #02C4E0;
+      --accent-secondary: #00FFA3; /* Solana bright mint/green */
+      --accent-cyan: #03E1FF;      /* Solana ocean blue/cyan */
       --text-primary: #FFFFFF;
       --text-secondary: #AAAAAA;
       --text-muted: #666666;
       --border: rgba(255, 255, 255, 0.15);
-      --success: #03DAC6;
+      --success: #00FFA3;          /* Solana mint green */
       --error: #CF6679;
       --glow-white: 0 2px 12px rgba(255, 255, 255, 0.08);
-      --glow-accent: 0 2px 10px rgba(74, 159, 232, 0.25);
+      --glow-accent: 0 2px 10px rgba(3, 225, 255, 0.25);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -2152,6 +2169,13 @@ function updateTrayMenu() {
 
 app.whenReady().then(() => {
   initPaths();
+  
+  // Check if this is the first run
+  const isFirstRun = !store.get('hasRunBefore');
+  if (isFirstRun) {
+    store.set('hasRunBefore', true);
+  }
+  
   // Create tray icon
   let trayIcon;
   const isMac = process.platform === 'darwin';
@@ -2215,6 +2239,33 @@ app.whenReady().then(() => {
   
   // Start server automatically
   startServer();
+  
+  // On first run, open the main window and show system tray info
+  if (isFirstRun) {
+    setTimeout(() => {
+      showMainWindow();
+      
+      // Show platform-specific system tray info dialog
+      let trayLocation = '';
+      if (isMac) {
+        trayLocation = 'the menu bar (top-right of your screen)';
+      } else if (isWin) {
+        trayLocation = 'the system tray (bottom-right, near the clock)';
+      } else {
+        trayLocation = 'the system tray';
+      }
+      
+      const { dialog } = require('electron');
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Welcome to PhotoLynk',
+        message: 'PhotoLynk runs in the background',
+        detail: `When you close this window, PhotoLynk will continue running in ${trayLocation}.\n\nClick the PhotoLynk icon there anytime to open this window again.`,
+        buttons: ['Got it'],
+        defaultId: 0
+      });
+    }, 500);
+  }
 });
 
 app.on('window-all-closed', (e) => {
