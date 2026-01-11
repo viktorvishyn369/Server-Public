@@ -28,6 +28,7 @@
     "files": [
       "main.js",
       "backup-client.js",
+      "sync-client.js",
       "icon.png",
       "iconTemplate.png",
       "iconTemplate@2x.png",
