@@ -116,10 +116,8 @@ function hammingDistance64(a, b) {
 }
 
 // Cross-platform deduplication threshold for 64-bit dHash
-// Threshold of 6 bits to account for HEIC decoder differences across platforms
-// (heic-convert on desktop vs native ImageIO on iOS vs ImageDecoder on Android)
-// 6 bits = ~9% difference tolerance, still strict enough to avoid false positives
-const CROSS_PLATFORM_DHASH_THRESHOLD = 6;
+// Threshold of 0 bits = exact match only (identical to mobile apps)
+const CROSS_PLATFORM_DHASH_THRESHOLD = 0;
 
 // Find a matching perceptual hash using Hamming distance (fuzzy matching)
 // Returns { match: boolean, distance: number } for logging
@@ -713,7 +711,9 @@ class DesktopBackupClient {
 
   async getExistingClassicFilenames() {
     const baseUrl = this.getBaseUrl();
-    const out = new Set();
+    const filenames = new Set();
+    const fileHashes = new Set();
+    const perceptualHashes = new Set();
     const pageLimit = 500;
     let offset = 0;
 
@@ -723,14 +723,16 @@ class DesktopBackupClient {
           'Authorization': `Bearer ${this.token}`,
           'X-Device-UUID': this.deviceUuid
         },
-        params: { offset, limit: pageLimit },
+        params: { offset, limit: pageLimit, meta: 'true' },
         timeout: 30000
       });
 
       const files = (response.data && response.data.files) ? response.data.files : [];
       for (const f of files) {
         const n = this.normalizeFilenameForCompare(f && f.filename ? f.filename : null);
-        if (n) out.add(n);
+        if (n) filenames.add(n);
+        if (f.fileHash) fileHashes.add(f.fileHash);
+        if (f.perceptualHash) perceptualHashes.add(f.perceptualHash);
       }
 
       if (!files || files.length < pageLimit) break;
@@ -739,7 +741,8 @@ class DesktopBackupClient {
       if (typeof total === 'number' && offset >= total) break;
     }
 
-    return out;
+    console.log(`[BACKUP] Server files: ${filenames.size} filenames, ${fileHashes.size} fileHashes, ${perceptualHashes.size} perceptualHashes`);
+    return { filenames, fileHashes, perceptualHashes };
   }
 
   // Upload manifest to StealthCloud
@@ -1233,10 +1236,13 @@ class DesktopBackupClient {
       this.masterKey = this.deriveMasterKey(this.config.password, this.config.email);
       this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
       const existingManifests = await this.getExistingManifests();
+      console.log(`[DEDUP] Found ${existingManifests.length} existing manifests on server`);
       existingIds = new Set(existingManifests.map(m => m.manifestId));
+      console.log(`[DEDUP] Built ${existingIds.size} manifestIds for dedup`);
       
       // Build deduplication sets by decrypting manifests (same as mobile)
       const dedupeSets = await this.buildDeduplicationSets(existingManifests);
+      console.log(`[DEDUP] Built dedup sets: filenames=${dedupeSets.alreadyFilenames.size}, fileHashes=${dedupeSets.alreadyFileHashes.size}, perceptualHashes=${dedupeSets.alreadyPerceptualHashes.size}`);
       alreadyFilenames = dedupeSets.alreadyFilenames;
       alreadyBaseFilenames = dedupeSets.alreadyBaseFilenames;
       alreadyFileHashes = dedupeSets.alreadyFileHashes;
@@ -1267,11 +1273,45 @@ class DesktopBackupClient {
         continue;
       }
 
+      // Classic (Local/Remote) dedup: check filename, fileHash, and perceptualHash
+      const classicFilenames = existingClassic?.filenames || existingClassic || new Set();
+      const classicFileHashes = existingClassic?.fileHashes || new Set();
+      const classicPerceptualHashes = existingClassic?.perceptualHashes || new Set();
+      
       const normalized = this.normalizeFilenameForCompare(file && file.name ? file.name : null);
-      if (normalized && existingClassic && existingClassic.has(normalized)) {
+      if (normalized && classicFilenames.has(normalized)) {
         skipped++;
         continue;
       }
+      
+      // Compute hashes for local file and check against server
+      let skipByHash = false;
+      if (file.path && (classicFileHashes.size > 0 || classicPerceptualHashes.size > 0)) {
+        try {
+          const isVideo = /\.(mp4|mov|m4v|avi|mkv|wmv|flv|webm|3gp)$/i.test(file.name || '');
+          if (isVideo && classicFileHashes.size > 0) {
+            const fileHash = await computeExactFileHash(file.path);
+            if (fileHash && classicFileHashes.has(fileHash)) {
+              console.log(`[BACKUP] Skip ${file.name}: server fileHash match`);
+              skipByHash = true;
+            }
+          } else if (!isVideo && classicPerceptualHashes.size > 0) {
+            const phashResult = await computePerceptualHash(file.path);
+            if (phashResult?.hash && classicPerceptualHashes.has(phashResult.hash)) {
+              console.log(`[BACKUP] Skip ${file.name}: server perceptualHash match`);
+              skipByHash = true;
+            }
+          }
+        } catch (e) {
+          // Hash computation failed, continue with upload
+        }
+      }
+      
+      if (skipByHash) {
+        skipped++;
+        continue;
+      }
+      
       toUpload.push(file);
     }
 

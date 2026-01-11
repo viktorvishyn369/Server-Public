@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const Store = require('electron-store');
 
 let tray = null;
+let mainWindow = null;
 let qrWindow = null;
 let backupWindow = null;
 let serverProcess = null;
@@ -272,7 +273,7 @@ function startServer() {
   }, 2000);
 }
 
-function stopServer() {
+function stopServer(callback) {
   safeConsole('log', 'Stopping server...');
   
   // Kill the server process
@@ -280,9 +281,12 @@ function stopServer() {
     try {
       serverProcess.kill('SIGKILL');
       serverProcess = null;
+      safeConsole('log', 'Server process killed');
     } catch (e) {
       safeConsole('error', 'Error killing server process:', e);
     }
+  } else {
+    safeConsole('log', 'No server process to kill');
   }
   
   freePort3000ForPhotoLynk();
@@ -290,15 +294,19 @@ function stopServer() {
   // Update menu after a delay to ensure port is released
   setTimeout(() => {
     updateTrayMenu();
-  }, 1000);
+    safeConsole('log', 'Server stopped, port released');
+    if (typeof callback === 'function') callback();
+  }, 1500);
 }
 
 function restartServer() {
   safeConsole('log', 'Restarting server...');
-  stopServer();
-  setTimeout(() => {
-    startServer();
-  }, 1000);
+  stopServer(() => {
+    safeConsole('log', 'Starting server after stop...');
+    setTimeout(() => {
+      startServer();
+    }, 500);
+  });
 }
 
 function openUploadsFolder() {
@@ -619,6 +627,421 @@ function getPairingData() {
   };
 }
 
+// ============================================================================
+// UNIFIED MAIN WINDOW - Album-style desktop app (replaces dropdown menu)
+// ============================================================================
+
+function showMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    return;
+  }
+  
+  const pairingData = getPairingData();
+  const credentials = store.get('backupCredentials') || {};
+  const photoFolders = store.get('backupFolders') || [];
+  const defaultDownloadPath = path.join(os.homedir(), 'Pictures', 'PhotoLynk Sync');
+  const savedDownloadPath = store.get('syncDownloadPath') || defaultDownloadPath;
+  const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim();
+  
+  mainWindow = new BrowserWindow({
+    width: 480,
+    height: 720,
+    minWidth: 420,
+    minHeight: 600,
+    resizable: true,
+    minimizable: true,
+    maximizable: false,
+    show: false,
+    title: 'PhotoLynk',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+  
+  // Generate QR code and build HTML
+  const QRCode = require('qrcode');
+  const qrDataString = JSON.stringify(pairingData);
+  
+  // Read icon as base64 for embedding in HTML
+  const fs = require('fs');
+  const iconPath = path.join(__dirname, 'icon.png');
+  const iconBase64 = fs.existsSync(iconPath) ? fs.readFileSync(iconPath).toString('base64') : '';
+  const iconDataUrl = iconBase64 ? `data:image/png;base64,${iconBase64}` : '';
+  
+  QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
+    const qrImage = err ? '' : qrUrl;
+    
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --bg-primary: #0A0A0A;
+      --bg-card: rgba(30, 30, 30, 0.85);
+      --bg-input: rgba(26, 26, 26, 0.9);
+      --accent: #4A9FE8;
+      --accent-secondary: #03DAC6;
+      --text-primary: #FFFFFF;
+      --text-secondary: #AAAAAA;
+      --text-muted: #666666;
+      --border: rgba(255, 255, 255, 0.15);
+      --success: #03DAC6;
+      --error: #CF6679;
+      --warning: #FFB74D;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; flex-direction: column; height: 100vh; }
+    .header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 24px; }
+    .logo-text { font-size: 18px; font-weight: 600; }
+    .version { font-size: 11px; color: var(--text-muted); }
+    .header-actions { display: flex; gap: 8px; }
+    .header-btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; transition: all 0.2s; }
+    .header-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+    .content { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; backdrop-filter: blur(10px); }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .server-status { display: flex; align-items: center; justify-content: space-between; }
+    .status-indicator { display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--error); }
+    .status-dot.running { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-text { font-size: 13px; }
+    .server-controls { display: flex; gap: 6px; }
+    .server-btn { padding: 6px 12px; border: none; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .server-btn.start { background: rgba(3, 218, 198, 0.2); color: var(--success); border: 1px solid rgba(3, 218, 198, 0.4); }
+    .server-btn.stop { background: rgba(207, 102, 121, 0.2); color: var(--error); border: 1px solid rgba(207, 102, 121, 0.4); }
+    .server-btn.restart { background: rgba(255, 183, 77, 0.2); color: var(--warning); border: 1px solid rgba(255, 183, 77, 0.4); }
+    .server-btn:hover { filter: brightness(1.2); }
+    .server-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .qr-section { display: flex; gap: 16px; align-items: center; }
+    .qr-container { background: #fff; padding: 8px; border-radius: 10px; flex-shrink: 0; }
+    .qr-code { width: 120px; height: 120px; display: block; }
+    .qr-info { flex: 1; }
+    .qr-info h3 { font-size: 14px; margin-bottom: 6px; }
+    .qr-info p { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+    .ip-badge { margin-top: 8px; padding: 6px 10px; background: rgba(74, 159, 232, 0.1); border: 1px solid rgba(74, 159, 232, 0.3); border-radius: 6px; font-size: 11px; display: inline-block; }
+    .ip-badge span { color: var(--accent-secondary); font-weight: 600; }
+    .main-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .action-btn { padding: 20px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); cursor: pointer; transition: all 0.2s; text-align: center; }
+    .action-btn:hover { border-color: var(--accent); background: rgba(74, 159, 232, 0.1); }
+    .action-btn.backup { border-color: rgba(74, 159, 232, 0.4); }
+    .action-btn.backup:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(74, 159, 232, 0.2); }
+    .action-btn.sync { border-color: rgba(3, 218, 198, 0.4); }
+    .action-btn.sync:hover { border-color: var(--accent-secondary); box-shadow: 0 0 20px rgba(3, 218, 198, 0.2); }
+    .action-icon { font-size: 28px; margin-bottom: 8px; }
+    .action-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .action-subtitle { font-size: 11px; color: var(--text-secondary); }
+    .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+    .form-row:last-child { margin-bottom: 0; }
+    .form-group { flex: 1; }
+    .form-group label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+    .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text-primary); font-size: 13px; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: rgba(74, 159, 232, 0.6); }
+    .form-group input::placeholder { color: var(--text-muted); }
+    .folder-list { max-height: 80px; overflow-y: auto; margin-bottom: 8px; }
+    .folder-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: var(--text-secondary); }
+    .folder-item button { background: none; border: none; color: var(--error); cursor: pointer; padding: 2px 6px; }
+    .folder-actions { display: flex; gap: 6px; }
+    .folder-btn { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+    .folder-btn:hover { background: rgba(255,255,255,0.1); }
+    .status-bar { padding: 8px 20px; border-top: 1px solid var(--border); font-size: 10px; color: var(--text-muted); display: flex; justify-content: space-between; flex-shrink: 0; }
+    .progress-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
+    .progress-overlay.visible { display: flex; }
+    .progress-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 300px; text-align: center; }
+    .progress-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+    .progress-text { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+    .progress-bar { height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+    .progress-cancel { margin-top: 16px; padding: 8px 20px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+    #remote-config { display: none; }
+    #remote-config.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <img class="logo-icon" src="${iconDataUrl}" width="24" height="24" style="border-radius: 4px;">
+      <span class="logo-text">PhotoLynk</span>
+      <span class="version">v${currentVersion || '1.0.0'}</span>
+    </div>
+    <div class="header-actions">
+      <button class="header-btn" onclick="checkUpdates()">Check Updates</button>
+      <button class="header-btn" onclick="toggleAutostart()">
+        <span id="autostart-label">${startOnBoot ? '✓ Launch at Login' : 'Launch at Login'}</span>
+      </button>
+    </div>
+  </div>
+  
+  <div class="content">
+    <div class="card">
+      <div class="card-title">🖥️ Local Server</div>
+      <div class="server-status">
+        <div class="status-indicator">
+          <div class="status-dot" id="server-dot"></div>
+          <span class="status-text" id="server-status">Checking...</span>
+        </div>
+        <div class="server-controls">
+          <button class="server-btn start" id="btn-start" onclick="serverControl('start')">Start</button>
+          <button class="server-btn restart" id="btn-restart" onclick="serverControl('restart')">Restart</button>
+          <button class="server-btn stop" id="btn-stop" onclick="serverControl('stop')">Stop</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">📱 Pair Mobile Device</div>
+      <div class="qr-section">
+        <div class="qr-container">
+          <img class="qr-code" src="${qrImage}" alt="QR Code">
+        </div>
+        <div class="qr-info">
+          <h3>Scan to Connect</h3>
+          <p>Open PhotoLynk on your phone, select "Local" server, and scan this QR code.</p>
+          <div class="ip-badge">Server: <span>${pairingData.ip}:${pairingData.port}</span></div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="main-actions">
+      <div class="action-btn backup" onclick="startBackup()">
+        <div class="action-icon">⬆️</div>
+        <div class="action-title">Backup</div>
+        <div class="action-subtitle">Upload to Cloud</div>
+      </div>
+      <div class="action-btn sync" onclick="startSync()">
+        <div class="action-icon">⬇️</div>
+        <div class="action-title">Sync</div>
+        <div class="action-subtitle">Download from Cloud</div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">🔐 Cloud Credentials</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Destination</label>
+          <select id="destination" onchange="toggleRemoteConfig()">
+            <option value="stealthcloud" selected>StealthCloud</option>
+            <option value="remote">Remote Server</option>
+          </select>
+        </div>
+      </div>
+      <div id="remote-config">
+        <div class="form-row">
+          <div class="form-group" style="flex:2"><label>Address</label><input type="text" id="remote-address" placeholder="192.168.1.100" value="${credentials.remoteAddress || ''}"></div>
+          <div class="form-group" style="flex:1"><label>Port</label><input type="text" id="remote-port" placeholder="3000" value="${credentials.remotePort || '3000'}"></div>
+        </div>
+      </div>
+      <div class="form-row"><div class="form-group"><label>Email</label><input type="email" id="email" placeholder="your@email.com" value="${credentials.email || ''}"></div></div>
+      <div class="form-row"><div class="form-group"><label>Password</label><input type="password" id="password" placeholder="Password" value="${credentials.password || ''}"></div></div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">📤 Source Folders (Upload FROM)</div>
+      <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 8px;">Photos & videos from these folders will be uploaded to cloud</div>
+      <div class="folder-list" id="folder-list">${photoFolders.length === 0 ? '<div style="color: var(--text-muted); padding: 8px; text-align: center;">No folders selected - click "Add Folder" below</div>' : photoFolders.map((f, i) => '<div class="folder-item"><span title="' + f + '">' + f.split('/').pop() + '</span><button onclick="removeFolder(' + i + ')">✕</button></div>').join('')}</div>
+      <div class="folder-actions">
+        <button class="folder-btn" onclick="addFolder()">+ Add Folder</button>
+        <button class="folder-btn" onclick="clearFolders()">Clear All</button>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">💾 Local Server Storage (Sync TO)</div>
+      <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 8px;">Files backed up from mobile devices are stored here (enter email & password to see your folder)</div>
+      <div class="form-row">
+        <div class="form-group" style="flex: 1;"><input type="text" id="uploads-path" value="${uploadsPath}" readonly style="font-size: 11px; cursor: text; user-select: all;"></div>
+        <button class="folder-btn" style="flex: 0; padding: 10px 16px;" onclick="copyUploadsPath()" title="Copy path">Copy</button>
+        <button class="folder-btn" style="flex: 0; padding: 6px 12px; line-height: 1.2; text-align: center;" onclick="addUploadsToSources()">Add to<br>Sources</button>
+        <button class="folder-btn" style="flex: 0; padding: 10px 16px;" onclick="openUploadsFolder()">Open</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="status-bar">
+    <span id="status-message">Ready</span>
+    <span id="update-status">${updateAvailable ? 'Update available: v' + latestVersion : ''}</span>
+  </div>
+  
+  <div class="progress-overlay" id="progress-overlay">
+    <div class="progress-box">
+      <div class="progress-title" id="progress-title">Processing...</div>
+      <div class="progress-text" id="progress-text">Preparing...</div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <button class="progress-cancel" onclick="cancelOperation()">Cancel</button>
+    </div>
+  </div>
+  
+  <script>
+    const { ipcRenderer } = require('electron');
+    let selectedFolders = ${JSON.stringify(photoFolders)};
+    let serverBusy = false;
+    
+    function updateServerStatus(running) {
+      document.getElementById('server-dot').classList.toggle('running', running);
+      document.getElementById('server-status').textContent = running ? 'Running' : 'Stopped';
+      // Re-enable buttons based on state
+      serverBusy = false;
+      document.getElementById('btn-start').disabled = running;
+      document.getElementById('btn-restart').disabled = !running;
+      document.getElementById('btn-stop').disabled = !running;
+    }
+    
+    function setButtonsBusy(busy, statusText) {
+      serverBusy = busy;
+      document.getElementById('btn-start').disabled = busy;
+      document.getElementById('btn-restart').disabled = busy;
+      document.getElementById('btn-stop').disabled = busy;
+      if (statusText) document.getElementById('server-status').textContent = statusText;
+    }
+    
+    function serverControl(action) {
+      if (serverBusy) return;
+      if (action === 'start') setButtonsBusy(true, 'Starting...');
+      else if (action === 'stop') setButtonsBusy(true, 'Stopping...');
+      else if (action === 'restart') setButtonsBusy(true, 'Restarting...');
+      ipcRenderer.send('server-control', action);
+    }
+    function checkUpdates() { ipcRenderer.send('check-updates'); }
+    function toggleAutostart() { ipcRenderer.send('toggle-autostart'); }
+    function toggleRemoteConfig() { document.getElementById('remote-config').classList.toggle('visible', document.getElementById('destination').value === 'remote'); }
+    
+    ipcRenderer.on('server-status', (e, running) => updateServerStatus(running));
+    ipcRenderer.on('autostart-changed', (e, enabled) => { document.getElementById('autostart-label').textContent = enabled ? '✓ Launch at Login' : 'Launch at Login'; });
+    ipcRenderer.on('update-available', (e, version) => { document.getElementById('update-status').textContent = 'Update available: v' + version; });
+    ipcRenderer.send('get-server-status');
+    
+    function renderFolders() {
+      const list = document.getElementById('folder-list');
+      list.innerHTML = selectedFolders.length === 0 ? '<div style="color: var(--text-muted); padding: 8px; text-align: center;">No folders selected</div>' : selectedFolders.map((f, i) => '<div class="folder-item"><span title="' + f + '">' + f.split('/').pop() + '</span><button onclick="removeFolder(' + i + ')">✕</button></div>').join('');
+    }
+    
+    async function addFolder() {
+      const paths = await ipcRenderer.invoke('select-folder');
+      if (paths && paths.length > 0) { paths.forEach(p => { if (!selectedFolders.includes(p)) selectedFolders.push(p); }); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
+    }
+    function removeFolder(i) { selectedFolders.splice(i, 1); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
+    function clearFolders() { selectedFolders = []; ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
+    const baseUploadsPath = "${uploadsPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}";
+    
+    // Compute UUID v5 from email:password (same algorithm as mobile apps and sync)
+    function computeUserUuid(email, password) {
+      if (!email || !password) return null;
+      const normalizedEmail = email.trim().toLowerCase();
+      const input = normalizedEmail + ':' + password;
+      // Simple SHA-1 based UUID v5 computation (matches server-side)
+      const crypto = require('crypto');
+      const namespaceBytes = Buffer.from('6ba7b8109dad11d180b400c04fd430c8', 'hex');
+      const hash = crypto.createHash('sha1');
+      hash.update(namespaceBytes);
+      hash.update(input);
+      const bytes = hash.digest();
+      bytes[6] = (bytes[6] & 0x0f) | 0x50;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = bytes.slice(0, 16).toString('hex');
+      return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20, 32);
+    }
+    
+    function getUserUploadsPath() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const uuid = computeUserUuid(email, password);
+      if (uuid) {
+        return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + uuid;
+      }
+      return baseUploadsPath;
+    }
+    
+    function updateUploadsPathDisplay() {
+      const pathEl = document.getElementById('uploads-path');
+      pathEl.value = getUserUploadsPath();
+    }
+    
+    // Update path when email or password changes
+    document.getElementById('email').addEventListener('input', updateUploadsPathDisplay);
+    document.getElementById('password').addEventListener('input', updateUploadsPathDisplay);
+    updateUploadsPathDisplay(); // Initial update
+    
+    function openUploadsFolder() { ipcRenderer.send('open-folder', getUserUploadsPath()); }
+    function copyUploadsPath() { 
+      const pathToCopy = getUserUploadsPath();
+      console.log('Copying path:', pathToCopy);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pathToCopy).then(() => console.log('Copied!')).catch(e => console.error('Copy failed:', e));
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = pathToCopy;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+    }
+    function addUploadsToSources() { const p = getUserUploadsPath(); if (p && !selectedFolders.includes(p)) { selectedFolders.push(p); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); } }
+    
+    function getConfig() {
+      const downloadPath = getUserUploadsPath(); // Use computed path with UUID, not input value
+      console.log('[getConfig] downloadPath:', downloadPath);
+      return { destination: document.getElementById('destination').value, source: document.getElementById('destination').value, email: document.getElementById('email').value, password: document.getElementById('password').value, remoteAddress: document.getElementById('remote-address').value, remotePort: document.getElementById('remote-port').value || '3000', folders: selectedFolders, downloadPath: downloadPath };
+    }
+    
+    function startBackup() {
+      const config = getConfig();
+      if (!config.email || !config.password) { alert('Please enter email and password'); return; }
+      if (selectedFolders.length === 0) { alert('Please add at least one folder to backup'); return; }
+      currentOperation = 'backup';
+      document.getElementById('progress-title').textContent = 'Backing Up...';
+      document.getElementById('progress-overlay').classList.add('visible');
+      ipcRenderer.send('start-desktop-backup', config);
+    }
+    
+    function startSync() {
+      const config = getConfig();
+      if (!config.email || !config.password) { alert('Please enter email and password'); return; }
+      currentOperation = 'sync';
+      document.getElementById('progress-title').textContent = 'Syncing...';
+      document.getElementById('progress-overlay').classList.add('visible');
+      ipcRenderer.send('start-desktop-sync', config);
+    }
+    
+    function cancelOperation() {
+      ipcRenderer.send(currentOperation === 'backup' ? 'cancel-desktop-backup' : 'cancel-desktop-sync');
+      document.getElementById('progress-text').textContent = 'Cancelling...';
+    }
+    
+    ipcRenderer.on('backup-progress', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = (d.progress * 100) + '%'; });
+    ipcRenderer.on('backup-complete', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = '100%'; setTimeout(() => document.getElementById('progress-overlay').classList.remove('visible'), 2000); });
+    ipcRenderer.on('backup-error', (e, d) => { document.getElementById('progress-text').textContent = 'Error: ' + d.message; document.getElementById('progress-fill').style.background = 'var(--error)'; setTimeout(() => { document.getElementById('progress-overlay').classList.remove('visible'); document.getElementById('progress-fill').style.background = 'var(--accent)'; }, 3000); });
+    ipcRenderer.on('sync-progress', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = (d.progress * 100) + '%'; });
+    ipcRenderer.on('sync-complete', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = '100%'; setTimeout(() => document.getElementById('progress-overlay').classList.remove('visible'), 2000); });
+    ipcRenderer.on('sync-error', (e, d) => { document.getElementById('progress-text').textContent = 'Error: ' + d.message; document.getElementById('progress-fill').style.background = 'var(--error)'; setTimeout(() => { document.getElementById('progress-overlay').classList.remove('visible'); document.getElementById('progress-fill').style.background = 'var(--accent)'; }, 3000); });
+  </script>
+</body>
+</html>`;
+    
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  });
+  
+  mainWindow.on('close', (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
+  mainWindow.on('ready-to-show', () => { mainWindow.show(); });
+  mainWindow.setMenuBarVisibility(false);
+}
+
 function showQRCodeWindow() {
   if (qrWindow && !qrWindow.isDestroyed()) {
     qrWindow.focus();
@@ -815,7 +1238,8 @@ function getPhotoFolders() {
 
 // IPC handler for adding folders via dialog
 ipcMain.handle('select-folder', async () => {
-  const result = await dialog.showOpenDialog(backupWindow, {
+  const parentWindow = mainWindow || backupWindow;
+  const result = await dialog.showOpenDialog(parentWindow, {
     properties: ['openDirectory', 'multiSelections'],
     title: 'Select Folders to Backup'
   });
@@ -825,13 +1249,89 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths;
 });
 
+// IPC handler for sync folder selection
+ipcMain.handle('select-sync-folder', async () => {
+  const parentWindow = mainWindow || null;
+  const result = await dialog.showOpenDialog(parentWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select Download Location'
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+  const selectedPath = result.filePaths[0];
+  store.set('syncDownloadPath', selectedPath);
+  return selectedPath;
+});
+
 ipcMain.on('save-backup-folders', (event, folders) => {
   store.set('backupFolders', folders);
+});
+
+ipcMain.on('open-folder', (event, folderPath) => {
+  if (folderPath && typeof folderPath === 'string') {
+    shell.openPath(folderPath);
+  }
 });
 
 ipcMain.on('get-backup-folders', (event) => {
   const folders = store.get('backupFolders') || [];
   event.reply('backup-folders', folders);
+});
+
+// IPC handlers for server control from main window
+ipcMain.on('server-control', (event, action) => {
+  safeConsole('log', 'Server control action:', action);
+  if (action === 'start') {
+    startServer();
+    setTimeout(() => {
+      checkServerRunning((running) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('server-status', running);
+        }
+      });
+    }, 2500);
+  } else if (action === 'stop') {
+    stopServer(() => {
+      checkServerRunning((running) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('server-status', running);
+        }
+      });
+    });
+  } else if (action === 'restart') {
+    stopServer(() => {
+      safeConsole('log', 'Restart: starting server after stop...');
+      setTimeout(() => {
+        startServer();
+        setTimeout(() => {
+          checkServerRunning((running) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('server-status', running);
+            }
+          });
+        }, 2500);
+      }, 500);
+    });
+  }
+});
+
+ipcMain.on('get-server-status', (event) => {
+  checkServerRunning((running) => {
+    event.reply('server-status', running);
+  });
+});
+
+ipcMain.on('check-updates', () => {
+  checkForUpdates();
+});
+
+ipcMain.on('toggle-autostart', (event) => {
+  startOnBoot = !startOnBoot;
+  setAutostart(startOnBoot);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('autostart-changed', startOnBoot);
+  }
 });
 
 function showBackupWindow() {
@@ -1520,6 +2020,59 @@ ipcMain.on('cancel-desktop-backup', () => {
   stopBackupPowerSaveBlocker();
 });
 
+// IPC handlers for sync
+let activeSyncClient = null;
+
+ipcMain.on('start-desktop-sync', async (event, config) => {
+  try {
+    store.set('backupCredentials', {
+      email: config.email,
+      password: config.password,
+      remoteAddress: config.remoteAddress,
+      remotePort: config.remotePort
+    });
+    
+    // downloadPath already contains user UUID from UI (getUserUploadsPath)
+    safeConsole('log', `[SYNC] Saving to: ${config.downloadPath}`);
+    store.set('syncDownloadPath', config.downloadPath);
+    
+    event.reply('sync-progress', { message: 'Connecting...', progress: 0.02 });
+    
+    if (!fs.existsSync(config.downloadPath)) {
+      fs.mkdirSync(config.downloadPath, { recursive: true });
+    }
+    
+    const { DesktopSyncClient } = require('./sync-client');
+    activeSyncClient = new DesktopSyncClient(config, (progress) => {
+      event.reply('sync-progress', progress);
+    });
+    
+    startBackupPowerSaveBlocker();
+    
+    const result = await activeSyncClient.sync();
+    activeSyncClient = null;
+    
+    stopBackupPowerSaveBlocker();
+    
+    event.reply('sync-complete', {
+      message: `Sync Complete\nDownloaded: ${result.downloaded}\nSkipped: ${result.skipped}`
+    });
+    
+  } catch (error) {
+    safeConsole('error', 'Sync error:', error);
+    activeSyncClient = null;
+    stopBackupPowerSaveBlocker();
+    event.reply('sync-error', { message: (error && error.message) ? error.message : 'Unknown error' });
+  }
+});
+
+ipcMain.on('cancel-desktop-sync', () => {
+  if (activeSyncClient) {
+    activeSyncClient.cancel();
+  }
+  stopBackupPowerSaveBlocker();
+});
+
 function scanFolder(folderPath, results, extensions, depth = 0) {
   if (depth > 5) return; // Limit recursion depth
   
@@ -1576,128 +2129,11 @@ function checkServerRunning(callback) {
   client.connect(3000, '127.0.0.1');
 }
 
+// Old dropdown menu removed - now using unified main window
+// This function is kept as a no-op for backward compatibility with existing calls
 function updateTrayMenu() {
-  checkServerRunning((isRunning) => {
-    const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '').trim();
-    const ips = getLocalIpAddresses();
-
-    // Build IP submenu
-    const ipSubmenu = ips.length > 0
-      ? [
-          { label: 'Click to copy', enabled: false },
-          { type: 'separator' },
-          ...ips.map((ip) => ({
-            label: ip,
-            click: () => {
-              clipboard.writeText(ip);
-              notifyCopied(ip);
-            }
-          }))
-        ]
-      : [{ label: 'No network detected', enabled: false }];
-
-    // Local Server submenu
-    const localServerSubmenu = [
-      {
-        label: isRunning ? '● Running' : '○ Stopped',
-        enabled: false
-      },
-      { type: 'separator' },
-      {
-        label: 'Pair Mobile Device (QR)',
-        click: showQRCodeWindow
-      },
-      {
-        label: 'View Received Files',
-        click: openUploadsFolder
-      },
-      { type: 'separator' },
-      {
-        label: 'Network Address',
-        submenu: ipSubmenu
-      },
-      { type: 'separator' },
-      {
-        label: 'Start',
-        click: startServer,
-        enabled: !isRunning
-      },
-      {
-        label: 'Restart',
-        click: restartServer,
-        enabled: isRunning
-      },
-      {
-        label: 'Stop',
-        click: stopServer,
-        enabled: isRunning
-      }
-    ];
-
-    // Main menu - clearly separated sections
-    const menuTemplate = [
-      {
-        label: currentVersion ? `PhotoLynk v${currentVersion}` : 'PhotoLynk',
-        enabled: false
-      },
-      { type: 'separator' },
-      // Cloud Backup section
-      {
-        label: 'Backup This PC to StealthCloud',
-        click: showBackupWindow
-      },
-      { type: 'separator' },
-      // Local Server section
-      {
-        label: 'Local Server',
-        submenu: localServerSubmenu
-      },
-      { type: 'separator' },
-      // Preferences
-      {
-        label: 'Launch at Login',
-        type: 'checkbox',
-        checked: !!startOnBoot,
-        click: (menuItem) => {
-          setAutostart(!!menuItem.checked);
-          updateTrayMenu();
-        }
-      },
-    ];
-    
-    // Add update menu items
-    if (updateAvailable) {
-      menuTemplate.push({
-        label: `Update Available (v${latestVersion})`,
-        click: installUpdate
-      });
-    } else {
-      menuTemplate.push({
-        label: 'Check for Updates',
-        click: checkForUpdates
-      });
-    }
-    
-    menuTemplate.push({ type: 'separator' });
-    menuTemplate.push({
-      label: 'Quit PhotoLynk',
-      click: () => {
-        stopServer();
-        app.quit();
-      }
-    });
-
-    const contextMenu = Menu.buildFromTemplate(menuTemplate);
-    tray.setContextMenu(contextMenu);
-    
-    // Update tooltip
-    let tooltip = currentVersion ? `PhotoLynk Server v${currentVersion}` : 'PhotoLynk Server';
-    tooltip += isRunning ? ' — Running' : ' — Stopped';
-    if (updateAvailable) {
-      tooltip += ` (Update available: v${latestVersion})`;
-    }
-    tray.setToolTip(tooltip);
-  });
+  // No-op: dropdown menu replaced by unified main window
+  // Tooltip is updated separately in the periodic interval
 }
 
 app.whenReady().then(() => {
@@ -1733,40 +2169,35 @@ app.whenReady().then(() => {
   tray = new Tray(trayIcon);
   tray.setToolTip('PhotoLynk Server');
   
-  // Track if menu is currently open to avoid refreshing while user is reading
-  let menuOpen = false;
-  
-  // Update menu when clicked
+  // Left-click opens the main window (unified app UI)
   tray.on('click', () => {
-    menuOpen = true;
-    updateTrayMenu();
+    showMainWindow();
   });
   
+  // Right-click shows a minimal context menu with Quit option
   tray.on('right-click', () => {
-    menuOpen = true;
-    updateTrayMenu();
+    const contextMenu = Menu.buildFromTemplate([
+      { label: 'Open PhotoLynk', click: showMainWindow },
+      { type: 'separator' },
+      { label: 'Quit', click: () => { app.isQuitting = true; stopServer(); app.quit(); } }
+    ]);
+    tray.popUpContextMenu(contextMenu);
   });
-  
-  // Reset menuOpen after a delay (menu auto-closes after interaction)
-  const resetMenuOpen = () => {
-    setTimeout(() => { menuOpen = false; }, 500);
-  };
   
   // Load startOnBoot setting and apply autostart configuration once
   startOnBoot = store.get('startOnBoot', false);
   setAutostart(startOnBoot);
 
-  updateTrayMenu();
-  
-  // Auto-refresh menu - disabled on Linux to prevent menu jumping
-  // On Linux, menu only updates on click/right-click
-  if (process.platform !== 'linux') {
-    setInterval(() => {
-      if (!menuOpen) {
-        updateTrayMenu();
-      }
-    }, 5000);
-  }
+  // Update tray tooltip periodically
+  setInterval(() => {
+    checkServerRunning((isRunning) => {
+      const ver = (app && typeof app.getVersion === 'function' ? app.getVersion() : '').trim();
+      let tooltip = ver ? `PhotoLynk v${ver}` : 'PhotoLynk';
+      tooltip += isRunning ? ' — Running' : ' — Stopped';
+      if (updateAvailable) tooltip += ` (Update: v${latestVersion})`;
+      tray.setToolTip(tooltip);
+    });
+  }, 5000);
   
   // Start server automatically
   startServer();
@@ -1778,6 +2209,7 @@ app.on('window-all-closed', (e) => {
 });
 
 app.on('before-quit', () => {
+  app.isQuitting = true;
   stopBackupPowerSaveBlocker();
   stopServer();
 });
