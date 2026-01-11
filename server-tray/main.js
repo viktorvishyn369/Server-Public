@@ -279,11 +279,25 @@ function stopServer(callback) {
   // Kill the server process
   if (serverProcess) {
     try {
-      serverProcess.kill('SIGKILL');
+      const pid = serverProcess.pid;
+      if (process.platform === 'win32' && pid) {
+        // Windows: use taskkill to forcefully terminate the process tree
+        try {
+          execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
+          safeConsole('log', 'Server process killed via taskkill');
+        } catch (e) {
+          // taskkill may fail if process already exited
+          safeConsole('log', 'taskkill failed (process may have already exited)');
+        }
+      } else {
+        // Unix: use SIGKILL
+        serverProcess.kill('SIGKILL');
+        safeConsole('log', 'Server process killed via SIGKILL');
+      }
       serverProcess = null;
-      safeConsole('log', 'Server process killed');
     } catch (e) {
       safeConsole('error', 'Error killing server process:', e);
+      serverProcess = null;
     }
   } else {
     safeConsole('log', 'No server process to kill');
@@ -2211,7 +2225,24 @@ app.on('window-all-closed', (e) => {
 app.on('before-quit', () => {
   app.isQuitting = true;
   stopBackupPowerSaveBlocker();
-  stopServer();
+  
+  // Synchronously kill server process on quit to ensure cleanup
+  if (serverProcess) {
+    try {
+      const pid = serverProcess.pid;
+      if (process.platform === 'win32' && pid) {
+        execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
+      } else if (pid) {
+        process.kill(pid, 'SIGKILL');
+      }
+    } catch (e) {
+      // Ignore - process may have already exited
+    }
+    serverProcess = null;
+  }
+  
+  // Also free port 3000 synchronously
+  freePort3000ForPhotoLynk();
 });
 
 // Hide dock icon on macOS
