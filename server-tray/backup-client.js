@@ -467,6 +467,80 @@ class DesktopBackupClient {
     return result;
   }
 
+  // Extract FULL EXIF data from image file for server storage (universal preservation)
+  async extractFullExif(filePath) {
+    const result = {
+      captureTime: null, make: null, model: null,
+      exposureTime: null, fNumber: null, iso: null,
+      focalLength: null, focalLengthIn35mm: null, flash: null,
+      whiteBalance: null, meteringMode: null, exposureProgram: null, exposureBias: null,
+      width: null, height: null, orientation: null, colorSpace: null,
+      gpsLatitude: null, gpsLongitude: null, gpsAltitude: null, gpsTimestamp: null,
+      software: null, lensMake: null, lensModel: null,
+      rawExif: null,
+    };
+    
+    try {
+      const ext = path.extname(filePath).toLowerCase();
+      let metadata = null;
+      
+      if (ext === '.heic' || ext === '.heif') {
+        const buf = fs.readFileSync(filePath);
+        const decoded = await heicDecode({ buffer: buf });
+        if (decoded && decoded.data) {
+          const rawImage = sharp(decoded.data, { raw: { width: decoded.width, height: decoded.height, channels: 4 } });
+          metadata = await rawImage.metadata();
+        }
+      } else {
+        metadata = await sharp(filePath).metadata();
+      }
+      
+      if (metadata && metadata.exif) {
+        const exifReader = require('exif-reader');
+        const exifData = exifReader(metadata.exif);
+        
+        // Core identification
+        const exifDate = exifData?.exif?.DateTimeOriginal || exifData?.exif?.DateTimeDigitized;
+        if (exifDate instanceof Date && !isNaN(exifDate.getTime())) {
+          result.captureTime = exifDate.toISOString().slice(0, 19);
+        }
+        if (exifData?.image?.Make) result.make = String(exifData.image.Make).trim();
+        if (exifData?.image?.Model) result.model = String(exifData.image.Model).trim();
+        
+        // Camera settings
+        if (exifData?.exif?.ExposureTime != null) result.exposureTime = exifData.exif.ExposureTime;
+        if (exifData?.exif?.FNumber != null) result.fNumber = exifData.exif.FNumber;
+        if (exifData?.exif?.ISO != null) result.iso = exifData.exif.ISO;
+        if (exifData?.exif?.FocalLength != null) result.focalLength = exifData.exif.FocalLength;
+        if (exifData?.exif?.FocalLengthIn35mmFormat != null) result.focalLengthIn35mm = exifData.exif.FocalLengthIn35mmFormat;
+        if (exifData?.exif?.Flash != null) result.flash = exifData.exif.Flash;
+        if (exifData?.exif?.WhiteBalance != null) result.whiteBalance = exifData.exif.WhiteBalance;
+        if (exifData?.exif?.MeteringMode != null) result.meteringMode = exifData.exif.MeteringMode;
+        if (exifData?.exif?.ExposureProgram != null) result.exposureProgram = exifData.exif.ExposureProgram;
+        if (exifData?.exif?.ExposureBiasValue != null) result.exposureBias = exifData.exif.ExposureBiasValue;
+        
+        // Image properties
+        if (metadata.width) result.width = metadata.width;
+        if (metadata.height) result.height = metadata.height;
+        if (metadata.orientation) result.orientation = metadata.orientation;
+        if (exifData?.exif?.ColorSpace != null) result.colorSpace = exifData.exif.ColorSpace;
+        
+        // GPS
+        if (exifData?.gps?.GPSLatitude != null) result.gpsLatitude = exifData.gps.GPSLatitude;
+        if (exifData?.gps?.GPSLongitude != null) result.gpsLongitude = exifData.gps.GPSLongitude;
+        if (exifData?.gps?.GPSAltitude != null) result.gpsAltitude = exifData.gps.GPSAltitude;
+        
+        // Software/lens
+        if (exifData?.image?.Software) result.software = String(exifData.image.Software).trim();
+        if (exifData?.exif?.LensMake) result.lensMake = String(exifData.exif.LensMake).trim();
+        if (exifData?.exif?.LensModel) result.lensModel = String(exifData.exif.LensModel).trim();
+      }
+    } catch (e) {
+      // Non-critical
+    }
+    return result;
+  }
+
   // Generate EXIF-based deduplication keys for matching across platforms
   // Priority: captureTime+make+model > captureTime+model > captureTime+make
   generateExifDedupKeys(exifData) {
@@ -1197,6 +1271,30 @@ class DesktopBackupClient {
     if (manifestResponse && manifestResponse.skipped) {
       console.log(`Server rejected ${fileName} as duplicate (reason: ${manifestResponse.reason || 'unknown'})`);
       return { skipped: true, reason: manifestResponse.reason || 'server-side-duplicate' };
+    }
+
+    // Store full EXIF to server for universal cross-platform preservation
+    // Non-blocking, fire-and-forget
+    if (exactFileHash && isImage && !manifestResponse?.skipped) {
+      try {
+        const fullExif = await this.extractFullExif(filePath);
+        if (fullExif && (fullExif.captureTime || fullExif.make || fullExif.gpsLatitude != null)) {
+          const baseUrl = this.getBaseUrl();
+          axios.post(`${baseUrl}/api/exif/store`, {
+            fileHash: exactFileHash,
+            exif: fullExif,
+            platform: 'desktop'
+          }, {
+            headers: {
+              'Authorization': `Bearer ${this.token}`,
+              'X-Device-UUID': this.deviceUuid
+            },
+            timeout: 10000
+          }).catch(e => console.log('[EXIF] Store failed (non-critical):', e?.message));
+        }
+      } catch (e) {
+        // Non-critical
+      }
     }
 
     return { uploaded: true, manifestId, fileHash: exactFileHash, perceptualHash: perceptualHash };
