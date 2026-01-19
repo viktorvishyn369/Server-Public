@@ -11,6 +11,7 @@ let mainWindow = null;
 let qrWindow = null;
 let backupWindow = null;
 let serverProcess = null;
+let stoppingServer = false;
 let serverPath = null;
 let uploadsPath = null;
 let dbPath = null;
@@ -189,7 +190,7 @@ function setAutostart(enabled) {
 }
 
 function startServer() {
-  if (serverProcess) {
+  if (serverProcess || stoppingServer) {
     safeConsole('log', 'Server already running');
     return;
   }
@@ -274,52 +275,85 @@ function startServer() {
 }
 
 function stopServer(callback) {
+  if (stoppingServer) {
+    safeConsole('log', 'Stop already in progress');
+    return;
+  }
+
+  stoppingServer = true;
   safeConsole('log', 'Stopping server...');
-  
-  // Kill the server process
-  if (serverProcess) {
+
+  const waitForExit = () => new Promise((resolve) => {
+    if (!serverProcess) return resolve();
+    const proc = serverProcess;
+    const timer = setTimeout(() => {
+      try {
+        const pid = proc.pid;
+        if (pid) {
+          if (process.platform === 'win32') {
+            execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
+          } else {
+            proc.kill('SIGKILL');
+          }
+        }
+      } catch (e) {
+        safeConsole('log', 'Force kill after timeout');
+      }
+      resolve();
+    }, 1500);
+
+    proc.once('close', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+
+  const killProcess = () => {
+    if (!serverProcess) {
+      safeConsole('log', 'No server process to kill');
+      return;
+    }
     try {
       const pid = serverProcess.pid;
       if (process.platform === 'win32' && pid) {
-        // Windows: use taskkill to forcefully terminate the process tree
         try {
           execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' });
           safeConsole('log', 'Server process killed via taskkill');
         } catch (e) {
-          // taskkill may fail if process already exited
           safeConsole('log', 'taskkill failed (process may have already exited)');
         }
       } else {
-        // Unix: use SIGKILL
         serverProcess.kill('SIGKILL');
         safeConsole('log', 'Server process killed via SIGKILL');
       }
-      serverProcess = null;
     } catch (e) {
       safeConsole('error', 'Error killing server process:', e);
-      serverProcess = null;
     }
-  } else {
-    safeConsole('log', 'No server process to kill');
-  }
-  
-  freePort3000ForPhotoLynk();
-  
-  // Update menu after a delay to ensure port is released
-  setTimeout(() => {
+  };
+
+  killProcess();
+
+  waitForExit().then(() => {
+    serverProcess = null;
+    freePort3000ForPhotoLynk();
     updateTrayMenu();
     safeConsole('log', 'Server stopped, port released');
+    stoppingServer = false;
     if (typeof callback === 'function') callback();
-  }, 1500);
+  }).catch(() => {
+    serverProcess = null;
+    stoppingServer = false;
+    freePort3000ForPhotoLynk();
+    updateTrayMenu();
+    if (typeof callback === 'function') callback();
+  });
 }
 
 function restartServer() {
   safeConsole('log', 'Restarting server...');
   stopServer(() => {
     safeConsole('log', 'Starting server after stop...');
-    setTimeout(() => {
-      startServer();
-    }, 500);
+    startServer();
   });
 }
 
@@ -2161,8 +2195,11 @@ function updateTrayMenu() {
 app.whenReady().then(() => {
   initPaths();
   
-  // Check if this is the first run
-  const isFirstRun = !store.get('hasRunBefore');
+  // Check if this is the first run and whether we've shown the welcome dialog
+  const hasRunBefore = !!store.get('hasRunBefore');
+  const welcomeShown = !!store.get('welcomeShown');
+  const isFirstRun = !hasRunBefore;
+
   if (isFirstRun) {
     store.set('hasRunBefore', true);
   }
@@ -2231,12 +2268,17 @@ app.whenReady().then(() => {
   // Start server automatically
   startServer();
   
-  // On first run, open the main window and show system tray info
-  if (isFirstRun) {
+  // On first run (or if welcome never shown), open the main window and show system tray info
+  if (isFirstRun || !welcomeShown) {
     setTimeout(() => {
+      // Ensure the main window is visible/focused (Linux sometimes starts hidden)
       showMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
       
-      // Show platform-specific system tray info dialog
+      // Show platform-specific system tray info dialog once
       let trayLocation = '';
       if (isMac) {
         trayLocation = 'the menu bar (top-right of your screen)';
@@ -2255,7 +2297,8 @@ app.whenReady().then(() => {
         buttons: ['Got it'],
         defaultId: 0
       });
-    }, 500);
+      store.set('welcomeShown', true);
+    }, 1200);
   }
 });
 
