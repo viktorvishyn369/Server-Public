@@ -1753,10 +1753,17 @@ function showMainWindow() {
       console.error('Event listener setup error:', e);
     }
     
-    async function openUploadsFolder() { ipcRenderer.send('open-folder', await getUserUploadsPath()); }
+    async function openUploadsFolder() { 
+      // Use the path from the input field directly (it already has the UUID)
+      const pathEl = document.getElementById('uploads-path');
+      const pathToOpen = pathEl ? pathEl.value : await getUserUploadsPath();
+      ipcRenderer.send('open-folder', pathToOpen); 
+    }
     window.openUploadsFolder = openUploadsFolder;
     async function copyUploadsPath() { 
-      const pathToCopy = await getUserUploadsPath();
+      // Use the path from the input field directly (it already has the UUID)
+      const pathEl = document.getElementById('uploads-path');
+      const pathToCopy = pathEl ? pathEl.value : await getUserUploadsPath();
       const btn = event.target;
       const originalText = btn.textContent;
       
