@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhotoLynk NFT Payment</title>
+  <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .container {
+      background: rgba(30, 30, 50, 0.95);
+      border-radius: 24px;
+      padding: 40px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      border: 1px solid rgba(153, 69, 255, 0.3);
+    }
+    .logo { font-size: 48px; margin-bottom: 16px; }
+    h1 { font-size: 24px; margin-bottom: 8px; color: #fff; }
+    .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; }
+    .nft-preview {
+      width: 120px; height: 120px; border-radius: 16px;
+      margin: 0 auto 20px; overflow: hidden;
+      border: 2px solid rgba(153, 69, 255, 0.5);
+      background: #222;
+    }
+    .nft-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .nft-name { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+    .nft-type { font-size: 12px; color: #9945FF; margin-bottom: 20px; }
+    .amount-box {
+      background: rgba(20, 241, 149, 0.1);
+      border: 1px solid rgba(20, 241, 149, 0.3);
+      border-radius: 12px; padding: 16px; margin-bottom: 24px;
+    }
+    .amount-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+    .amount-value { font-size: 28px; font-weight: 700; color: #14F195; }
+    .amount-usd { font-size: 14px; color: #888; }
+    .btn {
+      width: 100%; padding: 16px; border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: all 0.2s; margin-bottom: 12px;
+    }
+    .btn-phantom {
+      background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%);
+      color: #fff;
+    }
+    .btn-phantom:hover { box-shadow: 0 8px 24px rgba(153, 69, 255, 0.4); transform: translateY(-2px); }
+    .btn-phantom:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-secondary { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #888; }
+    .status { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 14px; display: none; }
+    .status.error { display: block; background: rgba(248, 113, 113, 0.1); color: #F87171; }
+    .status.success { display: block; background: rgba(20, 241, 149, 0.1); color: #14F195; }
+    .status.info { display: block; background: rgba(153, 69, 255, 0.1); color: #9945FF; }
+    .wallet-info { font-size: 12px; color: #666; margin-top: 16px; }
+    .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success-icon { font-size: 64px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container" id="main-container">
+    <div class="logo">⬡</div>
+    <h1>PhotoLynk NFT</h1>
+    <p class="subtitle">Complete payment to mint your memory</p>
+    
+    <div class="nft-preview"><img id="nft-image" src="" alt="NFT" onerror="this.style.display='none'"></div>
+    <div class="nft-name" id="nft-name">Loading...</div>
+    <div class="nft-type" id="nft-type">Compressed NFT</div>
+    
+    <div class="amount-box">
+      <div class="amount-label">Mint Fee</div>
+      <div class="amount-value" id="amount-sol">0.000 SOL</div>
+      <div class="amount-usd" id="amount-usd">≈ $0.00 USD</div>
+    </div>
+    
+    <button class="btn btn-phantom" id="pay-btn" onclick="connectAndPay()">
+      <span>👻</span> Connect Phantom & Pay
+    </button>
+    <button class="btn btn-secondary" onclick="window.close()">Cancel</button>
+    <div class="status" id="status"></div>
+    <div class="wallet-info">Recipient: <span id="recipient">...</span></div>
+  </div>
+
+  <div class="container" id="success-container" style="display:none;">
+    <div class="success-icon">✅</div>
+    <h1>Payment Successful!</h1>
+    <p class="subtitle">Your NFT is being minted on Solana</p>
+    <div class="status success" style="display:block;" id="tx-link"></div>
+    <button class="btn btn-phantom" onclick="window.close()" style="margin-top:24px;">Close Window</button>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const recipient = params.get('recipient') || '';
+    const amount = parseFloat(params.get('amount')) || 0;
+    const name = params.get('name') || 'PhotoLynk Memory';
+    const imageUrl = params.get('imageUrl') || '';
+    const nftType = params.get('nftType') || 'compressed';
+    const reference = params.get('reference') || '';
+
+    document.getElementById('nft-name').textContent = name;
+    document.getElementById('nft-type').textContent = nftType === 'compressed' ? 'Compressed NFT (cNFT)' : 'Standard NFT';
+    document.getElementById('amount-sol').textContent = amount.toFixed(6) + ' SOL';
+    document.getElementById('amount-usd').textContent = '≈ $' + (amount * 200).toFixed(2) + ' USD';
+    document.getElementById('recipient').textContent = recipient ? recipient.slice(0,4) + '...' + recipient.slice(-4) : '...';
+    if (imageUrl) document.getElementById('nft-image').src = imageUrl;
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + type;
+    }
+
+    function setLoading(loading) {
+      const btn = document.getElementById('pay-btn');
+      btn.disabled = loading;
+      btn.innerHTML = loading ? '<div class="spinner"></div> Processing...' : '<span>👻</span> Connect Phantom & Pay';
+    }
+
+    async function connectAndPay() {
+      const provider = window.phantom?.solana || window.solana;
+      
+      if (!provider?.isPhantom) {
+        showStatus('Phantom wallet not found. Install it from phantom.app', 'error');
+        setTimeout(() => window.open('https://phantom.app/', '_blank'), 1500);
+        return;
+      }
+
+      setLoading(true);
+      showStatus('Connecting to Phantom...', 'info');
+
+      try {
+        const resp = await provider.connect();
+        const pubkey = resp.publicKey.toString();
+        showStatus('Connected: ' + pubkey.slice(0,4) + '...' + pubkey.slice(-4), 'info');
+
+        const { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = solanaWeb3;
+        const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+        const fromPubkey = new PublicKey(pubkey);
+        const toPubkey = new PublicKey(recipient);
+        const lamports = Math.ceil(amount * LAMPORTS_PER_SOL);
+
+        showStatus('Creating transaction...', 'info');
+
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+        );
+
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = fromPubkey;
+
+        showStatus('Please approve in Phantom...', 'info');
+
+        const signed = await provider.signTransaction(transaction);
+        showStatus('Sending transaction...', 'info');
+
+        const signature = await connection.sendRawTransaction(signed.serialize());
+        showStatus('Confirming...', 'info');
+
+        await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+
+        document.getElementById('main-container').style.display = 'none';
+        document.getElementById('success-container').style.display = 'block';
+        document.getElementById('tx-link').innerHTML = 'Transaction: <a href="https://solscan.io/tx/' + signature + '" target="_blank" style="color:#14F195;">' + signature.slice(0,8) + '...</a>';
+
+      } catch (err) {
+        console.error('Payment error:', err);
+        showStatus(err.message || 'Payment failed', 'error');
+        setLoading(false);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connect Wallet - PhotoLynk</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .container {
+      background: rgba(30, 30, 50, 0.95);
+      border-radius: 24px;
+      padding: 40px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      border: 1px solid rgba(153, 69, 255, 0.3);
+    }
+    .logo { font-size: 48px; margin-bottom: 16px; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .subtitle { color: #888; font-size: 14px; margin-bottom: 32px; }
+    .btn {
+      width: 100%; padding: 16px; border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      transition: all 0.2s; margin-bottom: 12px;
+    }
+    .btn-phantom {
+      background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%);
+      color: #fff;
+    }
+    .btn-phantom:hover { box-shadow: 0 8px 24px rgba(153, 69, 255, 0.4); transform: translateY(-2px); }
+    .btn-phantom:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-secondary { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #888; }
+    .btn-secondary:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
+    .status { margin-top: 20px; padding: 14px; border-radius: 10px; font-size: 14px; display: none; }
+    .status.error { display: block; background: rgba(248, 113, 113, 0.1); color: #F87171; }
+    .status.success { display: block; background: rgba(20, 241, 149, 0.1); color: #14F195; }
+    .status.info { display: block; background: rgba(153, 69, 255, 0.1); color: #9945FF; }
+    .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .wallet-address { font-family: monospace; font-size: 12px; word-break: break-all; margin-top: 8px; color: #14F195; }
+    .success-icon { font-size: 64px; margin-bottom: 16px; }
+    .copy-btn { background: rgba(153,69,255,0.2); border: none; color: #9945FF; padding: 8px 16px; border-radius: 8px; cursor: pointer; margin-top: 12px; font-size: 12px; }
+    .copy-btn:hover { background: rgba(153,69,255,0.3); }
+  </style>
+</head>
+<body>
+  <div class="container" id="connect-container">
+    <div class="logo">👻</div>
+    <h1>Connect Phantom</h1>
+    <p class="subtitle">Connect your Solana wallet to PhotoLynk</p>
+    
+    <div id="unlock-steps" style="display:none; text-align:left; background:rgba(255,200,0,0.1); border:1px solid rgba(255,200,0,0.3); border-radius:12px; padding:16px; margin-bottom:16px;">
+      <div style="font-weight:600; color:#FFD700; margin-bottom:8px;">🔓 Unlock Required</div>
+      <div style="font-size:13px; color:#ccc; line-height:1.6;">
+        1. Click the <strong style="color:#AB9FF2;">Phantom icon</strong> in your browser toolbar (top-right)<br>
+        2. Enter your password to unlock<br>
+        3. Connection will happen automatically
+      </div>
+    </div>
+    
+    <button class="btn btn-phantom" id="connect-btn" onclick="connectPhantom()">
+      <span>🔗</span> Connect Phantom Wallet
+    </button>
+    
+    <button class="btn btn-secondary" onclick="window.close()">Cancel</button>
+    
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="container" id="success-container" style="display:none;">
+    <div class="success-icon">✅</div>
+    <h1>Wallet Connected!</h1>
+    <p class="subtitle">Copy your address and paste it in PhotoLynk</p>
+    <div class="wallet-address" id="wallet-address"></div>
+    <button class="copy-btn" onclick="copyAddress()">📋 Copy Address</button>
+    <div class="status success" style="display:block; margin-top:16px;">You can now close this window and paste the address in PhotoLynk</div>
+  </div>
+
+  <script>
+    let connectedAddress = '';
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + type;
+    }
+
+    function setLoading(loading) {
+      const btn = document.getElementById('connect-btn');
+      btn.disabled = loading;
+      btn.innerHTML = loading ? '<div class="spinner"></div> Connecting...' : '<span>🔗</span> Connect Phantom Wallet';
+    }
+
+    async function connectPhantom() {
+      const provider = window.phantom?.solana || window.solana;
+      
+      if (!provider?.isPhantom) {
+        showStatus('Phantom wallet not found. Please install it from phantom.app', 'error');
+        setTimeout(() => window.open('https://phantom.app/', '_blank'), 2000);
+        return;
+      }
+
+      setLoading(true);
+      showStatus('Opening Phantom...', 'info');
+
+      try {
+        // Use connect with onlyIfTrusted: false to force popup
+        const resp = await provider.connect({ onlyIfTrusted: false });
+        connectedAddress = resp.publicKey.toString();
+        
+        document.getElementById('connect-container').style.display = 'none';
+        document.getElementById('success-container').style.display = 'block';
+        document.getElementById('wallet-address').textContent = connectedAddress;
+        
+      } catch (err) {
+        console.error('Connection error:', err);
+        setLoading(false);
+        
+        // Parse common Phantom errors
+        const errMsg = err.message || '';
+        if (errMsg.includes('locked') || errMsg.includes('Unexpected error')) {
+          // Show unlock instructions
+          document.getElementById('unlock-steps').style.display = 'block';
+          showStatus('⏳ Unlock Phantom, then we\'ll connect automatically...', 'info');
+          
+          // Try using request method which may trigger unlock popup
+          try {
+            provider.request({ method: 'connect' });
+          } catch (e) {}
+          // Auto-retry every 2 seconds until connected
+          const retryInterval = setInterval(async () => {
+            try {
+              const provider = window.phantom?.solana || window.solana;
+              const resp = await provider.connect({ onlyIfTrusted: false });
+              clearInterval(retryInterval);
+              connectedAddress = resp.publicKey.toString();
+              document.getElementById('connect-container').style.display = 'none';
+              document.getElementById('success-container').style.display = 'block';
+              document.getElementById('wallet-address').textContent = connectedAddress;
+              // Send to server
+              fetch('http://localhost:3000/wallet-connected', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: connectedAddress })
+              }).catch(() => {});
+            } catch (e) {
+              // Still locked, keep retrying
+            }
+          }, 2000);
+          // Stop retrying after 60 seconds
+          setTimeout(() => clearInterval(retryInterval), 60000);
+        } else if (errMsg.includes('rejected') || errMsg.includes('User rejected') || err.code === 4001) {
+          showStatus('Connection cancelled. Click Connect when ready.', 'error');
+        } else if (errMsg.includes('already pending')) {
+          showStatus('Connection already pending. Check for a Phantom popup window.', 'error');
+        } else {
+          showStatus(errMsg || 'Connection failed. Make sure Phantom is unlocked.', 'error');
+        }
+      }
+    }
+
+    function copyAddress() {
+      navigator.clipboard.writeText(connectedAddress).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => btn.textContent = '📋 Copy Address', 2000);
+      });
+    }
+
+    // Auto-connect on page load - this triggers Phantom's unlock popup
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const provider = window.phantom?.solana || window.solana;
+        if (provider?.isPhantom) {
+          // Always try to connect - Phantom will show unlock popup if locked
+          connectPhantom();
+        }
+      }, 500);
+    });
+  </script>
+</body>
+</html>

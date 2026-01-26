@@ -1,6 +1,6 @@
 {
   "name": "photolynk-server-tray",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "PhotoLynk Server - System Tray Manager",
   "license": "MIT",
   "homepage": "https://github.com/viktorvishyn369/PhotoLynk",
@@ -102,13 +102,17 @@
       "icon": "icon.png",
       "category": "Utility",
       "maintainer": "PhotoLynk <photolynk@users.noreply.github.com>",
-      "executableArgs": ["--no-sandbox"]
+      "executableArgs": [
+        "--no-sandbox"
+      ]
     }
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@solana/spl-token": "^0.3.11",
+    "@solana/web3.js": "^1.98.4",
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "electron-store": "^8.1.0",
@@ -130,7 +134,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "electron": "28.3.3",
+    "electron": "^28.3.3",
     "electron-builder": "^24.9.1"
   }
 }

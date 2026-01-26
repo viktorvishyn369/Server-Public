@@ -4,13 +4,17 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
+const http = require('http');
 const Store = require('electron-store');
+const nftDesktop = require('./nftDesktop');
 
 let tray = null;
 let mainWindow = null;
 let qrWindow = null;
 let backupWindow = null;
 let serverProcess = null;
+let pairingServer = null;
+const PAIRING_PORT = 3001;
 let stoppingServer = false;
 let serverPath = null;
 let uploadsPath = null;
@@ -234,13 +238,20 @@ function startServer() {
     NODE_PATH: nodePath,
     UPLOAD_DIR: uploadsPath,
     DB_PATH: dbPath,
-    CLOUD_DIR: path.join(getDataRoot(), 'cloud'),
-    ELECTRON_RUN_AS_NODE: '1'
+    CLOUD_DIR: path.join(getDataRoot(), 'cloud')
   };
 
-  // Use Electron's embedded Node runtime so system Node is not required.
-  // `--runAsNode` makes Electron behave like Node.js.
-  serverProcess = spawn(process.execPath, [serverEntry], {
+  // Try system Node first (better native module compatibility), fallback to Electron's Node
+  let nodeExecutable = 'node';
+  try {
+    execSync('node --version', { stdio: 'ignore' });
+  } catch (e) {
+    // System node not available, use Electron's Node
+    nodeExecutable = process.execPath;
+    env.ELECTRON_RUN_AS_NODE = '1';
+  }
+  
+  serverProcess = spawn(nodeExecutable, [serverEntry], {
     cwd: serverPath,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -655,6 +666,36 @@ function generatePairingToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// Compute UUID v5 from email:password (matches mobile app's uuid library)
+// UUID v5 = SHA-1(namespace + name) with version/variant bits set
+function computeUserUuidSync(email, password) {
+  if (!email || !password) return null;
+  const normalizedEmail = email.trim().toLowerCase();
+  const name = normalizedEmail + ':' + password;
+  
+  // DNS namespace UUID: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 (same as mobile)
+  const namespaceBytes = Buffer.from([
+    0x6b, 0xa7, 0xb8, 0x10,
+    0x9d, 0xad,
+    0x11, 0xd1,
+    0x80, 0xb4,
+    0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+  ]);
+  
+  // UUID v5: SHA-1(namespace + name)
+  const hash = crypto.createHash('sha1')
+    .update(namespaceBytes)
+    .update(name)
+    .digest();
+  
+  // Apply UUID v5 version (0101xxxx) and variant (10xxxxxx) bits
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  
+  const hex = hash.slice(0, 16).toString('hex');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20, 32);
+}
+
 function getPairingData() {
   const ips = getLocalIpAddresses();
   const ip = ips.length > 0 ? ips[0] : '127.0.0.1';
@@ -670,9 +711,231 @@ function getPairingData() {
     type: 'photolynk-local',
     ip: ip,
     port: 3000,
+    pairingPort: PAIRING_PORT,
     token: pairingToken,
     name: os.hostname() || 'PhotoLynk Server'
   };
+}
+
+// ============================================================================
+// PAIRING HTTP SERVER - Receives credentials from mobile during QR pairing
+// ============================================================================
+
+function startPairingServer() {
+  if (pairingServer) return;
+  
+  pairingServer = http.createServer((req, res) => {
+    // CORS headers for mobile app
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
+    if (req.method === 'POST' && req.url === '/api/pair') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const { email, password, token } = data;
+          
+          // Validate pairing token
+          const storedToken = store.get('pairingToken');
+          if (!token || token !== storedToken) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid pairing token' }));
+            return;
+          }
+          
+          if (!email || !password) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Email and password required' }));
+            return;
+          }
+          
+          // Store credentials securely
+          store.set('backupCredentials', {
+            email: email,
+            password: password,
+            remoteAddress: '',
+            remotePort: '3000'
+          });
+          
+          // Generate new pairing token for security (one-time use)
+          const newToken = generatePairingToken();
+          store.set('pairingToken', newToken);
+          
+          safeConsole('log', '[Pairing] Credentials received from mobile for:', email);
+          
+          // Compute UUID v5 and create user folder
+          const userUuid = computeUserUuidSync(email, password);
+          if (userUuid && uploadsPath) {
+            const userFolderPath = path.join(uploadsPath, userUuid);
+            
+            // Create UUID folder if it doesn't exist
+            try {
+              if (!fs.existsSync(userFolderPath)) {
+                fs.mkdirSync(userFolderPath, { recursive: true });
+                safeConsole('log', '[Pairing] Created user folder:', userFolderPath);
+              }
+            } catch (mkdirErr) {
+              safeConsole('error', '[Pairing] Failed to create user folder:', mkdirErr.message);
+            }
+            
+            // Add UUID folder to source folders if not already there
+            const currentFolders = store.get('backupFolders') || [];
+            if (!currentFolders.includes(userFolderPath)) {
+              currentFolders.push(userFolderPath);
+              store.set('backupFolders', currentFolders);
+              safeConsole('log', '[Pairing] Added user folder to sources:', userFolderPath);
+            }
+            
+            // Update LOCAL STORAGE path in UI immediately with the UUID
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              const escapedPath = userFolderPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+              mainWindow.webContents.executeJavaScript(`
+                (function() {
+                  var uploadsPathEl = document.getElementById('uploads-path');
+                  if (uploadsPathEl) {
+                    uploadsPathEl.value = '${escapedPath}';
+                  }
+                  if (typeof cachedUuid !== 'undefined') {
+                    cachedUuid = '${userUuid}';
+                  }
+                })();
+              `);
+            }
+          }
+          
+          // Authenticate with StealthCloud to get token for NFT uploads
+          (async () => {
+            try {
+              const stealthCloudBaseUrl = 'https://api.stealthlynk.com';
+              const { DesktopBackupClient } = require('./backup-client');
+              const authClient = new DesktopBackupClient({
+                destination: 'stealthcloud',
+                email: email,
+                password: password,
+                serverUrl: stealthCloudBaseUrl,
+              });
+              await authClient.login();
+              if (authClient.token) {
+                store.set('backupCredentials', {
+                  ...store.get('backupCredentials'),
+                  baseUrl: stealthCloudBaseUrl,
+                  token: authClient.token,
+                  deviceUuid: authClient.deviceUuid,
+                });
+                safeConsole('log', '[Pairing] StealthCloud authenticated - NFT cloud storage ready');
+              }
+            } catch (authErr) {
+              safeConsole('log', '[Pairing] StealthCloud auth failed (NFT will use IPFS):', authErr.message);
+            }
+          })();
+          
+          // Show success popup in main window instead of closing it
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            // Send the updated folders to the renderer
+            const updatedFolders = store.get('backupFolders') || [];
+            mainWindow.webContents.send('backup-folders', updatedFolders);
+            
+            // Update the email/password fields in the UI
+            mainWindow.webContents.executeJavaScript(`
+              (function() {
+                // Update credentials fields
+                var emailEl = document.getElementById('email');
+                var passwordEl = document.getElementById('password');
+                if (emailEl) emailEl.value = '${email.replace(/'/g, "\\'")}';
+                if (passwordEl) passwordEl.value = '${password.replace(/'/g, "\\'")}';
+                
+                // Update selectedFolders and re-render
+                if (typeof selectedFolders !== 'undefined') {
+                  selectedFolders = ${JSON.stringify(store.get('backupFolders') || [])};
+                  if (typeof renderFolders === 'function') {
+                    renderFolders();
+                  }
+                }
+                
+                // Create success popup overlay
+                var overlay = document.createElement('div');
+                overlay.id = 'pairing-success-overlay';
+                overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
+                
+                var popup = document.createElement('div');
+                popup.style.cssText = 'background:#1a1a2e;border:1px solid #03E1FF;border-radius:16px;padding:32px;text-align:center;max-width:300px;box-shadow:0 0 40px rgba(3,225,255,0.3);';
+                
+                popup.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">✓</div>' +
+                  '<div style="font-size:18px;font-weight:600;color:#fff;margin-bottom:8px;">Paired Successfully</div>' +
+                  '<div style="font-size:14px;color:#888;margin-bottom:20px;">${email.replace(/'/g, "\\'")}</div>' +
+                  '<div style="font-size:12px;color:#03E1FF;">Credentials saved. Ready to sync!</div>';
+                
+                overlay.appendChild(popup);
+                document.body.appendChild(overlay);
+                
+                // Auto-hide after 3 seconds
+                setTimeout(function() {
+                  var el = document.getElementById('pairing-success-overlay');
+                  if (el) el.remove();
+                }, 3000);
+                
+                // Click to dismiss
+                overlay.onclick = function() { overlay.remove(); };
+              })();
+            `);
+          } else {
+            // Fallback to system notification if window not open
+            try {
+              new Notification({
+                title: 'PhotoLynk Paired',
+                body: 'Successfully paired with ' + email,
+                icon: path.join(__dirname, 'icon.png')
+              }).show();
+            } catch (e) {
+              // ignore notification errors
+            }
+          }
+          
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'Paired successfully' }));
+          
+        } catch (e) {
+          safeConsole('error', '[Pairing] Error:', e);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid request' }));
+        }
+      });
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    }
+  });
+  
+  pairingServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      safeConsole('log', '[Pairing] Port', PAIRING_PORT, 'in use, trying next...');
+      // Try next port
+      pairingServer.listen(PAIRING_PORT + 1, '0.0.0.0');
+    } else {
+      safeConsole('error', '[Pairing] Server error:', err);
+    }
+  });
+  
+  pairingServer.listen(PAIRING_PORT, '0.0.0.0', () => {
+    safeConsole('log', '[Pairing] Server listening on port', PAIRING_PORT);
+  });
+}
+
+function stopPairingServer() {
+  if (pairingServer) {
+    pairingServer.close();
+    pairingServer = null;
+    safeConsole('log', '[Pairing] Server stopped');
+  }
 }
 
 // ============================================================================
@@ -690,6 +953,11 @@ function showMainWindow() {
     return;
   }
   
+  // Ensure paths are initialized
+  if (!uploadsPath) {
+    initPaths();
+  }
+  
   const pairingData = getPairingData();
   const credentials = store.get('backupCredentials') || {};
   const photoFolders = store.get('backupFolders') || [];
@@ -698,10 +966,10 @@ function showMainWindow() {
   const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim();
   
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 720,
-    minWidth: 420,
-    minHeight: 600,
+    width: 380,
+    height: 680,
+    minWidth: 320,
+    minHeight: 500,
     resizable: true,
     minimizable: true,
     maximizable: false,
@@ -709,7 +977,8 @@ function showMainWindow() {
     title: 'PhotoLynk',
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      webSecurity: false
     }
   });
   
@@ -732,193 +1001,604 @@ function showMainWindow() {
   <meta charset="UTF-8">
   <style>
     :root {
-      --bg-primary: #0A0A0A;
-      --bg-card: rgba(30, 30, 30, 0.85);
-      --bg-input: rgba(26, 26, 26, 0.9);
-      --accent: #03E1FF;           /* Ocean blue - main accent */
+      --bg-primary: #000000;
+      --bg-card: rgba(20, 20, 20, 0.95);
+      --bg-input: rgba(30, 30, 30, 0.9);
+      --accent: #03E1FF;
+      --accent-green: #4ADE80;
       --text-primary: #FFFFFF;
-      --text-secondary: #AAAAAA;
-      --text-muted: #666666;
-      --border: rgba(255, 255, 255, 0.15);
-      --success: #4ADE80;          /* Green for running status */
-      --error: #F87171;            /* Red for errors */
+      --text-secondary: #888888;
+      --text-muted: #555555;
+      --border: rgba(255, 255, 255, 0.1);
+      --success: #4ADE80;
+      --error: #F87171;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overflow: hidden; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; flex-direction: column; height: 100vh; }
-    .header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-    .logo { display: flex; align-items: center; gap: 10px; }
-    .logo-icon { font-size: 24px; }
-    .logo-text { font-size: 18px; font-weight: 600; }
-    .version { font-size: 11px; color: var(--text-muted); }
-    .header-actions { display: flex; gap: 8px; }
-    .header-btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; transition: all 0.2s; }
+    
+    /* Views */
+    .view { display: none; flex-direction: column; height: 100%; }
+    .view.active { display: flex; }
+    
+    /* Header */
+    .header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .header-left { display: flex; flex-direction: column; }
+    .header-back { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--accent); font-size: 14px; }
+    .header-back:hover { opacity: 0.8; }
+    .app-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: baseline; gap: 8px; }
+    .version-badge { font-size: 11px; font-weight: 500; color: var(--text-muted); letter-spacing: 0; }
+    .header-title { font-size: 18px; font-weight: 600; }
+    .server-badge { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .server-badge-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .server-badge-dot.stopped { background: var(--error); }
+    .server-badge-text { font-size: 12px; color: var(--text-secondary); }
+    .header-actions { display: flex; gap: 12px; }
+    .header-btn { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text-secondary); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
     .header-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
-    .content { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
-    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; backdrop-filter: blur(10px); }
-    .card-title { font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-    .server-status { display: flex; align-items: center; justify-content: space-between; }
-    .status-indicator { display: flex; align-items: center; gap: 8px; }
-    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--error); }
-    .status-dot.running { background: var(--success); box-shadow: 0 0 8px var(--success); }
-    .status-text { font-size: 13px; }
-    .server-controls { display: flex; gap: 6px; }
-    .server-btn { padding: 6px 12px; border: none; border-radius: 6px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .server-btn.start { background: rgba(3, 225, 255, 0.15); color: var(--accent); border: 1px solid rgba(3, 225, 255, 0.4); }
-    .server-btn.stop { background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); border: 1px solid var(--border); }
-    .server-btn.restart { background: rgba(3, 225, 255, 0.1); color: var(--accent); border: 1px solid rgba(3, 225, 255, 0.3); }
-    .server-btn:hover { filter: brightness(1.2); }
-    .server-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .qr-section { display: flex; gap: 16px; align-items: center; }
-    .qr-container { background: #fff; padding: 8px; border-radius: 10px; flex-shrink: 0; }
-    .qr-code { width: 120px; height: 120px; display: block; }
+    
+    /* Status Hero - Fixed height to prevent layout shift */
+    .status-hero { height: 160px; padding: 16px; text-align: center; background: linear-gradient(180deg, rgba(3,225,255,0.05) 0%, transparent 100%); transition: background 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .status-hero.backing-up { background: linear-gradient(180deg, rgba(3,225,255,0.08) 0%, transparent 100%); }
+    .status-hero.syncing { background: linear-gradient(180deg, rgba(74,222,128,0.08) 0%, transparent 100%); }
+    .status-icon { width: 60px; height: 60px; margin: 0 auto 10px; border-radius: 50%; background: rgba(3,225,255,0.15); border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; transition: all 0.3s; }
+    .status-icon.running { background: rgba(74,222,128,0.15); border-color: var(--success); }
+    .status-icon.backing-up, .status-icon.syncing { width: 44px; height: 44px; margin-bottom: 8px; animation: pulse 2s infinite; }
+    .status-icon.backing-up { background: rgba(3,225,255,0.2); border-color: var(--accent); }
+    .status-icon.syncing { background: rgba(74,222,128,0.2); border-color: var(--success); }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
+    .status-icon svg { width: 28px; height: 28px; transition: all 0.3s; }
+    .status-icon.backing-up svg, .status-icon.syncing svg { width: 20px; height: 20px; }
+    .status-title { font-size: 20px; font-weight: 600; margin-bottom: 6px; transition: all 0.3s; }
+    .status-title.running { color: var(--success); }
+    .status-title.stopped { color: var(--error); }
+    .status-title.backing-up, .status-title.syncing { font-size: 16px; margin-bottom: 4px; }
+    .status-title.backing-up { color: var(--accent); }
+    .status-title.syncing { color: var(--success); }
+    .status-subtitle { font-size: 13px; color: var(--text-secondary); padding: 8px 16px; background: var(--bg-card); border-radius: 20px; display: inline-block; }
+    
+    /* Inline Progress */
+    .inline-progress { display: none; align-items: center; gap: 10px; margin-top: 8px; width: 100%; max-width: 280px; }
+    .inline-progress.visible { display: flex; }
+    .inline-progress-bar { flex: 1; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; }
+    .inline-progress-fill { height: 100%; background: linear-gradient(90deg, #03E1FF, #4ADE80); min-width: 3%; width: 0%; transition: width 0.3s; border-radius: 3px; }
+    .inline-progress-fill.syncing { background: linear-gradient(90deg, #4ADE80, #22C55E); }
+    .inline-progress-text { font-size: 13px; font-weight: 600; color: var(--accent); min-width: 40px; text-align: right; }
+    .inline-progress-text.syncing { color: var(--success); }
+    .inline-status-message { display: none; margin-top: 6px; font-size: 11px; color: var(--text-secondary); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+    .inline-status-message.visible { display: block; }
+    
+    /* Content */
+    .content { flex: 1; overflow-y: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+    
+    /* Action Buttons */
+    .action-row { display: flex; gap: 10px; }
+    .action-btn { flex: 1; display: flex; align-items: center; padding: 12px; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+    .action-btn.primary { background: linear-gradient(135deg, #03E1FF 0%, #00B4D8 100%); border: none; }
+    .action-btn.secondary { background: linear-gradient(135deg, #4ADE80 0%, #22C55E 100%); border: none; }
+    .action-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(3,225,255,0.3); }
+    .action-btn.secondary:hover { box-shadow: 0 8px 24px rgba(74,222,128,0.3); }
+    .action-btn-icon { width: 40px; height: 40px; border-radius: 10px; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; margin-right: 10px; }
+    .action-btn-icon svg { width: 20px; height: 20px; stroke: #000; fill: none; }
+    .action-btn-text { flex: 1; text-align: left; }
+    .action-btn-title { font-size: 14px; font-weight: 600; color: #000; }
+    .action-btn-subtitle { font-size: 11px; color: rgba(0,0,0,0.6); margin-top: 2px; }
+    .action-btn-arrow { font-size: 18px; color: rgba(0,0,0,0.4); }
+    
+    /* Cards */
+    .card { background: var(--bg-card); border-radius: 14px; padding: 12px; }
+    
+    /* Server Option */
+    .server-option { display: flex; align-items: center; padding: 14px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 8px; cursor: pointer; transition: all 0.2s; }
+    .server-option:last-child { margin-bottom: 0; }
+    .server-option.selected { border-color: var(--accent); background: rgba(3,225,255,0.08); }
+    .server-option:hover { border-color: rgba(255,255,255,0.3); }
+    .server-option-icon { width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; margin-right: 12px; color: var(--accent); font-size: 18px; }
+    .server-option-text { flex: 1; }
+    .server-option-title { font-size: 14px; font-weight: 500; }
+    .server-option-subtitle { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+    
+    /* QR Section */
+    .qr-section { display: flex; gap: 12px; align-items: center; padding: 12px; background: var(--bg-card); border-radius: 14px; }
+    .qr-container { background: #fff; padding: 10px; border-radius: 12px; flex-shrink: 0; }
+    .qr-code { width: 90px; height: 90px; display: block; }
     .qr-info { flex: 1; }
-    .qr-info h3 { font-size: 14px; margin-bottom: 6px; }
-    .qr-info p { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
-    .ip-badge { margin-top: 8px; padding: 6px 10px; background: rgba(3, 225, 255, 0.1); border: 1px solid rgba(3, 225, 255, 0.3); border-radius: 6px; font-size: 11px; display: inline-block; }
-    .ip-badge span { color: var(--accent); font-weight: 600; }
-    .main-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .action-btn { padding: 20px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); cursor: pointer; transition: all 0.2s; text-align: center; }
-    .action-btn:hover { border-color: var(--accent); background: rgba(3, 225, 255, 0.1); }
-    .action-btn.backup { border-color: rgba(3, 225, 255, 0.3); }
-    .action-btn.backup:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(3, 225, 255, 0.2); }
-    .action-btn.sync { border-color: rgba(3, 225, 255, 0.3); }
-    .action-btn.sync:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(3, 225, 255, 0.2); }
-    .action-icon { font-size: 28px; margin-bottom: 8px; }
-    .action-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-    .action-subtitle { font-size: 11px; color: var(--text-secondary); }
-    .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
-    .form-row:last-child { margin-bottom: 0; }
-    .form-group { flex: 1; }
-    .form-group label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
-    .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--text-primary); font-size: 13px; }
-    .form-group input:focus, .form-group select:focus { outline: none; border-color: rgba(3, 225, 255, 0.6); }
-    .form-group input::placeholder { color: var(--text-muted); }
-    .folder-list { max-height: 80px; overflow-y: auto; margin-bottom: 8px; }
-    .folder-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg-input); border-radius: 4px; margin-bottom: 4px; font-size: 11px; color: var(--text-secondary); }
-    .folder-item button { background: none; border: none; color: var(--error); cursor: pointer; padding: 2px 6px; }
-    .folder-actions { display: flex; gap: 6px; }
-    .folder-btn { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
-    .folder-btn:hover { background: rgba(255,255,255,0.1); }
-    .status-bar { padding: 8px 20px; border-top: 1px solid var(--border); font-size: 10px; color: var(--text-muted); display: flex; justify-content: space-between; flex-shrink: 0; }
-    .progress-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
+    .qr-info h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .qr-info p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+    .ip-badge { margin-top: 10px; padding: 8px 12px; background: rgba(3,225,255,0.1); border: 1px solid rgba(3,225,255,0.3); border-radius: 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    .ip-badge span { color: var(--accent); font-weight: 600; font-family: monospace; }
+    
+    /* Form inputs */
+    .form-group { margin-bottom: 12px; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-input); color: var(--text-primary); font-size: 13px; transition: border-color 0.2s; }
+    .form-input:focus { outline: none; border-color: var(--accent); }
+    .form-input::placeholder { color: var(--text-muted); }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .form-group { flex: 1; margin-bottom: 0; }
+    
+    /* Folder list */
+    .folder-list { max-height: 120px; overflow-y: auto; margin-bottom: 12px; }
+    .folder-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--bg-input); border-radius: 8px; margin-bottom: 6px; }
+    .folder-item span { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-item button { background: none; border: none; color: var(--error); cursor: pointer; padding: 4px 8px; font-size: 14px; }
+    .folder-actions { display: flex; gap: 8px; }
+    .folder-btn { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; transition: all 0.2s; }
+    .folder-btn:hover { background: rgba(255,255,255,0.05); border-color: var(--accent); color: var(--accent); }
+    
+    /* Section title */
+    .section-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px 4px; }
+    .section-title.centered { text-align: center; margin-left: 0; margin-right: 0; }
+    
+    /* Progress overlay */
+    .progress-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; }
     .progress-overlay.visible { display: flex; }
-    .progress-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 300px; text-align: center; }
-    .progress-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
-    .progress-text { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
-    .progress-bar { height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
-    .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
-    .progress-cancel { margin-top: 16px; padding: 8px 20px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+    .progress-box { background: var(--bg-card); border-radius: 20px; padding: 32px; width: 320px; text-align: center; }
+    .progress-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+    .progress-text { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+    .progress-bar { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #03E1FF, #4ADE80); width: 0%; transition: width 0.3s; }
+    .progress-cancel { margin-top: 20px; padding: 12px 24px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 13px; }
+    
     #remote-config { display: none; }
-    #remote-config.visible { display: block; }
+    #remote-config.visible { display: block; margin-top: 12px; }
+    
+    /* NFT Styles */
+    .action-btn.nft { background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); }
+    .action-btn.nft:hover { box-shadow: 0 8px 24px rgba(153,69,255,0.4); }
+    .action-btn-icon.nft-icon { background: rgba(255,255,255,0.2); }
+    .action-btn-icon.nft-icon svg { fill: none; stroke: #fff; }
+    .action-btn-title.nft-title { color: #fff; }
+    .action-btn-subtitle.nft-subtitle { color: rgba(255,255,255,0.7); }
+    .action-btn-arrow.nft-arrow { color: rgba(255,255,255,0.5); }
+    .action-btn-side.nft-side { border-color: rgba(153,69,255,0.4); }
+    .action-btn-side.nft-side:hover { border-color: #9945FF; background: rgba(153,69,255,0.1); }
+    .action-btn-side.nft-side svg { stroke: #9945FF; }
+    .action-btn-side.nft-side span { color: #9945FF; }
+    .action-btn-side { width: 52px; min-height: 56px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; margin-left: 8px; flex-shrink: 0; }
+    .action-btn-side:hover { border-color: var(--accent); }
+    .action-btn-side svg { width: 18px; height: 18px; margin-bottom: 2px; }
+    .action-btn-side span { font-size: 9px; }
+    
+    /* NFT Album Overlay */
+    .nft-album-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-primary); z-index: 1000; display: none; flex-direction: column; overflow: hidden; }
+    .nft-album-overlay.active { display: flex; }
+    .nft-album-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .nft-album-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .nft-album-content { flex: 1; overflow-y: auto; padding: 12px 16px; }
+    .nft-refresh-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 16px; }
+    .nft-refresh-btn:hover { background: rgba(255,255,255,0.05); color: #9945FF; border-color: #9945FF; }
+    .nft-close-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
+    .nft-close-btn:hover { background: rgba(255,255,255,0.05); color: #ff4444; border-color: #ff4444; }
+    .nft-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .nft-item { aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--bg-card); border: 1px solid var(--border); cursor: pointer; position: relative; transition: all 0.2s; }
+    .nft-item.standard { box-shadow: 0 4px 12px rgba(153,69,255,0.3), 0 0 0 1px rgba(153,69,255,0.2); } /* Purple shadow for standard NFTs */
+    .nft-item.compressed { box-shadow: 0 4px 12px rgba(20,241,149,0.2), 0 0 0 1px rgba(20,241,149,0.15); } /* Green shadow for compressed NFTs */
+    .nft-item:hover { transform: scale(1.02); }
+    .nft-item.standard:hover { box-shadow: 0 6px 16px rgba(153,69,255,0.4), 0 0 0 1px rgba(153,69,255,0.4); }
+    .nft-item.compressed:hover { box-shadow: 0 6px 16px rgba(20,241,149,0.3), 0 0 0 1px rgba(20,241,149,0.3); }
+    .nft-item img { width: 100%; height: 100%; object-fit: cover; }
+    .nft-item-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 8px 10px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+    .nft-item-name { font-size: 11px; font-weight: 500; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nft-item-date { font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+    .nft-badge { position: absolute; bottom: 8px; right: 8px; width: 24px; height: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .nft-badge-cnft { background: #1a5c2a; border-radius: 50%; } /* Dark green circle */
+    .nft-badge-cnft .badge-text { color: #5ddb6e; font-size: 8px; font-weight: 700; line-height: 1; } /* Light green "cN" */
+    .nft-badge-cnft .badge-sub { color: #5ddb6e; font-size: 5px; line-height: 1; margin-top: -1px; } /* Light green "compressed" */
+    .nft-badge-standard { background: #2a1a4a; border-radius: 4px; } /* Dark purple background */
+    .nft-badge-standard .badge-hex { color: #9945FF; font-size: 16px; line-height: 1; } /* Light purple hexagon outline */
+    
+    /* NFT Detail View Overlay */
+    .nft-detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-primary); z-index: 1100; display: none; flex-direction: column; overflow: hidden; }
+    .nft-detail-overlay.active { display: flex; }
+    .nft-detail-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .nft-detail-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .nft-detail-close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
+    .nft-detail-close:hover { background: rgba(255,255,255,0.05); color: #ff4444; border-color: #ff4444; }
+    .nft-detail-content { flex: 1; overflow-y: auto; padding: 16px; }
+    .nft-detail-image { width: 100%; aspect-ratio: 1; border-radius: 16px; overflow: hidden; margin-bottom: 16px; position: relative; }
+    .nft-detail-image.standard { box-shadow: 0 8px 24px rgba(153,69,255,0.4); }
+    .nft-detail-image.compressed { box-shadow: 0 8px 24px rgba(20,241,149,0.3); }
+    .nft-detail-image img { width: 100%; height: 100%; object-fit: cover; }
+    .nft-detail-badge { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; }
+    .nft-detail-badge.cnft { background: #1a5c2a; color: #5ddb6e; }
+    .nft-detail-badge.standard { background: #2a1a4a; color: #9945FF; }
+    .nft-detail-name { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
+    .nft-detail-collection { font-size: 12px; color: #9945FF; margin-bottom: 12px; }
+    .nft-detail-description { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; padding: 12px; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border); }
+    .nft-detail-info { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .nft-detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border); }
+    .nft-detail-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+    .nft-detail-value { font-size: 12px; color: var(--text-primary); font-weight: 500; }
+    .nft-detail-value.address { font-family: monospace; font-size: 10px; }
+    .nft-detail-actions { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .nft-action-btn { padding: 14px; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; }
+    .nft-action-btn.primary { background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); border: none; color: #fff; }
+    .nft-action-btn.primary:hover { background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%); transform: translateY(-1px); }
+    .nft-action-btn.secondary { background: transparent; border: 1px solid #9945FF; color: #9945FF; }
+    .nft-action-btn.secondary:hover { background: rgba(153,69,255,0.1); }
+    .nft-action-btn.danger { background: transparent; border: 1px solid #ff4444; color: #ff4444; }
+    .nft-action-btn.danger:hover { background: rgba(255,68,68,0.1); }
+    
+    /* NFT Transfer Modal */
+    .nft-transfer-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1200; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .nft-transfer-modal.active { display: flex; }
+    .nft-transfer-content { background: var(--bg-primary); border-radius: 16px; width: 100%; max-width: 360px; border: 1px solid var(--border); overflow: hidden; }
+    .nft-transfer-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .nft-transfer-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+    .nft-transfer-close { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; }
+    .nft-transfer-body { padding: 16px; }
+    .nft-transfer-preview { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-card); border-radius: 10px; margin-bottom: 16px; }
+    .nft-transfer-preview img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; }
+    .nft-transfer-preview-info { flex: 1; }
+    .nft-transfer-preview-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .nft-transfer-preview-type { font-size: 10px; color: var(--text-muted); }
+    .nft-transfer-input-group { margin-bottom: 16px; }
+    .nft-transfer-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; display: block; }
+    .nft-transfer-input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 12px; font-family: monospace; }
+    .nft-transfer-input:focus { outline: none; border-color: #9945FF; }
+    .nft-transfer-cost { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-card); border-radius: 10px; margin-bottom: 16px; }
+    .nft-transfer-cost-label { font-size: 11px; color: var(--text-muted); }
+    .nft-transfer-cost-value { font-size: 13px; color: #14F195; font-weight: 600; }
+    .nft-transfer-actions { display: flex; gap: 10px; }
+    .nft-transfer-actions .nft-action-btn { flex: 1; }
+    
+    /* NFT Mint Panel (inline) */
+    .nft-mint-section { margin-top: 8px; background: var(--bg-card); border-radius: 14px; padding: 16px; border: 1px solid rgba(153,69,255,0.3); }
+    .nft-mint-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .nft-mint-title { font-size: 14px; font-weight: 600; color: #9945FF; display: flex; align-items: center; gap: 6px; }
+    .nft-mint-close { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; }
+    .nft-mint-close:hover { background: rgba(255,255,255,0.05); }
+    .nft-promo-banner { background: linear-gradient(135deg, #9945FF 0%, #14F195 100%); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; font-size: 11px; }
+    .nft-option-group { margin-bottom: 12px; }
+    .nft-option-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
+    .nft-options { display: flex; gap: 6px; }
+    .nft-option { flex: 1; padding: 10px 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; text-align: center; transition: all 0.2s; }
+    .nft-option:hover { border-color: #9945FF; }
+    .nft-option.selected { border-color: #9945FF; background: rgba(153,69,255,0.15); }
+    .nft-option-title { font-size: 11px; font-weight: 500; color: var(--text-primary); }
+    .nft-option-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+    .nft-option-price { font-size: 11px; font-weight: 600; color: #14F195; margin-top: 4px; }
+    .nft-photo-select { border: 2px dashed var(--border); border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; }
+    .nft-photo-select:hover { border-color: #9945FF; background: rgba(153,69,255,0.05); }
+    .nft-photo-icon { font-size: 28px; margin-bottom: 4px; }
+    .nft-photo-text { font-size: 11px; color: var(--text-muted); }
+    .nft-photo-preview { display: none; position: relative; border-radius: 10px; overflow: hidden; }
+    .nft-photo-preview img { width: 100%; max-height: 120px; object-fit: cover; border-radius: 10px; }
+    .nft-photo-remove { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.7); border: none; color: #fff; cursor: pointer; font-size: 11px; }
+    .nft-input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(0,0,0,0.3); color: var(--text-primary); font-size: 12px; margin-bottom: 8px; }
+    .nft-input:focus { outline: none; border-color: #9945FF; }
+    .nft-input::placeholder { color: var(--text-muted); }
+    .nft-wallet-row { display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(153,69,255,0.1); border-radius: 8px; margin-bottom: 10px; font-size: 11px; }
+    .nft-wallet-dot { width: 6px; height: 6px; border-radius: 50%; background: #14F195; }
+    .nft-wallet-dot.disconnected { background: #f87171; }
+    .nft-wallet-connect { margin-left: auto; padding: 4px 10px; border-radius: 5px; border: 1px solid #9945FF; background: transparent; color: #9945FF; cursor: pointer; font-size: 10px; }
+    .nft-mint-btn { width: 100%; padding: 12px; border: none; border-radius: 10px; background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; }
+    .nft-mint-btn:hover { box-shadow: 0 6px 20px rgba(153,69,255,0.4); }
+    .nft-mint-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+    .nft-item-name { font-size: 8px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nft-loading, .nft-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; color: var(--text-muted); font-size: 12px; gap: 8px; }
+    .nft-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: #9945FF; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="logo">
-      <img class="logo-icon" src="${iconDataUrl}" width="24" height="24" style="border-radius: 4px;">
-      <span class="logo-text">PhotoLynk</span>
-      <span class="version">v${currentVersion || '1.0.0'}</span>
-    </div>
-    <div class="header-actions">
-      <button class="header-btn" onclick="checkUpdates()">Check Updates</button>
-      <button class="header-btn" onclick="toggleAutostart()">
-        <span id="autostart-label">${startOnBoot ? '✓ Launch at Login' : 'Launch at Login'}</span>
-      </button>
-    </div>
-  </div>
-  
-  <div class="content">
-    <div class="card">
-      <div class="card-title">🖥️ Local Server</div>
-      <div class="server-status">
-        <div class="status-indicator">
-          <div class="status-dot" id="server-dot"></div>
-          <span class="status-text" id="server-status">Checking...</span>
+  <!-- MAIN VIEW -->
+  <div id="main-view" class="view active">
+    <div class="header">
+      <div class="header-left">
+        <div class="app-title">PhotoLynk <span class="version-badge">v1.5.0</span></div>
+        <div class="server-badge">
+          <div class="server-badge-dot" id="server-dot"></div>
+          <span class="server-badge-text" id="server-status">Local Server</span>
         </div>
-        <div class="server-controls">
-          <button class="server-btn start" id="btn-start" onclick="serverControl('start')">Start</button>
-          <button class="server-btn restart" id="btn-restart" onclick="serverControl('restart')">Restart</button>
-          <button class="server-btn stop" id="btn-stop" onclick="serverControl('stop')">Stop</button>
-        </div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" onclick="showView('settings')" title="Settings">⚙️</button>
       </div>
     </div>
     
-    <div class="card">
-      <div class="card-title">📱 Pair Mobile Device</div>
+    <div class="status-hero" id="status-hero">
+      <div class="status-icon" id="status-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);">
+          <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+        </svg>
+      </div>
+      <div class="status-title" id="status-title">Ready</div>
+      <div class="status-subtitle" id="status-subtitle">Idle</div>
+      
+      <!-- Inline Progress (hidden by default) -->
+      <div class="inline-progress" id="inline-progress">
+        <div class="inline-progress-bar">
+          <div class="inline-progress-fill" id="inline-progress-fill"></div>
+        </div>
+        <div class="inline-progress-text" id="inline-progress-text">0%</div>
+      </div>
+      <div class="inline-status-message" id="inline-status-message"></div>
+    </div>
+    
+    <div class="content">
+      <div class="action-row">
+        <div class="action-btn primary" onclick="startBackup()">
+          <div class="action-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg></div>
+          <div class="action-btn-text">
+            <div class="action-btn-title">Backup All</div>
+            <div class="action-btn-subtitle">Upload to cloud</div>
+          </div>
+          <div class="action-btn-arrow">›</div>
+        </div>
+      </div>
+      
+      <div class="action-row">
+        <div class="action-btn secondary" onclick="startSync()">
+          <div class="action-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 21v-9"/><path d="m8 17 4 4 4-4"/></svg></div>
+          <div class="action-btn-text">
+            <div class="action-btn-title">Sync All</div>
+            <div class="action-btn-subtitle">Download from cloud</div>
+          </div>
+          <div class="action-btn-arrow">›</div>
+        </div>
+      </div>
+      
       <div class="qr-section">
         <div class="qr-container">
           <img class="qr-code" src="${qrImage}" alt="QR Code">
         </div>
         <div class="qr-info">
-          <h3>Scan to Connect</h3>
-          <p>Open PhotoLynk on your phone, select "Local" server, and scan this QR code.</p>
-          <div class="ip-badge">Server: <span>${pairingData.ip}:${pairingData.port}</span></div>
+          <h3>📱 Pair Mobile</h3>
+          <p>Scan with PhotoLynk app to connect and sync credentials</p>
+          <div class="ip-badge">🔗 <span>${pairingData.ip}:${pairingData.port}</span></div>
         </div>
       </div>
+      
+      <!-- NFT Section -->
+      <div class="action-row">
+        <div class="action-btn nft" onclick="openNFTMint()">
+          <div class="action-btn-icon nft-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <div class="action-btn-text">
+            <div class="action-btn-title nft-title">NFT Memories</div>
+            <div class="action-btn-subtitle nft-subtitle">Own photos forever</div>
+          </div>
+          <div class="action-btn-arrow nft-arrow">›</div>
+        </div>
+        <div class="action-btn-side nft-side" onclick="openNFTAlbum()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          <span>Album</span>
+        </div>
+      </div>
+      <div class="section-title centered">SOLANA NFT</div>
+      
+      <!-- NFT Album Overlay (separate window on top) -->
+      <div id="nft-album-overlay" class="nft-album-overlay">
+        <div class="nft-album-header">
+          <button class="nft-close-btn" onclick="closeNFTAlbum()">✕</button>
+          <span class="nft-album-title">Your NFT Album</span>
+          <button class="nft-refresh-btn" onclick="refreshNFTAlbum()">↻</button>
+        </div>
+        <div class="nft-album-content">
+          <div id="nft-grid" class="nft-grid"></div>
+          <div id="nft-loading" class="nft-loading" style="display: none;">
+            <div class="nft-spinner"></div>
+            <span>Loading NFTs...</span>
+          </div>
+          <div id="nft-empty" class="nft-empty" style="display: none;">
+            <span>No NFTs yet. Mint your first memory!</span>
+          </div>
+          <div id="nft-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;padding-bottom:20px;"></div>
+        </div>
+      </div>
+      
+      <!-- NFT Detail View Overlay -->
+      <div id="nft-detail-overlay" class="nft-detail-overlay">
+        <div class="nft-detail-header">
+          <button class="nft-detail-close" onclick="closeNFTDetail()">✕</button>
+          <span class="nft-detail-title">NFT Details</span>
+          <div style="width:32px;"></div>
+        </div>
+        <div class="nft-detail-content">
+          <div id="nft-detail-image" class="nft-detail-image">
+            <img id="nft-detail-img" src="" alt="">
+            <div id="nft-detail-badge" class="nft-detail-badge"></div>
+          </div>
+          <div id="nft-detail-name" class="nft-detail-name"></div>
+          <div id="nft-detail-collection" class="nft-detail-collection"></div>
+          <div id="nft-detail-description" class="nft-detail-description"></div>
+          <div class="nft-detail-info">
+            <div class="nft-detail-row">
+              <span class="nft-detail-label">Type</span>
+              <span id="nft-detail-type" class="nft-detail-value"></span>
+            </div>
+            <div class="nft-detail-row">
+              <span class="nft-detail-label">Mint Address</span>
+              <span id="nft-detail-mint" class="nft-detail-value address"></span>
+            </div>
+            <div class="nft-detail-row">
+              <span class="nft-detail-label">Owner</span>
+              <span id="nft-detail-owner" class="nft-detail-value address"></span>
+            </div>
+          </div>
+          <div class="nft-detail-actions">
+            <button class="nft-action-btn secondary" onclick="verifyNFTOnChain()">
+              <span>🔗</span> Verify on Blockchain
+            </button>
+            <button class="nft-action-btn primary" onclick="openNFTTransfer()">
+              <span>↗</span> Transfer NFT
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- NFT Transfer Modal -->
+      <div id="nft-transfer-modal" class="nft-transfer-modal">
+        <div class="nft-transfer-content">
+          <div class="nft-transfer-header">
+            <span class="nft-transfer-title">Transfer NFT</span>
+            <button class="nft-transfer-close" onclick="closeNFTTransfer()">✕</button>
+          </div>
+          <div class="nft-transfer-body">
+            <div class="nft-transfer-preview">
+              <img id="nft-transfer-img" src="" alt="">
+              <div class="nft-transfer-preview-info">
+                <div id="nft-transfer-name" class="nft-transfer-preview-name"></div>
+                <div id="nft-transfer-type" class="nft-transfer-preview-type"></div>
+              </div>
+            </div>
+            <div class="nft-transfer-input-group">
+              <label class="nft-transfer-label">Recipient Wallet Address</label>
+              <input type="text" id="nft-transfer-recipient" class="nft-transfer-input" placeholder="Enter Solana wallet address...">
+            </div>
+            <div class="nft-transfer-cost">
+              <span class="nft-transfer-cost-label">Estimated Cost</span>
+              <span id="nft-transfer-cost" class="nft-transfer-cost-value">~0.00001 SOL</span>
+            </div>
+            <div class="nft-transfer-actions">
+              <button class="nft-action-btn secondary" onclick="closeNFTTransfer()">Cancel</button>
+              <button class="nft-action-btn primary" onclick="confirmNFTTransfer()">Confirm Transfer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- NFT Mint Panel (inline) -->
+      <div id="nft-mint-section" class="nft-mint-section" style="display: none;">
+        <div class="nft-mint-header">
+          <div class="nft-mint-title"><span>⬡</span> NFT Memories</div>
+          <button class="nft-mint-close" onclick="closeNFTMint()">✕</button>
+        </div>
+        
+        <div id="nft-promo-banner" class="nft-promo-banner" style="display: none;">
+          🎉 Launch Special - <span id="promo-days">30</span> Days Left! Up to 90% off!
+        </div>
+        
+        <div class="nft-option-group">
+          <div class="nft-option-label">NFT Type</div>
+          <div class="nft-options">
+            <div class="nft-option selected" onclick="selectNFTType('compressed', this)">
+              <div class="nft-option-title">Compressed (cNFT)</div>
+              <div class="nft-option-sub">99.99% cheaper</div>
+              <div class="nft-option-price" id="cnft-price">$0.02</div>
+            </div>
+            <div class="nft-option" onclick="selectNFTType('standard', this)">
+              <div class="nft-option-title">Standard NFT</div>
+              <div class="nft-option-sub">Traditional</div>
+              <div class="nft-option-price" id="nft-price">$0.20</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="nft-option-group">
+          <div class="nft-option-label">Image Storage</div>
+          <div class="nft-options">
+            <div class="nft-option selected" onclick="selectNFTStorage('cloud', this)">
+              <div class="nft-option-title">StealthCloud</div>
+              <div class="nft-option-sub">Free storage • <span id="cloud-fee">$0.02</span> fee</div>
+            </div>
+            <div class="nft-option" onclick="selectNFTStorage('ipfs', this)">
+              <div class="nft-option-title">IPFS</div>
+              <div class="nft-option-sub">Decentralized • <span id="ipfs-fee">$0.05</span> fee</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="nft-option-group">
+          <div class="nft-option-label">Select Photo</div>
+          <div class="nft-photo-select" id="nft-photo-select" onclick="selectNFTPhoto()">
+            <div class="nft-photo-icon">📷</div>
+            <div class="nft-photo-text">Click to select</div>
+          </div>
+          <div class="nft-photo-preview" id="nft-photo-preview">
+            <img id="nft-preview-img" src="">
+            <button class="nft-photo-remove" onclick="removeNFTPhoto()">✕</button>
+          </div>
+        </div>
+        
+        <div class="nft-option-group">
+          <div class="nft-option-label">NFT Details</div>
+          <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Memory)">
+          <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)">
+        </div>
+        
+        <div class="nft-wallet-row">
+          <div class="nft-wallet-dot disconnected" id="mint-wallet-dot"></div>
+          <span id="mint-wallet-text">No wallet connected</span>
+          <button class="nft-wallet-connect" onclick="connectNFTWallet()">Connect</button>
+        </div>
+        
+        <button class="nft-mint-btn" id="nft-mint-btn" disabled onclick="doMintNFT()">
+          <span>⬡</span> Mint NFT
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- SETTINGS VIEW -->
+  <div id="settings-view" class="view">
+    <div class="header">
+      <div class="header-back" onclick="showView('main')">← Back</div>
+      <div class="header-title">Settings</div>
+      <div style="width: 60px;"></div>
     </div>
     
-    <div class="main-actions">
-      <div class="action-btn backup" onclick="startBackup()">
-        <div class="action-icon">⬆️</div>
-        <div class="action-title">Backup</div>
-        <div class="action-subtitle">Upload to Cloud</div>
+    <div class="content">
+      <div class="section-title">BACKUP DESTINATION</div>
+      <div class="card">
+        <div class="server-option selected" onclick="selectDestination('stealthcloud', this)">
+          <div class="server-option-icon">☁️</div>
+          <div class="server-option-text">
+            <div class="server-option-title">StealthCloud</div>
+            <div class="server-option-subtitle">Secure cloud backup</div>
+          </div>
+        </div>
+        <div class="server-option" onclick="selectDestination('remote', this)">
+          <div class="server-option-icon">🌐</div>
+          <div class="server-option-text">
+            <div class="server-option-title">Remote Server</div>
+            <div class="server-option-subtitle">Internet connection</div>
+          </div>
+        </div>
+        <div id="remote-config">
+          <div class="form-row" style="margin-top: 12px;">
+            <div class="form-group"><input class="form-input" type="text" id="remote-address" placeholder="Server address" value="${credentials.remoteAddress || ''}"></div>
+            <div class="form-group" style="flex: 0.4;"><input class="form-input" type="text" id="remote-port" placeholder="3000" value="${credentials.remotePort || '3000'}"></div>
+          </div>
+        </div>
       </div>
-      <div class="action-btn sync" onclick="startSync()">
-        <div class="action-icon">⬇️</div>
-        <div class="action-title">Sync</div>
-        <div class="action-subtitle">Download from Cloud</div>
-      </div>
-    </div>
-    
-    <div class="card">
-      <div class="card-title">🔐 Cloud Credentials</div>
-      <div class="form-row">
+      
+      <div class="section-title">CREDENTIALS</div>
+      <div class="card">
         <div class="form-group">
-          <label>Destination</label>
-          <select id="destination" onchange="toggleRemoteConfig()">
-            <option value="stealthcloud" selected>StealthCloud</option>
-            <option value="remote">Remote Server</option>
-          </select>
+          <input class="form-input" type="text" id="email" placeholder="Email, nickname, or name.skr" value="${credentials.email || ''}">
+        </div>
+        <div class="form-group">
+          <input class="form-input" type="password" id="password" placeholder="Password" value="${credentials.password || ''}">
+        </div>
+        <input type="hidden" id="destination" value="stealthcloud">
+      </div>
+      
+      <div class="section-title">SOURCE FOLDERS</div>
+      <div class="card">
+        <div class="folder-list" id="folder-list">${photoFolders.length === 0 ? '<div style="color: var(--text-muted); padding: 12px; text-align: center; font-size: 12px;">No folders selected</div>' : photoFolders.map((f, i) => '<div class="folder-item"><span title="' + f + '">' + f.split(/[\\/]/).pop() + '</span><button onclick="removeFolder(' + i + ')">✕</button></div>').join('')}</div>
+        <div class="folder-actions">
+          <button class="folder-btn" onclick="addFolder()">+ Add Folder</button>
+          <button class="folder-btn" onclick="clearFolders()">Clear All</button>
         </div>
       </div>
-      <div id="remote-config">
+      
+      <div class="section-title">LOCAL STORAGE</div>
+      <div class="card">
         <div class="form-row">
-          <div class="form-group" style="flex:2"><label>Address</label><input type="text" id="remote-address" placeholder="192.168.1.100" value="${credentials.remoteAddress || ''}"></div>
-          <div class="form-group" style="flex:1"><label>Port</label><input type="text" id="remote-port" placeholder="3000" value="${credentials.remotePort || '3000'}"></div>
+          <div class="form-group" style="flex: 1;"><input class="form-input" type="text" id="uploads-path" value="${uploadsPath || ''}" readonly style="font-size: 11px; cursor: text;"></div>
+        </div>
+        <div class="folder-actions" style="margin-top: 10px;">
+          <button class="folder-btn" onclick="copyUploadsPath()">📋 Copy</button>
+          <button class="folder-btn" onclick="openUploadsFolder()">📂 Open</button>
+          <button class="folder-btn" onclick="addUploadsToSources()">➕ Add to Sources</button>
         </div>
       </div>
-      <div class="form-row"><div class="form-group"><label>Email</label><input type="email" id="email" placeholder="your@email.com" value="${credentials.email || ''}"></div></div>
-      <div class="form-row"><div class="form-group"><label>Password</label><input type="password" id="password" placeholder="Password" value="${credentials.password || ''}"></div></div>
-    </div>
-    
-    <div class="card">
-      <div class="card-title">📤 Source Folders (Upload FROM)</div>
-      <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 8px;">Photos & videos from these folders will be uploaded to cloud</div>
-      <div class="folder-list" id="folder-list">${photoFolders.length === 0 ? '<div style="color: var(--text-muted); padding: 8px; text-align: center;">No folders selected - click "Add Folder" below</div>' : photoFolders.map((f, i) => '<div class="folder-item"><span title="' + f + '">' + f.split('/').pop() + '</span><button onclick="removeFolder(' + i + ')">✕</button></div>').join('')}</div>
-      <div class="folder-actions">
-        <button class="folder-btn" onclick="addFolder()">+ Add Folder</button>
-        <button class="folder-btn" onclick="clearFolders()">Clear All</button>
-      </div>
-    </div>
-    
-    <div class="card">
-      <div class="card-title">💾 Local Server Storage (Sync TO)</div>
-      <div style="color: var(--text-muted); font-size: 11px; margin-bottom: 8px;">Files backed up from mobile devices are stored here (enter email & password to see your folder)</div>
-      <div class="form-row">
-        <div class="form-group" style="flex: 1;"><input type="text" id="uploads-path" value="${uploadsPath}" readonly style="font-size: 11px; cursor: text; user-select: all;"></div>
-        <button class="folder-btn" style="flex: 0; padding: 10px 16px;" onclick="copyUploadsPath()" title="Copy path">Copy</button>
-        <button class="folder-btn" style="flex: 0; padding: 6px 12px; line-height: 1.2; text-align: center;" onclick="addUploadsToSources()">Add to<br>Sources</button>
-        <button class="folder-btn" style="flex: 0; padding: 10px 16px;" onclick="openUploadsFolder()">Open</button>
-      </div>
     </div>
   </div>
   
-  <div class="status-bar">
-    <span id="status-message">Ready</span>
-    <span id="update-status">${updateAvailable ? 'Update available: v' + latestVersion : ''}</span>
-  </div>
-  
+  <!-- Progress Overlay -->
   <div class="progress-overlay" id="progress-overlay">
     <div class="progress-box">
       <div class="progress-title" id="progress-title">Processing...</div>
@@ -929,47 +1609,66 @@ function showMainWindow() {
   </div>
   
   <script>
+    // Global error handler
+    window.onerror = function(msg, url, line, col, error) {
+      console.error('JS Error:', msg, 'at line', line, 'col', col);
+      return false;
+    };
+    
     const { ipcRenderer } = require('electron');
     let selectedFolders = ${JSON.stringify(photoFolders)};
     let serverBusy = false;
+    let currentDestination = 'stealthcloud';
+    let currentOperation = 'backup';
+    
+    // View navigation
+    function showView(viewName) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(viewName + '-view').classList.add('active');
+    }
+    window.showView = showView;
     
     function updateServerStatus(running) {
-      document.getElementById('server-dot').classList.toggle('running', running);
-      document.getElementById('server-status').textContent = running ? 'Running' : 'Stopped';
-      // Re-enable buttons based on state
+      const dot = document.getElementById('server-dot');
+      const status = document.getElementById('server-status');
+      const icon = document.getElementById('status-icon');
+      const title = document.getElementById('status-title');
+      
+      if (running) {
+        dot.classList.remove('stopped');
+        status.textContent = 'Local Server';
+        icon.classList.add('running');
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>';
+        title.textContent = 'Ready';
+        title.classList.remove('stopped');
+        title.classList.add('running');
+      } else {
+        dot.classList.add('stopped');
+        status.textContent = 'Server Stopped';
+        icon.classList.remove('running');
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--error);"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        title.textContent = 'Stopped';
+        title.classList.remove('running');
+        title.classList.add('stopped');
+      }
       serverBusy = false;
-      document.getElementById('btn-start').disabled = running;
-      document.getElementById('btn-restart').disabled = !running;
-      document.getElementById('btn-stop').disabled = !running;
     }
     
-    function setButtonsBusy(busy, statusText) {
-      serverBusy = busy;
-      document.getElementById('btn-start').disabled = busy;
-      document.getElementById('btn-restart').disabled = busy;
-      document.getElementById('btn-stop').disabled = busy;
-      if (statusText) document.getElementById('server-status').textContent = statusText;
+    function selectDestination(dest, el) {
+      currentDestination = dest;
+      document.getElementById('destination').value = dest;
+      document.querySelectorAll('.server-option').forEach(opt => opt.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('remote-config').classList.toggle('visible', dest === 'remote');
     }
-    
-    function serverControl(action) {
-      if (serverBusy) return;
-      if (action === 'start') setButtonsBusy(true, 'Starting...');
-      else if (action === 'stop') setButtonsBusy(true, 'Stopping...');
-      else if (action === 'restart') setButtonsBusy(true, 'Restarting...');
-      ipcRenderer.send('server-control', action);
-    }
-    function checkUpdates() { ipcRenderer.send('check-updates'); }
-    function toggleAutostart() { ipcRenderer.send('toggle-autostart'); }
-    function toggleRemoteConfig() { document.getElementById('remote-config').classList.toggle('visible', document.getElementById('destination').value === 'remote'); }
+    window.selectDestination = selectDestination;
     
     ipcRenderer.on('server-status', (e, running) => updateServerStatus(running));
-    ipcRenderer.on('autostart-changed', (e, enabled) => { document.getElementById('autostart-label').textContent = enabled ? '✓ Launch at Login' : 'Launch at Login'; });
-    ipcRenderer.on('update-available', (e, version) => { document.getElementById('update-status').textContent = 'Update available: v' + version; });
     ipcRenderer.send('get-server-status');
     
     function renderFolders() {
       const list = document.getElementById('folder-list');
-      list.innerHTML = selectedFolders.length === 0 ? '<div style="color: var(--text-muted); padding: 8px; text-align: center;">No folders selected</div>' : selectedFolders.map((f, i) => '<div class="folder-item"><span title="' + f + '">' + f.split('/').pop() + '</span><button onclick="removeFolder(' + i + ')">✕</button></div>').join('');
+      list.innerHTML = selectedFolders.length === 0 ? '<div style="color: var(--text-muted); padding: 12px; text-align: center; font-size: 12px;">No folders selected</div>' : selectedFolders.map((f, i) => '<div class="folder-item"><span title="' + f + '">' + f + '</span><button onclick="removeFolder(' + i + ')">✕</button></div>').join('');
     }
     
     async function addFolder() {
@@ -977,50 +1676,87 @@ function showMainWindow() {
       if (paths && paths.length > 0) { paths.forEach(p => { if (!selectedFolders.includes(p)) selectedFolders.push(p); }); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
     }
     function removeFolder(i) { selectedFolders.splice(i, 1); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
+    window.removeFolder = removeFolder;
     function clearFolders() { selectedFolders = []; ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
-    const baseUploadsPath = "${uploadsPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}";
+    window.clearFolders = clearFolders;
+    window.addFolder = addFolder;
+    const baseUploadsPath = "${(uploadsPath || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}";
     
-    // Compute UUID v5 from email:password (same algorithm as mobile apps and sync)
-    function computeUserUuid(email, password) {
-      if (!email || !password) return null;
-      const normalizedEmail = email.trim().toLowerCase();
-      const input = normalizedEmail + ':' + password;
-      // Simple SHA-1 based UUID v5 computation (matches server-side)
-      const crypto = require('crypto');
-      const namespaceBytes = Buffer.from('6ba7b8109dad11d180b400c04fd430c8', 'hex');
-      const hash = crypto.createHash('sha1');
-      hash.update(namespaceBytes);
-      hash.update(input);
-      const bytes = hash.digest();
-      bytes[6] = (bytes[6] & 0x0f) | 0x50;
-      bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      const hex = bytes.slice(0, 16).toString('hex');
-      return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20, 32);
+    // Compute UUID v5 from email:password using SubtleCrypto (matches mobile app's uuid library)
+    // UUID v5 = SHA-1(namespace + name) with version/variant bits set
+    async function computeUserUuid(email, password) {
+      try {
+        if (!email || !password) return null;
+        const normalizedEmail = email.trim().toLowerCase();
+        const name = normalizedEmail + ':' + password;
+        
+        // DNS namespace UUID: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 (same as mobile)
+        const namespaceBytes = new Uint8Array([
+          0x6b, 0xa7, 0xb8, 0x10,
+          0x9d, 0xad,
+          0x11, 0xd1,
+          0x80, 0xb4,
+          0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+        ]);
+        
+        // Concatenate namespace + name for SHA-1
+        const encoder = new TextEncoder();
+        const nameBytes = encoder.encode(name);
+        const data = new Uint8Array(namespaceBytes.length + nameBytes.length);
+        data.set(namespaceBytes, 0);
+        data.set(nameBytes, namespaceBytes.length);
+        
+        const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+        const hashArray = new Uint8Array(hashBuffer);
+        
+        // Apply UUID v5 version (0101xxxx) and variant (10xxxxxx) bits
+        hashArray[6] = (hashArray[6] & 0x0f) | 0x50;
+        hashArray[8] = (hashArray[8] & 0x3f) | 0x80;
+        
+        const hex = Array.from(hashArray.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join('');
+        return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20, 32);
+      } catch (e) {
+        console.error('computeUserUuid error:', e);
+        return null;
+      }
     }
     
-    function getUserUploadsPath() {
+    let cachedUuid = null;
+    async function getUserUploadsPath() {
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      const uuid = computeUserUuid(email, password);
+      const uuid = await computeUserUuid(email, password);
       if (uuid) {
+        cachedUuid = uuid;
         return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + uuid;
       }
       return baseUploadsPath;
     }
+    function getUserUploadsPathSync() {
+      if (cachedUuid) {
+        return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + cachedUuid;
+      }
+      return baseUploadsPath;
+    }
     
-    function updateUploadsPathDisplay() {
+    async function updateUploadsPathDisplay() {
       const pathEl = document.getElementById('uploads-path');
-      pathEl.value = getUserUploadsPath();
+      pathEl.value = await getUserUploadsPath();
     }
     
     // Update path when email or password changes
-    document.getElementById('email').addEventListener('input', updateUploadsPathDisplay);
-    document.getElementById('password').addEventListener('input', updateUploadsPathDisplay);
-    updateUploadsPathDisplay(); // Initial update
+    try {
+      document.getElementById('email').addEventListener('input', updateUploadsPathDisplay);
+      document.getElementById('password').addEventListener('input', updateUploadsPathDisplay);
+      updateUploadsPathDisplay(); // Initial update
+    } catch (e) {
+      console.error('Event listener setup error:', e);
+    }
     
-    function openUploadsFolder() { ipcRenderer.send('open-folder', getUserUploadsPath()); }
-    function copyUploadsPath() { 
-      const pathToCopy = getUserUploadsPath();
+    async function openUploadsFolder() { ipcRenderer.send('open-folder', await getUserUploadsPath()); }
+    window.openUploadsFolder = openUploadsFolder;
+    async function copyUploadsPath() { 
+      const pathToCopy = await getUserUploadsPath();
       const btn = event.target;
       const originalText = btn.textContent;
       
@@ -1047,44 +1783,1171 @@ function showMainWindow() {
         showCopied();
       }
     }
-    function addUploadsToSources() { const p = getUserUploadsPath(); if (p && !selectedFolders.includes(p)) { selectedFolders.push(p); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); } }
+    async function addUploadsToSources() { const p = await getUserUploadsPath(); if (p && !selectedFolders.includes(p)) { selectedFolders.push(p); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); } }
+    window.copyUploadsPath = copyUploadsPath;
+    window.addUploadsToSources = addUploadsToSources;
     
-    function getConfig() {
-      const downloadPath = getUserUploadsPath(); // Use computed path with UUID, not input value
+    async function getConfig() {
+      const downloadPath = await getUserUploadsPath(); // Use computed path with UUID, not input value
       console.log('[getConfig] downloadPath:', downloadPath);
       return { destination: document.getElementById('destination').value, source: document.getElementById('destination').value, email: document.getElementById('email').value, password: document.getElementById('password').value, remoteAddress: document.getElementById('remote-address').value, remotePort: document.getElementById('remote-port').value || '3000', folders: selectedFolders, downloadPath: downloadPath };
     }
     
-    function startBackup() {
-      const config = getConfig();
+    // Inline progress helper functions
+    function showInlineProgress(type) {
+      const hero = document.getElementById('status-hero');
+      const icon = document.getElementById('status-icon');
+      const title = document.getElementById('status-title');
+      const subtitle = document.getElementById('status-subtitle');
+      const progress = document.getElementById('inline-progress');
+      const progressFill = document.getElementById('inline-progress-fill');
+      const progressText = document.getElementById('inline-progress-text');
+      const statusMsg = document.getElementById('inline-status-message');
+      
+      // Update classes for styling
+      hero.className = 'status-hero ' + type;
+      icon.className = 'status-icon ' + type;
+      title.className = 'status-title ' + type;
+      
+      // Update icon SVG
+      if (type === 'backing-up') {
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+        title.textContent = 'Backing Up...';
+        progressFill.className = 'inline-progress-fill';
+        progressText.className = 'inline-progress-text';
+      } else if (type === 'syncing') {
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+        title.textContent = 'Syncing...';
+        progressFill.className = 'inline-progress-fill syncing';
+        progressText.className = 'inline-progress-text syncing';
+      }
+      
+      // Show progress elements
+      subtitle.style.display = 'none';
+      progress.classList.add('visible');
+      progressFill.style.width = '0%';
+      progressText.textContent = '0%';
+      statusMsg.classList.add('visible');
+      statusMsg.textContent = 'Preparing...';
+    }
+    
+    function updateInlineProgress(percent, message) {
+      document.getElementById('inline-progress-fill').style.width = percent + '%';
+      document.getElementById('inline-progress-text').textContent = Math.round(percent) + '%';
+      document.getElementById('inline-status-message').textContent = message;
+    }
+    
+    function hideInlineProgress(success, message) {
+      const hero = document.getElementById('status-hero');
+      const icon = document.getElementById('status-icon');
+      const title = document.getElementById('status-title');
+      const subtitle = document.getElementById('status-subtitle');
+      const progress = document.getElementById('inline-progress');
+      const statusMsg = document.getElementById('inline-status-message');
+      
+      // Show completion message briefly
+      if (success) {
+        title.textContent = 'Complete!';
+        title.className = 'status-title running';
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>';
+        document.getElementById('inline-progress-fill').style.width = '100%';
+      } else {
+        title.textContent = 'Error';
+        title.className = 'status-title stopped';
+      }
+      statusMsg.textContent = message;
+      
+      // Reset to idle after delay
+      setTimeout(() => {
+        hero.className = 'status-hero';
+        icon.className = 'status-icon';
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>';
+        title.className = 'status-title';
+        title.textContent = 'Ready';
+        subtitle.style.display = 'inline-block';
+        progress.classList.remove('visible');
+        statusMsg.classList.remove('visible');
+      }, success ? 2000 : 3000);
+    }
+    
+    async function startBackup() {
+      const config = await getConfig();
       if (!config.email || !config.password) { alert('Please enter email and password'); return; }
       if (selectedFolders.length === 0) { alert('Please add at least one folder to backup'); return; }
       currentOperation = 'backup';
-      document.getElementById('progress-title').textContent = 'Backing Up...';
-      document.getElementById('progress-overlay').classList.add('visible');
+      showInlineProgress('backing-up');
       ipcRenderer.send('start-desktop-backup', config);
     }
+    window.startBackup = startBackup;
     
-    function startSync() {
-      const config = getConfig();
+    async function startSync() {
+      const config = await getConfig();
       if (!config.email || !config.password) { alert('Please enter email and password'); return; }
       currentOperation = 'sync';
-      document.getElementById('progress-title').textContent = 'Syncing...';
-      document.getElementById('progress-overlay').classList.add('visible');
+      showInlineProgress('syncing');
       ipcRenderer.send('start-desktop-sync', config);
     }
+    window.startSync = startSync;
     
     function cancelOperation() {
       ipcRenderer.send(currentOperation === 'backup' ? 'cancel-desktop-backup' : 'cancel-desktop-sync');
-      document.getElementById('progress-text').textContent = 'Cancelling...';
+      document.getElementById('inline-status-message').textContent = 'Cancelling...';
+    }
+    window.cancelOperation = cancelOperation;
+    
+    ipcRenderer.on('backup-progress', (e, d) => { updateInlineProgress(d.progress * 100, d.message); });
+    ipcRenderer.on('backup-complete', (e, d) => { hideInlineProgress(true, d.message); });
+    ipcRenderer.on('backup-error', (e, d) => { hideInlineProgress(false, 'Error: ' + d.message); });
+    ipcRenderer.on('sync-progress', (e, d) => { updateInlineProgress(d.progress * 100, d.message); });
+    ipcRenderer.on('sync-complete', (e, d) => { hideInlineProgress(true, d.message); });
+    ipcRenderer.on('sync-error', (e, d) => { hideInlineProgress(false, 'Error: ' + d.message); });
+    
+    // IPFS Gateways for standard NFT image loading (ipfs.io and pinata are most reliable)
+    const IPFS_GATEWAYS = [
+      'https://ipfs.io/ipfs/',              // Most reliable, follows redirects
+      'https://gateway.pinata.cloud/ipfs/', // Pinata - where most NFT images are hosted
+      'https://dweb.link/ipfs/',
+      'https://w3s.link/ipfs/',
+    ];
+    // cNFT-optimized gateways (same order - ipfs.io and pinata first)
+    const CNFT_IPFS_GATEWAYS = [
+      'https://ipfs.io/ipfs/',              // Most reliable, follows redirects
+      'https://gateway.pinata.cloud/ipfs/', // Pinata - where most NFT images are hosted
+      'https://w3s.link/ipfs/',
+      'https://nftstorage.link/ipfs/',
+    ];
+    const MAX_IPFS_RETRY_CYCLES = 1; // Single cycle through all gateways
+    const MAX_STEALTHCLOUD_RETRIES = 3; // Retry StealthCloud 3 times
+    const GATEWAY_RETRY_DELAY_MS = 10000; // 10 seconds between gateway attempts (matches mobile)
+    const IMAGE_LOAD_TIMEOUT_MS = 15000; // 15 seconds timeout (matches mobile)
+    
+    // Extract CID from any IPFS URL
+    function extractIPFSCid(url) {
+      if (!url) return null;
+      if (url.startsWith('ipfs://')) {
+        const rest = url.slice('ipfs://'.length);
+        const cid = rest.split('/')[0];
+        return cid || null;
+      }
+      const idx = url.indexOf('/ipfs/');
+      if (idx !== -1) {
+        const rest = url.slice(idx + '/ipfs/'.length);
+        const cid = rest.split('/')[0];
+        return cid || null;
+      }
+      return null;
+    }
+
+    function clearNFTImageTimeout(img) {
+      try {
+        if (img && img._nftLoadTimeout) {
+          clearTimeout(img._nftLoadTimeout);
+          img._nftLoadTimeout = null;
+        }
+      } catch (e) {}
+    }
+
+    function scheduleNFTImageTimeout(img) {
+      clearNFTImageTimeout(img);
+      if (!img) return;
+      img._nftLoadTimeout = setTimeout(() => {
+        if (img && img.dataset && img.dataset.loaded !== '1') {
+          handleNFTImageError(img, true);
+        }
+      }, IMAGE_LOAD_TIMEOUT_MS);
+    }
+
+    function setNFTImageSrc(img, nextUrl, immediate) {
+      if (!img) return;
+      img.dataset.loaded = '0';
+      img.dataset.lastSetAt = String(Date.now());
+      img.src = nextUrl;
+      scheduleNFTImageTimeout(img);
     }
     
-    ipcRenderer.on('backup-progress', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = (d.progress * 100) + '%'; });
-    ipcRenderer.on('backup-complete', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = '100%'; setTimeout(() => document.getElementById('progress-overlay').classList.remove('visible'), 2000); });
-    ipcRenderer.on('backup-error', (e, d) => { document.getElementById('progress-text').textContent = 'Error: ' + d.message; document.getElementById('progress-fill').style.background = 'var(--error)'; setTimeout(() => { document.getElementById('progress-overlay').classList.remove('visible'); document.getElementById('progress-fill').style.background = 'var(--accent)'; }, 3000); });
-    ipcRenderer.on('sync-progress', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = (d.progress * 100) + '%'; });
-    ipcRenderer.on('sync-complete', (e, d) => { document.getElementById('progress-text').textContent = d.message; document.getElementById('progress-fill').style.width = '100%'; setTimeout(() => document.getElementById('progress-overlay').classList.remove('visible'), 2000); });
-    ipcRenderer.on('sync-error', (e, d) => { document.getElementById('progress-text').textContent = 'Error: ' + d.message; document.getElementById('progress-fill').style.background = 'var(--error)'; setTimeout(() => { document.getElementById('progress-overlay').classList.remove('visible'); document.getElementById('progress-fill').style.background = 'var(--accent)'; }, 3000); });
+    // Check if URL is StealthCloud
+    function isStealthCloudUrl(url) {
+      if (!url) return false;
+      return url.includes('stealthlynk.io') || url.includes('nft.stealthlynk.io');
+    }
+    
+    // Handle NFT image load error with StealthCloud priority, then IPFS gateway retries
+    function handleNFTImageError(img, immediate) {
+      const originalUrl = img.dataset.originalUrl;
+      const fallbackUrl = img.dataset.fallbackUrl || '';
+      let gatewayIndex = parseInt(img.dataset.gatewayIndex) || 0;
+      let retryCount = parseInt(img.dataset.retryCount) || 0;
+      let source = img.dataset.source || 'primary';
+      const isCompressed = img.dataset.compressed === '1';
+      const wasCached = img.dataset.cached === '1';
+      // Use cNFT-optimized gateways for compressed NFTs
+      const gateways = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
+      
+      console.log('[NFT Album] Image error, source:', source, 'retry:', retryCount, 'gateway:', gatewayIndex, isCompressed ? '(cNFT)' : '', wasCached ? '(was cached)' : '');
+      
+      // If cached image failed, fall back to network URL
+      if (wasCached && source === 'primary') {
+        console.log('[NFT Album] Cached image failed, trying network');
+        img.dataset.cached = '0';
+        img.dataset.source = 'fallback';
+        img.dataset.gatewayIndex = 0;
+        const cid = extractIPFSCid(originalUrl);
+        if (cid) {
+          setNFTImageSrc(img, gateways[0] + cid, true);
+          return;
+        } else if (originalUrl) {
+          setNFTImageSrc(img, originalUrl, true);
+          return;
+        }
+      }
+      
+      if (source === 'primary') {
+        // Primary source failed (StealthCloud or direct URL)
+        if (isStealthCloudUrl(originalUrl)) {
+          if (retryCount < MAX_STEALTHCLOUD_RETRIES - 1) {
+            // Retry StealthCloud with cache buster
+            retryCount++;
+            img.dataset.retryCount = retryCount;
+            console.log('[NFT Album] StealthCloud retry', retryCount);
+            setTimeout(() => {
+              setNFTImageSrc(img, originalUrl + (originalUrl.includes('?') ? '&' : '?') + 'r=' + retryCount, false);
+            }, 3000);
+            return;
+          } else {
+            // StealthCloud exhausted, try IPFS fallback if available
+            const cid = extractIPFSCid(fallbackUrl);
+            if (cid) {
+              console.log('[NFT Album] StealthCloud failed, trying IPFS fallback');
+              img.dataset.source = 'fallback';
+              img.dataset.retryCount = 0;
+              img.dataset.gatewayIndex = 0;
+              setNFTImageSrc(img, gateways[0] + cid, true);
+              return;
+            }
+          }
+        } else {
+          // Primary is IPFS - try gateways
+          const cid = extractIPFSCid(originalUrl);
+          if (cid) {
+            const delayMs = immediate ? 0 : GATEWAY_RETRY_DELAY_MS;
+            setTimeout(() => {
+              if (gatewayIndex < gateways.length - 1) {
+                gatewayIndex++;
+                img.dataset.gatewayIndex = gatewayIndex;
+                setNFTImageSrc(img, gateways[gatewayIndex] + cid, immediate);
+                console.log('[NFT Album] IPFS gateway', gatewayIndex + 1, 'for', cid.slice(0, 8));
+              } else if (retryCount < MAX_IPFS_RETRY_CYCLES) {
+                gatewayIndex = 0;
+                retryCount++;
+                img.dataset.gatewayIndex = 0;
+                img.dataset.retryCount = retryCount;
+                setNFTImageSrc(img, gateways[0] + cid, immediate);
+                console.log('[NFT Album] IPFS retry cycle', retryCount + 1);
+              } else {
+                console.log('[NFT Album] IPFS failed for', cid.slice(0, 8));
+                img.style.opacity = '0.3';
+              }
+            }, delayMs);
+            return;
+          }
+        }
+      } else {
+        // Fallback source (IPFS gateways)
+        const cid = extractIPFSCid(fallbackUrl);
+        if (cid) {
+          const delayMs = immediate ? 0 : GATEWAY_RETRY_DELAY_MS;
+          setTimeout(() => {
+            if (gatewayIndex < gateways.length - 1) {
+              gatewayIndex++;
+              img.dataset.gatewayIndex = gatewayIndex;
+              setNFTImageSrc(img, gateways[gatewayIndex] + cid, immediate);
+            } else if (retryCount < MAX_IPFS_RETRY_CYCLES) {
+              gatewayIndex = 0;
+              retryCount++;
+              img.dataset.gatewayIndex = 0;
+              img.dataset.retryCount = retryCount;
+              setNFTImageSrc(img, gateways[0] + cid, immediate);
+            } else {
+              img.style.opacity = '0.3';
+            }
+          }, delayMs);
+          return;
+        }
+      }
+      
+      // No valid source found - show placeholder and hide spinner
+      console.log('[NFT Album] No valid image source, showing placeholder');
+      const spinner = img.parentElement ? img.parentElement.querySelector('.nft-spinner') : null;
+      if (spinner) spinner.style.display = 'none';
+      img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#1a1a1a" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="#666" font-size="24">⬡</text></svg>');
+      img.style.opacity = '0.5';
+    }
+    
+    // NFT State
+    let nftWalletAddress = null;
+    let selectedNFTType = 'compressed';
+    let selectedNFTStorage = 'cloud';
+    let selectedNFTPhoto = null;
+    let isMinting = false;
+    
+    // NFT Mint Panel Functions
+    async function openNFTMint() {
+      console.log('[NFT] openNFTMint called');
+      try {
+        const section = document.getElementById('nft-mint-section');
+        console.log('[NFT] section found:', !!section, 'current display:', section ? section.style.display : 'N/A');
+        // Always show it
+        section.style.display = 'block';
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (true) {
+          // Load fees
+          try {
+            const feesData = await ipcRenderer.invoke('get-nft-fees');
+            if (feesData && feesData.isPromo) {
+              document.getElementById('nft-promo-banner').style.display = 'block';
+              document.getElementById('promo-days').textContent = feesData.promoDaysRemaining;
+            }
+            if (feesData && feesData.fees) {
+              updateNFTPrices(feesData.fees);
+            }
+          } catch (e) {
+            console.error('Failed to load fees:', e);
+          }
+          updateMintWalletUI();
+        } else {
+          section.style.display = 'none';
+        }
+      } catch (e) {
+        console.error('openNFTMint error:', e);
+      }
+    }
+
+    // Ensure inline handler can access it immediately
+    window.openNFTMint = openNFTMint;
+    
+    function closeNFTMint() {
+      document.getElementById('nft-mint-section').style.display = 'none';
+      resetNFTMintForm();
+    }
+    
+    function resetNFTMintForm() {
+      selectedNFTPhoto = null;
+      document.getElementById('nft-photo-select').style.display = 'block';
+      document.getElementById('nft-photo-preview').style.display = 'none';
+      document.getElementById('nft-name-input').value = '';
+      document.getElementById('nft-desc-input').value = '';
+      updateMintButton();
+    }
+    
+    function updateNFTPrices(fees) {
+      const cnftPrice = selectedNFTStorage === 'cloud' ? fees.APP_COMMISSION_CNFT_CLOUD_USD : fees.APP_COMMISSION_CNFT_IPFS_USD;
+      const nftPrice = selectedNFTStorage === 'cloud' ? fees.APP_COMMISSION_STANDARD_CLOUD_USD : fees.APP_COMMISSION_STANDARD_IPFS_USD;
+      document.getElementById('cnft-price').textContent = '$' + cnftPrice.toFixed(2);
+      document.getElementById('nft-price').textContent = '$' + nftPrice.toFixed(2);
+      
+      // Update storage option fees based on selected NFT type
+      if (selectedNFTType === 'compressed') {
+        document.getElementById('cloud-fee').textContent = '$' + fees.APP_COMMISSION_CNFT_CLOUD_USD.toFixed(2);
+        document.getElementById('ipfs-fee').textContent = '$' + fees.APP_COMMISSION_CNFT_IPFS_USD.toFixed(2);
+      } else {
+        document.getElementById('cloud-fee').textContent = '$' + fees.APP_COMMISSION_STANDARD_CLOUD_USD.toFixed(2);
+        document.getElementById('ipfs-fee').textContent = '$' + fees.APP_COMMISSION_STANDARD_IPFS_USD.toFixed(2);
+      }
+    }
+    
+    function selectNFTType(type, el) {
+      selectedNFTType = type;
+      el.parentElement.querySelectorAll('.nft-option').forEach(o => o.classList.remove('selected'));
+      el.classList.add('selected');
+      ipcRenderer.invoke('get-nft-fees').then(data => { if (data && data.fees) updateNFTPrices(data.fees); }).catch(e => console.error('get-nft-fees error:', e));
+      updateMintButton();
+    }
+    
+    function selectNFTStorage(storage, el) {
+      selectedNFTStorage = storage;
+      el.parentElement.querySelectorAll('.nft-option').forEach(o => o.classList.remove('selected'));
+      el.classList.add('selected');
+      ipcRenderer.invoke('get-nft-fees').then(data => { if (data && data.fees) updateNFTPrices(data.fees); }).catch(e => console.error('get-nft-fees error:', e));
+      updateMintButton();
+    }
+    
+    async function selectNFTPhoto() {
+      try {
+        const paths = await ipcRenderer.invoke('select-photo-for-nft');
+        if (paths && paths.length > 0) {
+          selectedNFTPhoto = paths[0];
+          document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(selectedNFTPhoto);
+          document.getElementById('nft-photo-select').style.display = 'none';
+          document.getElementById('nft-photo-preview').style.display = 'block';
+          updateMintButton();
+        }
+      } catch (e) {
+        console.error('selectNFTPhoto error:', e);
+      }
+    }
+    
+    function removeNFTPhoto() {
+      selectedNFTPhoto = null;
+      document.getElementById('nft-photo-select').style.display = 'block';
+      document.getElementById('nft-photo-preview').style.display = 'none';
+      updateMintButton();
+    }
+    
+    let walletPollInterval = null;
+    
+    function connectNFTWallet() {
+      // Open browser directly
+      ipcRenderer.send('open-wallet-connect');
+      
+      // Update UI to show connecting
+      document.getElementById('mint-wallet-text').textContent = 'Connecting...';
+      
+      // Poll for wallet address
+      if (walletPollInterval) clearInterval(walletPollInterval);
+      walletPollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('http://localhost:3000/wallet-address');
+          const data = await res.json();
+          if (data.success && data.address) {
+            clearInterval(walletPollInterval);
+            walletPollInterval = null;
+            nftWalletAddress = data.address;
+            updateMintWalletUI();
+            loadNFTAlbum();
+            // Bring app window to front
+            if (data.bringToFront) {
+              ipcRenderer.send('bring-to-front');
+            }
+          }
+        } catch (e) { /* Server not ready */ }
+      }, 500);
+      
+      // Stop polling after 2 minutes
+      setTimeout(() => {
+        if (walletPollInterval) {
+          clearInterval(walletPollInterval);
+          walletPollInterval = null;
+          if (!nftWalletAddress) {
+            document.getElementById('mint-wallet-text').textContent = 'Connection timed out';
+          }
+        }
+      }, 120000);
+    }
+    
+    function updateMintWalletUI() {
+      const dot = document.getElementById('mint-wallet-dot');
+      const text = document.getElementById('mint-wallet-text');
+      if (nftWalletAddress) {
+        dot.classList.remove('disconnected');
+        text.textContent = nftWalletAddress.slice(0, 4) + '...' + nftWalletAddress.slice(-4);
+      } else {
+        dot.classList.add('disconnected');
+        text.textContent = 'No wallet connected';
+      }
+      updateMintButton();
+    }
+    
+    function updateMintButton() {
+      const btn = document.getElementById('nft-mint-btn');
+      btn.disabled = !selectedNFTPhoto || !nftWalletAddress || isMinting;
+    }
+    
+    async function doMintNFT() {
+      if (isMinting || !selectedNFTPhoto || !nftWalletAddress) return;
+      isMinting = true;
+      
+      const btn = document.getElementById('nft-mint-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Minting...';
+      
+      const name = document.getElementById('nft-name-input').value || 'PhotoLynk Memory';
+      const description = document.getElementById('nft-desc-input').value || '';
+      
+      try {
+        const result = await ipcRenderer.invoke('mint-nft', {
+          nftType: selectedNFTType,
+          storageOption: selectedNFTStorage,
+          filePath: selectedNFTPhoto,
+          name: name,
+          description: description,
+          walletAddress: nftWalletAddress,
+        });
+        
+        if (result.success) {
+          btn.innerHTML = '<span>✓</span> ' + (result.message || 'Complete payment in wallet');
+          btn.style.background = 'linear-gradient(135deg, #14F195 0%, #10B981 100%)';
+          setTimeout(() => {
+            closeNFTMint();
+            btn.style.background = '';
+            isMinting = false;
+          }, 3000);
+        } else {
+          throw new Error(result.error || 'Minting failed');
+        }
+      } catch (e) {
+        btn.innerHTML = '<span>✕</span> ' + (e.message || 'Failed');
+        btn.style.background = 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
+        setTimeout(() => {
+          isMinting = false;
+          btn.style.background = '';
+          btn.innerHTML = '<span>⬡</span> Mint NFT';
+          updateMintButton();
+        }, 3000);
+      }
+    }
+    
+    ipcRenderer.on('mint-progress', (e, data) => {
+      document.getElementById('nft-mint-btn').innerHTML = '<span>⏳</span> ' + data.status;
+    });
+    
+    // Poll for mint success from browser
+    let mintSuccessPollInterval = null;
+    function startMintSuccessPoll() {
+      if (mintSuccessPollInterval) clearInterval(mintSuccessPollInterval);
+      mintSuccessPollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('http://localhost:3000/nft-mint-success');
+          const data = await res.json();
+          if (data.success) {
+            clearInterval(mintSuccessPollInterval);
+            mintSuccessPollInterval = null;
+            showMintSuccessPopup(data);
+          }
+        } catch (e) { /* Server not ready */ }
+      }, 1000);
+      
+      // Stop polling after 5 minutes
+      setTimeout(() => {
+        if (mintSuccessPollInterval) {
+          clearInterval(mintSuccessPollInterval);
+          mintSuccessPollInterval = null;
+        }
+      }, 300000);
+    }
+    
+    function showMintSuccessPopup(data) {
+      // Bring window to front
+      ipcRenderer.send('bring-to-front');
+      
+      // Create success overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'mint-success-overlay';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+      
+      const popup = document.createElement('div');
+      popup.style.cssText = 'background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border:1px solid #14F195;border-radius:20px;padding:24px;max-width:400px;width:100%;text-align:center;box-shadow:0 0 60px rgba(20,241,149,0.3);';
+      
+      const solAmount = data.amount ? data.amount.toFixed(6) : '0';
+      const usdAmount = data.amount ? (data.amount * 200).toFixed(2) : '0'; // Approximate USD
+      
+      var nftTypeLabel = data.nftType === 'compressed' ? 'Compressed NFT (cNFT)' : 'Standard NFT';
+      var imageHtml = data.imageUrl ? '<img src="' + data.imageUrl + '" style="width:120px;height:120px;border-radius:12px;object-fit:cover;margin-bottom:20px;border:2px solid #9945FF;">' : '';
+      var mintAddressHtml = data.mintAddress ? '<div style="display:flex;justify-content:space-between;margin-top:8px;"><span style="color:#888;font-size:12px;">Mint Address</span><span style="color:#fff;font-size:10px;font-family:monospace;">' + data.mintAddress.slice(0,8) + '...' + data.mintAddress.slice(-4) + '</span></div>' : '';
+      
+      popup.innerHTML = '<div style="font-size:64px;margin-bottom:16px;">🎉</div>' +
+        '<h2 style="color:#14F195;font-size:24px;margin-bottom:8px;">NFT Minted!</h2>' +
+        '<p style="color:#888;font-size:14px;margin-bottom:20px;">' + nftTypeLabel + '</p>' +
+        imageHtml +
+        '<div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;margin-bottom:20px;text-align:left;">' +
+          '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">' +
+            '<span style="color:#888;font-size:12px;">Total Spent</span>' +
+            '<span style="color:#14F195;font-size:14px;font-weight:600;">' + solAmount + ' SOL (~$' + usdAmount + ')</span>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">' +
+            '<span style="color:#888;font-size:12px;">Payment TX</span>' +
+            '<a href="https://solscan.io/tx/' + data.paymentTx + '" target="_blank" style="color:#9945FF;font-size:12px;text-decoration:none;">' + data.paymentTx.slice(0,8) + '...' + data.paymentTx.slice(-4) + ' ↗</a>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;">' +
+            '<span style="color:#888;font-size:12px;">Mint TX</span>' +
+            '<a href="https://solscan.io/tx/' + data.mintTx + '" target="_blank" style="color:#9945FF;font-size:12px;text-decoration:none;">' + data.mintTx.slice(0,8) + '...' + data.mintTx.slice(-4) + ' ↗</a>' +
+          '</div>' +
+          mintAddressHtml +
+        '</div>' +
+        '<button onclick="this.parentElement.parentElement.remove()" style="width:100%;padding:14px;border:none;border-radius:10px;background:linear-gradient(135deg,#14F195 0%,#10B981 100%);color:#000;font-size:16px;font-weight:600;cursor:pointer;">' +
+          'Awesome! 🚀' +
+        '</button>';
+      
+      overlay.appendChild(popup);
+      document.body.appendChild(overlay);
+      
+      // Close NFT mint section
+      closeNFTMint();
+      
+      // Refresh album
+      loadNFTAlbum();
+    }
+    
+    // Start polling when minting starts
+    ipcRenderer.on('mint-progress', () => {
+      if (!mintSuccessPollInterval) startMintSuccessPoll();
+    });
+    
+    // NFT Album Functions
+    function openNFTAlbum() {
+      console.log('[NFT] openNFTAlbum called');
+      const overlay = document.getElementById('nft-album-overlay');
+      if (overlay) {
+        overlay.classList.add('active');
+      }
+      loadNFTAlbum();
+    }
+    
+    function closeNFTAlbum() {
+      const overlay = document.getElementById('nft-album-overlay');
+      if (overlay) {
+        overlay.classList.remove('active');
+      }
+      stopNFTAutoRefresh();
+    }
+    
+    // Scroll to show NFT grid with navigation buttons visible
+    function scrollToNFTGrid() {
+      const nav = document.getElementById('nft-nav');
+      if (nav) {
+        // Scroll so navigation buttons are visible at bottom
+        nav.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      } else {
+        const section = document.getElementById('nft-album-section');
+        if (section) {
+          section.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+      }
+    }
+    
+    let allNFTs = [];
+    let nftPageIndex = 0;
+    const NFT_PAGE_SIZE = 6; // 2x3 grid
+    let nftAutoRefreshInterval = null;
+    const NFT_AUTO_REFRESH_MS = 60000; // Check for new NFTs every 60 seconds
+    
+    // Start auto-refresh when album is open
+    function startNFTAutoRefresh() {
+      if (nftAutoRefreshInterval) return;
+      nftAutoRefreshInterval = setInterval(async () => {
+        if (!nftWalletAddress) return;
+        console.log('[NFT Album] Auto-checking for new NFTs...');
+        try {
+          const result = await ipcRenderer.invoke('fetch-user-nfts', nftWalletAddress, 1000);
+          if (result && result.success && result.nfts) {
+            const newCount = result.nfts.length;
+            const oldCount = allNFTs.length;
+            if (newCount > oldCount) {
+              console.log('[NFT Album] Found', newCount - oldCount, 'new NFT(s)!');
+              allNFTs = result.nfts;
+              renderNFTPage();
+            }
+          }
+        } catch (e) {
+          console.log('[NFT Album] Auto-refresh error:', e.message);
+        }
+      }, NFT_AUTO_REFRESH_MS);
+      console.log('[NFT Album] Auto-refresh started (every', NFT_AUTO_REFRESH_MS/1000, 'seconds)');
+    }
+    
+    function stopNFTAutoRefresh() {
+      if (nftAutoRefreshInterval) {
+        clearInterval(nftAutoRefreshInterval);
+        nftAutoRefreshInterval = null;
+        console.log('[NFT Album] Auto-refresh stopped');
+      }
+    }
+    
+    async function loadNFTAlbum() {
+      try {
+        const grid = document.getElementById('nft-grid');
+        const loading = document.getElementById('nft-loading');
+        const empty = document.getElementById('nft-empty');
+        
+        grid.innerHTML = '';
+        loading.style.display = 'flex';
+        empty.style.display = 'none';
+        allNFTs = [];
+        nftPageIndex = 0;
+        
+        if (!nftWalletAddress) {
+          loading.style.display = 'none';
+          empty.innerHTML = '<span>Connect wallet to view NFTs</span><button onclick="connectNFTWallet()" style="margin-top:8px;padding:8px 16px;border-radius:8px;border:1px solid #9945FF;background:transparent;color:#9945FF;cursor:pointer;">Connect Wallet</button>';
+          empty.style.display = 'flex';
+          return;
+        }
+        
+        // Fetch ALL NFTs (limit 1000)
+        const result = await ipcRenderer.invoke('fetch-user-nfts', nftWalletAddress, 1000);
+        loading.style.display = 'none';
+        
+        if (result && result.success && result.nfts && result.nfts.length > 0) {
+          allNFTs = result.nfts;
+          console.log('[NFT Album] Total NFTs:', allNFTs.length);
+          renderNFTPage();
+          // Start auto-refresh to detect new NFTs
+          startNFTAutoRefresh();
+        } else {
+          empty.innerHTML = '<span>No NFTs yet. Mint your first memory!</span>';
+          empty.style.display = 'flex';
+          // Still start auto-refresh to detect when first NFT is minted
+          startNFTAutoRefresh();
+        }
+      } catch (e) {
+        console.error('loadNFTAlbum error:', e);
+      }
+    }
+    
+    // Retry fetching image from metadata for NFTs that failed initial load
+    async function retryNFTImageFromMetadata(nftIndex, metadataUrl, itemElement, nftName, isCompressed) {
+      console.log('[NFT Album] Retrying image fetch for', nftName, 'from metadata');
+      try {
+        const result = await ipcRenderer.invoke('fetch-nft-image-from-metadata', metadataUrl, isCompressed);
+        if (result && result.imageUrl) {
+          console.log('[NFT Album] Got image for', nftName, ':', result.imageUrl.slice(0, 50));
+          // Update the NFT in allNFTs array
+          if (allNFTs[nftIndex]) {
+            allNFTs[nftIndex].image = result.imageUrl;
+            allNFTs[nftIndex].imageUrl = result.imageUrl;
+          }
+          // Update the item element with the image
+          const gateways = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
+          const cid = extractIPFSCid(result.imageUrl);
+          const primaryUrl = cid ? gateways[0] + cid : result.imageUrl;
+          
+          itemElement.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div><img style="opacity:0;transition:opacity 0.3s;" data-original-url="' + result.imageUrl + '" data-fallback-url="' + result.imageUrl + '" data-gateway-index="0" data-retry-count="0" data-source="primary" data-compressed="' + (isCompressed ? '1' : '0') + '" src="' + primaryUrl + '"><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+          
+          const img = itemElement.querySelector('img');
+          const spinner = itemElement.querySelector('.nft-spinner');
+          if (img) {
+            img.onload = () => { 
+              img.style.opacity = '1';
+              if (spinner) spinner.style.display = 'none';
+            };
+            img.onerror = () => { handleNFTImageError(img, false); };
+            scheduleNFTImageTimeout(img);
+          }
+        } else {
+          console.log('[NFT Album] No image found for', nftName, '- metadata may not have image field');
+          itemElement.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.04);cursor:pointer;" onclick="retrySingleNFT(' + nftIndex + ')"><div style="padding:8px;text-align:center;font-size:10px;color:var(--text-muted);">No image</div><div style="font-size:9px;color:var(--accent);">Tap to retry</div></div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+        }
+      } catch (e) {
+        console.error('[NFT Album] Retry failed for', nftName, e);
+        itemElement.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.04);cursor:pointer;" onclick="retrySingleNFT(' + nftIndex + ')"><div style="padding:8px;text-align:center;font-size:10px;color:var(--text-muted);">Load failed</div><div style="font-size:9px;color:var(--accent);">Tap to retry</div></div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+      }
+    }
+    
+    // Retry a single NFT's image without resetting the page
+    function retrySingleNFT(nftIndex) {
+      const nft = allNFTs[nftIndex];
+      if (!nft) return;
+      
+      const metadataUrl = nft.metadataUrl || '';
+      const nftName = nft.name || 'NFT #' + (nftIndex + 1);
+      const isCompressed = nft.isCompressed === true;
+      
+      // Find the item element in the grid
+      const grid = document.getElementById('nft-grid');
+      const startIdx = nftPageIndex * NFT_PAGE_SIZE;
+      const localIdx = nftIndex - startIdx;
+      const itemElement = grid.children[localIdx];
+      
+      if (!itemElement) {
+        console.log('[NFT Album] Cannot find item element for index', nftIndex);
+        return;
+      }
+      
+      console.log('[NFT Album] Retrying single NFT:', nftName, 'index:', nftIndex);
+      
+      if (metadataUrl) {
+        // Show spinner and retry
+        itemElement.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div><div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:var(--text-muted);">Retrying...</div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+        retryNFTImageFromMetadata(nftIndex, metadataUrl, itemElement, nftName, isCompressed);
+      } else {
+        // No metadata URL - show error
+        itemElement.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.04);"><div style="padding:8px;text-align:center;font-size:10px;color:var(--text-muted);">No metadata</div></div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+      }
+    }
+    window.retrySingleNFT = retrySingleNFT;
+    
+    // NFT Detail View
+    let currentDetailNFT = null;
+    
+    function openNFTDetail(nftIndex) {
+      const nft = allNFTs[nftIndex];
+      if (!nft) return;
+      
+      currentDetailNFT = { ...nft, index: nftIndex };
+      const isCompressed = nft.isCompressed === true;
+      
+      // Set image
+      const imgEl = document.getElementById('nft-detail-img');
+      const imageUrl = nft.cachedPath ? 'file://' + nft.cachedPath : (nft.image || nft.imageUrl || '');
+      imgEl.src = imageUrl;
+      
+      // Set image container class for shadow
+      const imageContainer = document.getElementById('nft-detail-image');
+      imageContainer.className = 'nft-detail-image ' + (isCompressed ? 'compressed' : 'standard');
+      
+      // Set badge
+      const badge = document.getElementById('nft-detail-badge');
+      badge.className = 'nft-detail-badge ' + (isCompressed ? 'cnft' : 'standard');
+      badge.textContent = isCompressed ? 'Compressed' : 'Standard';
+      
+      // Set details
+      const mintAddr = nft.assetId || nft.mintAddress || nft.mint || '';
+      document.getElementById('nft-detail-name').textContent = nft.name || 'Unnamed NFT';
+      document.getElementById('nft-detail-collection').textContent = nft.collection || 'PhotoLynk Memories';
+      document.getElementById('nft-detail-description').textContent = nft.description || 'A precious memory minted as an NFT on Solana blockchain.';
+      document.getElementById('nft-detail-type').textContent = isCompressed ? 'Compressed NFT (cNFT)' : 'Standard NFT';
+      document.getElementById('nft-detail-mint').textContent = mintAddr ? (mintAddr.slice(0, 8) + '...' + mintAddr.slice(-8)) : 'N/A';
+      document.getElementById('nft-detail-owner').textContent = nftWalletAddress ? (nftWalletAddress.slice(0, 8) + '...' + nftWalletAddress.slice(-8)) : 'N/A';
+      
+      // Store mint address for verify/transfer
+      currentDetailNFT.mintAddress = mintAddr;
+      
+      // Show overlay
+      document.getElementById('nft-detail-overlay').classList.add('active');
+    }
+    
+    function closeNFTDetail() {
+      document.getElementById('nft-detail-overlay').classList.remove('active');
+      currentDetailNFT = null;
+    }
+    
+    function verifyNFTOnChain() {
+      const mintAddr = currentDetailNFT?.mintAddress || currentDetailNFT?.assetId || currentDetailNFT?.mint;
+      if (!mintAddr) {
+        alert('No mint address available');
+        return;
+      }
+      // Open Solana Explorer
+      const explorerUrl = 'https://explorer.solana.com/address/' + mintAddr + '?cluster=mainnet';
+      require('electron').shell.openExternal(explorerUrl);
+    }
+    
+    function openNFTTransfer() {
+      if (!currentDetailNFT) return;
+      
+      const isCompressed = currentDetailNFT.isCompressed === true;
+      const imageUrl = currentDetailNFT.cachedPath ? 'file://' + currentDetailNFT.cachedPath : (currentDetailNFT.image || currentDetailNFT.imageUrl || '');
+      
+      document.getElementById('nft-transfer-img').src = imageUrl;
+      document.getElementById('nft-transfer-name').textContent = currentDetailNFT.name || 'Unnamed NFT';
+      document.getElementById('nft-transfer-type').textContent = isCompressed ? 'Compressed NFT' : 'Standard NFT';
+      document.getElementById('nft-transfer-recipient').value = '';
+      
+      // Set estimated cost (cNFTs are cheaper to transfer)
+      const cost = isCompressed ? '~0.00001 SOL' : '~0.000005 SOL';
+      document.getElementById('nft-transfer-cost').textContent = cost;
+      
+      document.getElementById('nft-transfer-modal').classList.add('active');
+    }
+    
+    function closeNFTTransfer() {
+      document.getElementById('nft-transfer-modal').classList.remove('active');
+    }
+    
+    async function confirmNFTTransfer() {
+      const recipient = document.getElementById('nft-transfer-recipient').value.trim();
+      
+      if (!recipient) {
+        alert('Please enter a recipient wallet address');
+        return;
+      }
+      
+      // Validate Solana address (base58, 32-44 chars)
+      if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipient)) {
+        alert('Invalid Solana wallet address');
+        return;
+      }
+      
+      if (!currentDetailNFT) {
+        alert('No NFT selected');
+        return;
+      }
+      
+      if (!nftWalletAddress) {
+        alert('Please connect your wallet first');
+        return;
+      }
+      
+      const confirmBtn = document.querySelector('.nft-transfer-actions .nft-action-btn.primary');
+      
+      try {
+        confirmBtn.textContent = 'Building TX...';
+        confirmBtn.disabled = true;
+        
+        const mintAddr = currentDetailNFT.mintAddress || currentDetailNFT.assetId || currentDetailNFT.mint;
+        const isCompressed = currentDetailNFT.isCompressed === true;
+        const actualMint = isCompressed ? mintAddr.replace('cnft_', '') : mintAddr;
+        
+        // Build the transaction in the renderer using web3.js from window
+        confirmBtn.textContent = 'Preparing TX...';
+        
+        // Request transaction building from main process
+        const txResult = await ipcRenderer.invoke('build-nft-transfer-tx', {
+          mint: actualMint,
+          from: nftWalletAddress,
+          to: recipient,
+          isCompressed: isCompressed
+        });
+        
+        if (!txResult.success) {
+          throw new Error(txResult.error || 'Failed to build transaction');
+        }
+        
+        confirmBtn.textContent = 'Opening Phantom...';
+        
+        // Open browser to sign the transaction via Phantom
+        // The transaction is base64 encoded and will be signed in browser
+        ipcRenderer.send('open-nft-transfer', {
+          transaction: txResult.transaction,
+          mint: actualMint,
+          recipient: recipient,
+          isVersioned: txResult.isVersioned || false
+        });
+        
+        // Poll for transfer completion
+        let transferPollInterval = setInterval(async () => {
+          try {
+            const res = await fetch('http://localhost:3000/nft-transfer-status');
+            const data = await res.json();
+            if (data.completed) {
+              clearInterval(transferPollInterval);
+              // Bring app window to front
+              ipcRenderer.send('focus-window');
+              if (data.success) {
+                showTransferSuccessModal(data.signature);
+                closeNFTTransfer();
+                closeNFTDetail();
+                refreshNFTAlbum();
+              } else {
+                alert('Transfer failed: ' + (data.error || 'Unknown error'));
+              }
+              confirmBtn.innerHTML = 'Confirm Transfer';
+              confirmBtn.disabled = false;
+            }
+          } catch (e) { /* Server not ready */ }
+        }, 1000);
+        
+        // Stop polling after 3 minutes
+        setTimeout(() => {
+          clearInterval(transferPollInterval);
+          confirmBtn.innerHTML = 'Confirm Transfer';
+          confirmBtn.disabled = false;
+        }, 180000);
+        
+        return; // Don't run finally block yet
+        
+      } catch (e) {
+        console.error('[NFT Transfer] Error:', e);
+        if (e.message?.includes('User rejected') || e.code === 4001) {
+          alert('Transaction cancelled by user');
+        } else {
+          alert('Transfer failed: ' + e.message);
+        }
+      } finally {
+        confirmBtn.innerHTML = 'Confirm Transfer';
+        confirmBtn.disabled = false;
+      }
+    }
+    
+    window.openNFTDetail = openNFTDetail;
+    window.closeNFTDetail = closeNFTDetail;
+    window.verifyNFTOnChain = verifyNFTOnChain;
+    window.openNFTTransfer = openNFTTransfer;
+    window.closeNFTTransfer = closeNFTTransfer;
+    window.confirmNFTTransfer = confirmNFTTransfer;
+    
+    function showTransferSuccessModal(signature) {
+      const solscanUrl = 'https://solscan.io/tx/' + signature;
+      const shortSig = signature.slice(0, 16) + '...' + signature.slice(-16);
+      
+      // Create modal overlay
+      const modal = document.createElement('div');
+      modal.id = 'transfer-success-modal';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+      modal.innerHTML = \`
+        <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:20px;padding:32px;max-width:360px;width:100%;text-align:center;border:1px solid rgba(20,241,149,0.3);box-shadow:0 20px 60px rgba(20,241,149,0.2);">
+          <div style="font-size:56px;margin-bottom:16px;">✅</div>
+          <h2 style="color:#14F195;font-size:22px;margin-bottom:8px;">Transfer Successful!</h2>
+          <p style="color:#888;font-size:13px;margin-bottom:20px;">Your NFT has been transferred to the new owner.</p>
+          
+          <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;margin-bottom:20px;text-align:left;">
+            <div style="color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px;">Transaction Signature</div>
+            <div style="color:#fff;font-size:12px;font-family:monospace;word-break:break-all;">\${shortSig}</div>
+          </div>
+          
+          <button onclick="require('electron').shell.openExternal('\${solscanUrl}')" style="width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#14F195 0%,#0ea66a 100%);color:#000;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;">
+            <span>🔗</span> View on Solscan
+          </button>
+          
+          <button onclick="document.getElementById('transfer-success-modal').remove()" style="width:100%;padding:12px;border:1px solid rgba(255,255,255,0.2);border-radius:12px;background:transparent;color:#888;font-size:13px;cursor:pointer;">
+            Close
+          </button>
+        </div>
+      \`;
+      document.body.appendChild(modal);
+    }
+    window.showTransferSuccessModal = showTransferSuccessModal;
+    
+    function renderNFTPage() {
+      const grid = document.getElementById('nft-grid');
+      grid.innerHTML = '';
+      
+      const startIdx = nftPageIndex * NFT_PAGE_SIZE;
+      const batch = allNFTs.slice(startIdx, startIdx + NFT_PAGE_SIZE);
+      
+      batch.forEach((nft, i) => {
+        const item = document.createElement('div');
+        const isCompressed = nft.isCompressed === true;
+        const globalIdx = startIdx + i;
+        item.className = 'nft-item ' + (isCompressed ? 'compressed' : 'standard');
+        item.onclick = () => openNFTDetail(globalIdx);
+        const imageUrl = nft.image || nft.imageUrl || '';
+        const originalUrl = nft.imageUrl || imageUrl;  // Keep original for fallback
+        const nftName = nft.name || 'NFT #' + (startIdx + i + 1);
+        const isCached = nft.cachedPath && imageUrl.startsWith('/');
+        
+        if (!imageUrl) {
+          // Show spinner and try to fetch image from metadata URL
+          const metadataUrl = nft.metadataUrl || '';
+          const nftIndex = startIdx + i;
+          // Always try to fetch if we have metadata URL (even if previous attempt failed)
+          if (metadataUrl) {
+            item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div><div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:var(--text-muted);">Loading...</div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+            grid.appendChild(item);
+            // Try to fetch image from metadata in background
+            console.log('[NFT Album] No image for', nftName, '- retrying from metadata:', metadataUrl.slice(0, 50));
+            retryNFTImageFromMetadata(nftIndex, metadataUrl, item, nftName, isCompressed);
+          } else {
+            // No metadata URL either - show placeholder with retry button
+            const globalIdx = startIdx + i;
+            item.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.04);cursor:pointer;" onclick="retrySingleNFT(' + globalIdx + ')"><div style="padding:8px;text-align:center;font-size:10px;color:var(--text-muted);">No image</div><div style="font-size:9px;color:var(--accent);">Tap to retry</div></div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+            grid.appendChild(item);
+          }
+          return;
+        }
+        
+        // Use cached local file if available, otherwise use IPFS gateway
+        let primaryUrl = imageUrl;
+        if (isCached) {
+          // Local file path - use file:// protocol
+          primaryUrl = 'file://' + imageUrl;
+          console.log('[NFT Album] Using cached:', nftName);
+        } else {
+          const cid = extractIPFSCid(imageUrl);
+          if (cid) {
+            const gateways = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
+            primaryUrl = gateways[0] + cid;
+          }
+          console.log('[NFT Album] Loading', nftName, (isCompressed ? '(cNFT)' : ''), ':', primaryUrl.slice(0, 50) + '...');
+        }
+        
+        // Add loading spinner that shows until image loads, with badge for compressed/standard
+        const badgeHtml = isCompressed 
+          ? '<div class="nft-badge nft-badge-cnft"><span class="badge-text">cN</span></div>' 
+          : '<div class="nft-badge nft-badge-standard"><span class="badge-hex">⬡</span></div>';
+        item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div>' + badgeHtml + '<img style="opacity:0;transition:opacity 0.3s;" data-original-url="' + originalUrl + '" data-fallback-url="' + originalUrl + '" data-gateway-index="0" data-retry-count="0" data-source="primary" data-compressed="' + (isCompressed ? '1' : '0') + '" data-cached="' + (isCached ? '1' : '0') + '" src="' + primaryUrl + '"><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+        grid.appendChild(item);
+
+        const img = item.querySelector('img');
+        const spinner = item.querySelector('.nft-spinner');
+        if (img) {
+          img.dataset.loaded = '0';
+          img.onload = () => { 
+            img.dataset.loaded = '1'; 
+            img.style.opacity = '1';
+            if (spinner) spinner.style.display = 'none';
+            clearNFTImageTimeout(img); 
+          };
+          img.onerror = () => { clearNFTImageTimeout(img); handleNFTImageError(img, false); };
+          // Skip timeout for cached images - they load instantly
+          if (!isCached) scheduleNFTImageTimeout(img);
+        }
+      });
+      
+      updateNFTNavigation();
+      
+      // Scroll to show the grid and navigation after content renders
+      setTimeout(() => scrollToNFTGrid(), 300);
+    }
+    
+    function updateNFTNavigation() {
+      let navContainer = document.getElementById('nft-nav');
+      if (!navContainer) return;
+      
+      const totalPages = Math.ceil(allNFTs.length / NFT_PAGE_SIZE);
+      const currentPage = nftPageIndex + 1;
+      const hasPrev = nftPageIndex > 0;
+      const hasNext = nftPageIndex < totalPages - 1;
+      
+      // Solana app style navigation buttons
+      const prevBtnStyle = hasPrev 
+        ? 'flex:1;padding:12px;border:1px solid #9945FF;border-radius:10px;background:rgba(153,69,255,0.1);color:#9945FF;cursor:pointer;font-size:13px;font-weight:500;' 
+        : 'flex:1;padding:12px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text-muted);cursor:default;font-size:13px;font-weight:500;';
+      const nextBtnStyle = hasNext 
+        ? 'flex:1;padding:12px;border:1px solid #9945FF;border-radius:10px;background:rgba(153,69,255,0.1);color:#9945FF;cursor:pointer;font-size:13px;font-weight:500;' 
+        : 'flex:1;padding:12px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text-muted);cursor:default;font-size:13px;font-weight:500;';
+      navContainer.innerHTML = '<button onclick="nftPrevPage()" style="' + prevBtnStyle + '"' + (hasPrev ? '' : ' disabled') + '>‹ Prev</button><span style="font-size:12px;color:var(--text-secondary);font-weight:500;">' + currentPage + ' / ' + totalPages + '</span><button onclick="nftNextPage()" style="' + nextBtnStyle + '"' + (hasNext ? '' : ' disabled') + '>Next ›</button>';
+    }
+    
+    function nftPrevPage() {
+      if (nftPageIndex > 0) {
+        nftPageIndex--;
+        renderNFTPage();
+      }
+    }
+    
+    function nftNextPage() {
+      const totalPages = Math.ceil(allNFTs.length / NFT_PAGE_SIZE);
+      if (nftPageIndex < totalPages - 1) {
+        nftPageIndex++;
+        renderNFTPage();
+      }
+    }
+    
+    window.nftPrevPage = nftPrevPage;
+    window.nftNextPage = nftNextPage;
+    
+    async function refreshNFTAlbum() { 
+      console.log('[NFT Album] Refreshing - clearing cache and rescanning...');
+      try {
+        await ipcRenderer.invoke('clear-nft-cache');
+        console.log('[NFT Album] Cache cleared');
+      } catch (e) {
+        console.log('[NFT Album] Cache clear failed:', e.message);
+      }
+      loadNFTAlbum(); 
+    }
+
+    // Ensure inline handlers (onclick/onerror) can access NFT functions
+    window.openNFTMint = openNFTMint;
+    window.closeNFTMint = closeNFTMint;
+    window.selectNFTType = selectNFTType;
+    window.selectNFTStorage = selectNFTStorage;
+    window.selectNFTPhoto = selectNFTPhoto;
+    window.removeNFTPhoto = removeNFTPhoto;
+    window.connectNFTWallet = connectNFTWallet;
+    window.doMintNFT = doMintNFT;
+    window.openNFTAlbum = openNFTAlbum;
+    window.closeNFTAlbum = closeNFTAlbum;
+    window.refreshNFTAlbum = refreshNFTAlbum;
+    window.handleNFTImageError = handleNFTImageError;
+
+    // Ensure other inline handlers work reliably
+    window.showView = showView;
+    window.startBackup = startBackup;
+    window.startSync = startSync;
+    window.cancelOperation = cancelOperation;
+    window.selectDestination = selectDestination;
+    window.addFolder = addFolder;
+    window.removeFolder = removeFolder;
+    window.clearFolders = clearFolders;
+    window.openUploadsFolder = openUploadsFolder;
+    window.copyUploadsPath = copyUploadsPath;
+    window.addUploadsToSources = addUploadsToSources;
+    
+    ipcRenderer.on('wallet-connected', (e, address) => {
+      nftWalletAddress = address;
+      updateMintWalletUI();
+      loadNFTAlbum();
+    });
   </script>
 </body>
 </html>`;
@@ -1100,6 +2963,9 @@ function showMainWindow() {
   });
   mainWindow.on('ready-to-show', () => { mainWindow.show(); });
   mainWindow.setMenuBarVisibility(false);
+  
+  // DevTools disabled for production
+  // mainWindow.webContents.openDevTools({ mode: 'detach' });
 }
 
 function showQRCodeWindow() {
@@ -1123,7 +2989,8 @@ function showQRCodeWindow() {
     title: 'Connect Mobile',
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      webSecurity: false
     }
   });
   
@@ -1392,6 +3259,211 @@ ipcMain.on('toggle-autostart', (event) => {
   }
 });
 
+// ============================================================================
+// NFT IPC HANDLERS
+// ============================================================================
+
+let connectedWalletAddress = null;
+
+// Initialize NFT module on app ready
+app.whenReady().then(() => {
+  const appDataPath = app.getPath('userData');
+  nftDesktop.initCache(appDataPath);
+  nftDesktop.initNFTStorage(appDataPath);
+  nftDesktop.initializeSolana();
+});
+
+ipcMain.on('open-nft-mint', () => {
+  const credentials = store.get('backupCredentials') || {};
+  nftDesktop.openNFTMintWindow(app.getPath('userData'), credentials);
+});
+
+ipcMain.on('open-nft-album', () => {
+  nftDesktop.openNFTAlbumWindow(app.getPath('userData'), connectedWalletAddress);
+});
+
+ipcMain.on('open-wallet-connect', () => {
+  // Skip the popup - open browser directly for Phantom connection
+  const { shell } = require('electron');
+  shell.openExternal('http://localhost:3000/wallet-connect');
+});
+
+ipcMain.on('open-nft-transfer', (event, { transaction, mint, recipient, isVersioned }) => {
+  // Open browser to sign the NFT transfer transaction via Phantom
+  const { shell } = require('electron');
+  const params = new URLSearchParams({
+    tx: transaction,
+    mint: mint,
+    to: recipient,
+    versioned: isVersioned ? '1' : '0'
+  });
+  shell.openExternal('http://localhost:3000/nft-transfer-sign?' + params.toString());
+});
+
+ipcMain.on('focus-window', () => {
+  // Bring the main window to front after transfer completes
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+ipcMain.handle('select-photo-for-nft', async () => {
+  const parentWindow = mainWindow || null;
+  const result = await dialog.showOpenDialog(parentWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'] }
+    ],
+    title: 'Select Photo for NFT'
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths;
+});
+
+ipcMain.handle('fetch-user-nfts', async (event, walletAddress, limit) => {
+  return await nftDesktop.fetchUserNFTs(walletAddress, limit);
+});
+
+ipcMain.handle('fetch-nft-image-from-metadata', async (event, metadataUrl, isCompressed) => {
+  try {
+    const imageUrl = await nftDesktop.fetchImageFromMetadata(metadataUrl, isCompressed);
+    return { imageUrl };
+  } catch (e) {
+    console.error('[NFT] Failed to fetch image from metadata:', e.message);
+    return { imageUrl: '' };
+  }
+});
+
+ipcMain.handle('clear-nft-cache', async () => {
+  try {
+    nftDesktop.clearCache();
+    return { success: true };
+  } catch (e) {
+    console.error('[NFT] Failed to clear cache:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('mint-nft', async (event, data) => {
+  safeConsole('log', '[NFT] Mint request:', data);
+  
+  // Get credentials for StealthCloud upload
+  const credentials = store.get('backupCredentials') || {};
+  const mintParams = {
+    ...data,
+    credentials: credentials.baseUrl ? {
+      baseUrl: credentials.baseUrl,
+      token: credentials.token,
+      deviceUuid: credentials.deviceUuid,
+    } : null,
+  };
+  
+  // Use nftDesktop.mintNFT which handles upload and opens wallet for payment
+  const result = await nftDesktop.mintNFT(mintParams, (progress) => {
+    // Send progress to renderer
+    event.sender.send('mint-progress', progress);
+  });
+  
+  return result;
+});
+
+ipcMain.on('bring-to-front', () => {
+  // Bring main window to front when wallet connected
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+ipcMain.on('wallet-connected-from-browser', (event, address) => {
+  connectedWalletAddress = address;
+  // Broadcast to all windows
+  BrowserWindow.getAllWindows().forEach(win => {
+    win.webContents.send('wallet-connected', address);
+  });
+});
+
+// NFT Storage handlers (same as mobile)
+ipcMain.handle('get-stored-nfts', async () => {
+  return await nftDesktop.getStoredNFTs();
+});
+
+ipcMain.handle('get-nft-by-mint', async (event, mintAddress) => {
+  return await nftDesktop.getNFTByMintAddress(mintAddress);
+});
+
+ipcMain.handle('sync-nfts-from-server', async () => {
+  const credentials = store.get('backupCredentials') || {};
+  if (!credentials.baseUrl || !credentials.token) {
+    return { success: false, error: 'Not authenticated' };
+  }
+  return await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: credentials.token });
+});
+
+// NFT Verification handler (same as mobile)
+ipcMain.handle('verify-nft-on-chain', async (event, mintAddress, txSignature) => {
+  return await nftDesktop.verifyNFTOnChain(mintAddress, txSignature);
+});
+
+// NFT Transfer - build transaction for signing using nftDesktop module
+ipcMain.handle('build-nft-transfer-tx', async (event, { mint, from, to, isCompressed }) => {
+  try {
+    // Use nftDesktop's transferNFT which handles both standard and compressed NFTs
+    const result = await nftDesktop.buildTransferTransaction(mint, from, to, isCompressed);
+    return result;
+  } catch (e) {
+    console.error('[Build NFT Transfer TX] Error:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+// Confirm transaction after Phantom signs and sends
+ipcMain.handle('confirm-transaction', async (event, signature) => {
+  try {
+    const { Connection } = require('@solana/web3.js');
+    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=***REMOVED***', 'confirmed');
+    
+    const result = await connection.confirmTransaction(signature, 'confirmed');
+    return { success: !result.value.err, error: result.value.err };
+  } catch (e) {
+    console.error('[Confirm TX] Error:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+// Domain resolution handler (same as mobile)
+ipcMain.handle('resolve-recipient', async (event, input) => {
+  return await nftDesktop.resolveRecipient(input);
+});
+
+// Get explorer/solscan URLs
+ipcMain.handle('get-explorer-url', (event, txSignature, type) => {
+  return nftDesktop.getExplorerUrl(txSignature, type);
+});
+
+ipcMain.handle('get-solscan-url', (event, mintAddress) => {
+  return nftDesktop.getSolscanUrl(mintAddress);
+});
+
+// Get current fees (for UI display)
+ipcMain.handle('get-nft-fees', () => {
+  return {
+    fees: nftDesktop.getCurrentFees(),
+    isPromo: nftDesktop.isPromoActive(),
+    promoDaysRemaining: nftDesktop.getPromoDaysRemaining(),
+  };
+});
+
+// Get SOL price
+ipcMain.handle('get-sol-price', async () => {
+  return await nftDesktop.getSolPrice();
+});
+
 function showBackupWindow() {
   if (backupWindow && !backupWindow.isDestroyed()) {
     backupWindow.focus();
@@ -1412,7 +3484,8 @@ function showBackupWindow() {
     title: 'Desktop Backup',
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      webSecurity: false
     }
   });
   
@@ -1733,8 +3806,8 @@ function showBackupWindow() {
       <div class="section-title">Credentials</div>
       <div class="form-row">
         <div class="form-group">
-          <label>Email</label>
-          <input type="email" id="email" placeholder="your@email.com" value="${credentials.email || ''}">
+          <label>Email / Nickname / Seeker ID</label>
+          <input type="text" id="email" placeholder="email, nickname, or name.skr" value="${credentials.email || ''}">
         </div>
       </div>
       <div class="form-row">
@@ -1944,6 +4017,15 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
       // Login first to get token
       await checkClient.login();
       
+      // Store token and baseUrl for NFT StealthCloud uploads
+      const stealthCloudBaseUrl = 'https://api.stealthlynk.com';
+      store.set('backupCredentials', {
+        ...store.get('backupCredentials'),
+        baseUrl: stealthCloudBaseUrl,
+        token: checkClient.token,
+        deviceUuid: checkClient.deviceUuid,
+      });
+      
       // Check subscription status
       const subStatus = await checkClient.checkSubscription();
       
@@ -2106,6 +4188,17 @@ ipcMain.on('start-desktop-sync', async (event, config) => {
     startBackupPowerSaveBlocker();
     
     const result = await activeSyncClient.sync();
+    
+    // Store credentials after sync for NFT StealthCloud uploads
+    if (activeSyncClient.token) {
+      const stealthCloudBaseUrl = 'https://api.stealthlynk.com';
+      store.set('backupCredentials', {
+        ...store.get('backupCredentials'),
+        baseUrl: stealthCloudBaseUrl,
+        token: activeSyncClient.token,
+        deviceUuid: activeSyncClient.deviceUuid,
+      });
+    }
     activeSyncClient = null;
     
     stopBackupPowerSaveBlocker();
@@ -2194,6 +4287,9 @@ function updateTrayMenu() {
 
 app.whenReady().then(() => {
   initPaths();
+  
+  // Start pairing server to receive credentials from mobile
+  startPairingServer();
   
   // Check if this is the first run and whether we've shown the welcome dialog
   const hasRunBefore = !!store.get('hasRunBefore');
@@ -2310,6 +4406,7 @@ app.on('window-all-closed', (e) => {
 app.on('before-quit', () => {
   app.isQuitting = true;
   stopBackupPowerSaveBlocker();
+  stopPairingServer();
   
   // Synchronously kill server process on quit to ensure cleanup
   if (serverProcess) {
