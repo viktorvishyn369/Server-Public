@@ -27,6 +27,9 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
+      "nftDesktop.js",
+      "nft-payment.html",
+      "wallet-connect.html",
       "backup-client.js",
       "sync-client.js",
       "icon.png",
