@@ -4477,6 +4477,16 @@ app.on('before-quit', () => {
     serverProcess = null;
   }
   
+  // On Windows, also kill any orphaned PhotoLynk processes by name
+  if (process.platform === 'win32') {
+    try {
+      // Kill any remaining PhotoLynk Desktop processes (child Node processes)
+      execSync('taskkill /F /IM "PhotoLynk Desktop.exe" /T', { stdio: 'ignore' });
+    } catch (e) {
+      // Ignore - no processes found or already killed
+    }
+  }
+  
   // Also free port 3000 synchronously
   freePort3000ForPhotoLynk();
 });

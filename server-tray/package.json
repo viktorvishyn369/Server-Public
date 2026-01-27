@@ -87,6 +87,13 @@
       ],
       "icon": "icon.png"
     },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
+    },
     "linux": {
       "target": [
         {
