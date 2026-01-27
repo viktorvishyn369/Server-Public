@@ -592,19 +592,33 @@ function isPhotoLynkOwnedPid(pid) {
     if (!/^\d+$/.test(pidStr)) return false;
 
     if (process.platform === 'win32') {
-      const ps = `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pidStr}').CommandLine"`;
-      const cmd = execSync(ps, { encoding: 'utf8' }).toString();
-      const hay = String(cmd || '').toLowerCase();
-      if (hay.includes('photolynk') && hay.includes('server')) return true;
-      if (hay.includes('server.js') && hay.includes('photolynk')) return true;
-      return false;
+      // Use wmic which is faster and more reliable than PowerShell
+      try {
+        const cmd = execSync(`wmic process where "ProcessId=${pidStr}" get CommandLine,ExecutablePath /format:list`, { encoding: 'utf8', timeout: 3000 }).toString();
+        const hay = String(cmd || '').toLowerCase();
+        // Check for PhotoLynk Desktop executable or server.js in command line
+        if (hay.includes('photolynk desktop')) return true;
+        if (hay.includes('photolynk-server-tray')) return true;
+        if (hay.includes('server.js') && hay.includes('photolynk')) return true;
+        if (hay.includes('server.js') && hay.includes('resources\\server')) return true;
+        return false;
+      } catch (e) {
+        // wmic failed, try tasklist
+        try {
+          const out = execSync(`tasklist /FI "PID eq ${pidStr}" /FO CSV /NH`, { encoding: 'utf8', timeout: 3000 }).toString();
+          const hay = String(out || '').toLowerCase();
+          if (hay.includes('photolynk')) return true;
+          return false;
+        } catch (e2) {
+          return false;
+        }
+      }
     }
 
     const cmd = execSync(`ps -p ${pidStr} -o command=`, { encoding: 'utf8' }).toString();
     const hay = String(cmd || '');
     if (hay.includes('PhotoLynk Server.app/Contents/Resources/server/server.js')) return true;
-    if (hay.includes('PhotoLynk Server.app/Contents/Resources/server/server.js')) return true;
-    if (hay.includes('/PhotoLynk/server/server.js')) return true;
+    if (hay.includes('PhotoLynk Desktop.app/Contents/Resources/server/server.js')) return true;
     if (hay.includes('/PhotoLynk/server/server.js')) return true;
     if (hay.includes('com.photolynk.server')) return true;
     if (hay.toLowerCase().includes('photolynk') && hay.includes('server.js')) return true;
@@ -616,36 +630,47 @@ function isPhotoLynkOwnedPid(pid) {
 
 function freePort3000ForPhotoLynk() {
   const pids = getPort3000Listeners();
+  safeConsole('log', 'Port 3000 listeners found:', pids.length > 0 ? pids.join(', ') : 'none');
 
   // If the port is in use but we cannot discover any PID (common on Linux without
   // permission to see process info), do NOT attempt to start a second server.
-  if (pids.length === 0) return !isPort3000InUse();
+  if (pids.length === 0) {
+    const inUse = isPort3000InUse();
+    safeConsole('log', 'No PIDs found, port 3000 in use:', inUse);
+    return !inUse;
+  }
 
   let killedAny = false;
   let foundNonOwnedProcess = false;
   for (const pid of pids) {
-    if (!isPhotoLynkOwnedPid(pid)) {
+    const isOwned = isPhotoLynkOwnedPid(pid);
+    safeConsole('log', 'PID', pid, 'is PhotoLynk owned:', isOwned);
+    if (!isOwned) {
       foundNonOwnedProcess = true;
       continue;
     }
     try {
       if (process.platform === 'win32') {
-        execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+        execSync(`taskkill /PID ${pid} /F /T`, { stdio: 'ignore' });
       } else {
         execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
       }
       killedAny = true;
       safeConsole('log', 'Stopped PhotoLynk listener on port 3000 (PID:', pid, ')');
     } catch (e) {
-      // ignore
+      safeConsole('log', 'Failed to kill PID', pid, ':', e.message);
     }
   }
 
   // If we found processes but none were PhotoLynk-owned, port is blocked by another app
-  if (!killedAny && foundNonOwnedProcess) return false;
+  if (!killedAny && foundNonOwnedProcess) {
+    safeConsole('log', 'Port 3000 blocked by non-PhotoLynk process');
+    return false;
+  }
   
   // If no processes were found at all, or we killed them, check if port is now free
   const remaining = getPort3000Listeners();
+  safeConsole('log', 'Remaining listeners after cleanup:', remaining.length > 0 ? remaining.join(', ') : 'none');
   if (remaining.length > 0) return false;
   return !isPort3000InUse();
 }
