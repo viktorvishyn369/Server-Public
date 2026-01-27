@@ -1156,7 +1156,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       --border: rgba(255,255,255,0.1);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; overflow-y: auto; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; overflow: hidden; }
     .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
     .header h1 { font-size: 22px; display: flex; align-items: center; gap: 8px; }
     .header h1 span { font-size: 24px; }
@@ -1541,8 +1541,8 @@ function generateNFTAlbumHTML(walletAddress) {
     .nft-item-name { font-size: 10px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     
     .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px; color: var(--text-muted); gap: 12px; }
-    .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; transform-origin: center center; box-sizing: border-box; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     
     .empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
     .empty-icon { font-size: 48px; margin-bottom: 16px; }

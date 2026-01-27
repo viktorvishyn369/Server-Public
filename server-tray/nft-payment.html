@@ -64,8 +64,8 @@
     .status.success { display: block; background: rgba(20, 241, 149, 0.1); color: #14F195; }
     .status.info { display: block; background: rgba(153, 69, 255, 0.1); color: #9945FF; }
     .wallet-info { font-size: 12px; color: #666; margin-top: 16px; }
-    .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; transform-origin: center center; box-sizing: border-box; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .success-icon { font-size: 64px; margin-bottom: 16px; }
   </style>
 </head>

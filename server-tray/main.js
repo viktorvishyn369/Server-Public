@@ -222,6 +222,14 @@ function startServer() {
   safeConsole('log', 'Starting server from:', serverPath);
   
   const serverEntry = path.join(serverPath, 'server.js');
+  
+  // Verify server.js exists
+  if (!fs.existsSync(serverEntry)) {
+    safeConsole('error', 'Server entry not found:', serverEntry);
+    return;
+  }
+  safeConsole('log', 'Server entry found:', serverEntry);
+  
   const nodeModulesPaths = [
     ...(app && app.isPackaged
       ? [
@@ -241,21 +249,19 @@ function startServer() {
     CLOUD_DIR: path.join(getDataRoot(), 'cloud')
   };
 
-  // Try system Node first (better native module compatibility), fallback to Electron's Node
-  let nodeExecutable = 'node';
-  try {
-    execSync('node --version', { stdio: 'ignore' });
-  } catch (e) {
-    // System node not available, use Electron's Node
-    nodeExecutable = process.execPath;
-    env.ELECTRON_RUN_AS_NODE = '1';
-  }
+  // Always use Electron's bundled Node - all dependencies are bundled in app
+  const nodeExecutable = process.execPath;
+  env.ELECTRON_RUN_AS_NODE = '1';
+  safeConsole('log', 'Using bundled Electron Node:', nodeExecutable);
+  
+  safeConsole('log', 'Spawning server with:', nodeExecutable, serverEntry);
   
   serverProcess = spawn(nodeExecutable, [serverEntry], {
     cwd: serverPath,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
-    detached: false
+    detached: false,
+    windowsHide: true // Hide console window on Windows
   });
 
   // Log server output
@@ -271,12 +277,30 @@ function startServer() {
     safeConsole('error', 'Failed to start server:', err);
     serverProcess = null;
     updateTrayMenu();
+    // Auto-restart on error after delay
+    if (!stoppingServer && !app.isQuitting) {
+      safeConsole('log', 'Auto-restarting server after error in 3 seconds...');
+      setTimeout(() => {
+        if (!serverProcess && !stoppingServer && !app.isQuitting) {
+          startServer();
+        }
+      }, 3000);
+    }
   });
 
   serverProcess.on('close', (code) => {
     safeConsole('log', `Server process exited with code ${code}`);
     serverProcess = null;
     updateTrayMenu();
+    // Auto-restart on unexpected exit (code !== 0 or null means crash/error)
+    if (!stoppingServer && !app.isQuitting) {
+      safeConsole('log', 'Auto-restarting server after exit in 3 seconds...');
+      setTimeout(() => {
+        if (!serverProcess && !stoppingServer && !app.isQuitting) {
+          startServer();
+        }
+      }, 3000);
+    }
   });
 
   // Update menu after a delay to ensure server is fully started
@@ -1165,7 +1189,7 @@ function showMainWindow() {
     .nft-album-overlay.active { display: flex; }
     .nft-album-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .nft-album-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-    .nft-album-content { flex: 1; overflow-y: auto; padding: 12px 16px; }
+    .nft-album-content { flex: 1; overflow: hidden; padding: 12px 16px; }
     .nft-refresh-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 16px; }
     .nft-refresh-btn:hover { background: rgba(255,255,255,0.05); color: #9945FF; border-color: #9945FF; }
     .nft-close-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
@@ -1195,7 +1219,7 @@ function showMainWindow() {
     .nft-detail-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
     .nft-detail-close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
     .nft-detail-close:hover { background: rgba(255,255,255,0.05); color: #ff4444; border-color: #ff4444; }
-    .nft-detail-content { flex: 1; overflow-y: auto; padding: 16px; }
+    .nft-detail-content { flex: 1; overflow: hidden; padding: 16px; }
     .nft-detail-image { width: 100%; aspect-ratio: 1; border-radius: 16px; overflow: hidden; margin-bottom: 16px; position: relative; }
     .nft-detail-image.standard { box-shadow: 0 8px 24px rgba(153,69,255,0.4); }
     .nft-detail-image.compressed { box-shadow: 0 8px 24px rgba(20,241,149,0.3); }
@@ -1278,8 +1302,8 @@ function showMainWindow() {
     .nft-mint-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
     .nft-item-name { font-size: 8px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .nft-loading, .nft-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; color: var(--text-muted); font-size: 12px; gap: 8px; }
-    .nft-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: #9945FF; border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .nft-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: #9945FF; border-radius: 50%; animation: spin 1s linear infinite; transform-origin: center center; box-sizing: border-box; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -2516,7 +2540,7 @@ function showMainWindow() {
           const cid = extractIPFSCid(result.imageUrl);
           const primaryUrl = cid ? gateways[0] + cid : result.imageUrl;
           
-          itemElement.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div><img style="opacity:0;transition:opacity 0.3s;" data-original-url="' + result.imageUrl + '" data-fallback-url="' + result.imageUrl + '" data-gateway-index="0" data-retry-count="0" data-source="primary" data-compressed="' + (isCompressed ? '1' : '0') + '" src="' + primaryUrl + '"><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+          itemElement.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;margin-left:-12px;margin-top:-12px;"></div><img style="opacity:0;transition:opacity 0.3s;" data-original-url="' + result.imageUrl + '" data-fallback-url="' + result.imageUrl + '" data-gateway-index="0" data-retry-count="0" data-source="primary" data-compressed="' + (isCompressed ? '1' : '0') + '" src="' + primaryUrl + '"><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
           
           const img = itemElement.querySelector('img');
           const spinner = itemElement.querySelector('.nft-spinner');
@@ -2562,7 +2586,7 @@ function showMainWindow() {
       
       if (metadataUrl) {
         // Show spinner and retry
-        itemElement.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div><div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:var(--text-muted);">Retrying...</div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+        itemElement.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;margin-left:-12px;margin-top:-12px;"></div><div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:var(--text-muted);">Retrying...</div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
         retryNFTImageFromMetadata(nftIndex, metadataUrl, itemElement, nftName, isCompressed);
       } else {
         // No metadata URL - show error
@@ -2817,7 +2841,7 @@ function showMainWindow() {
           const nftIndex = startIdx + i;
           // Always try to fetch if we have metadata URL (even if previous attempt failed)
           if (metadataUrl) {
-            item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div><div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:var(--text-muted);">Loading...</div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+            item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;margin-left:-12px;margin-top:-12px;"></div><div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:var(--text-muted);">Loading...</div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
             grid.appendChild(item);
             // Try to fetch image from metadata in background
             console.log('[NFT Album] No image for', nftName, '- retrying from metadata:', metadataUrl.slice(0, 50));
@@ -2850,7 +2874,7 @@ function showMainWindow() {
         const badgeHtml = isCompressed 
           ? '<div class="nft-badge nft-badge-cnft"><span class="badge-text">cN</span></div>' 
           : '<div class="nft-badge nft-badge-standard"><span class="badge-hex">⬡</span></div>';
-        item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;"></div>' + badgeHtml + '<img style="opacity:0;transition:opacity 0.3s;" data-original-url="' + originalUrl + '" data-fallback-url="' + originalUrl + '" data-gateway-index="0" data-retry-count="0" data-source="primary" data-compressed="' + (isCompressed ? '1' : '0') + '" data-cached="' + (isCached ? '1' : '0') + '" src="' + primaryUrl + '"><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
+        item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;margin-left:-12px;margin-top:-12px;"></div>' + badgeHtml + '<img style="opacity:0;transition:opacity 0.3s;" data-original-url="' + originalUrl + '" data-fallback-url="' + originalUrl + '" data-gateway-index="0" data-retry-count="0" data-source="primary" data-compressed="' + (isCompressed ? '1' : '0') + '" data-cached="' + (isCached ? '1' : '0') + '" src="' + primaryUrl + '"><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
         grid.appendChild(item);
 
         const img = item.querySelector('img');
@@ -3312,7 +3336,15 @@ ipcMain.on('focus-window', () => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
-    mainWindow.focus();
+    
+    // Linux-specific: setAlwaysOnTop trick to force focus
+    if (process.platform === 'linux') {
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(false);
+    } else {
+      mainWindow.focus();
+    }
   }
 });
 
@@ -3383,7 +3415,15 @@ ipcMain.on('bring-to-front', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
-    mainWindow.focus();
+    
+    // Linux-specific: setAlwaysOnTop trick to force focus
+    if (process.platform === 'linux') {
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(false);
+    } else {
+      mainWindow.focus();
+    }
   }
 });
 
@@ -4338,18 +4378,25 @@ app.whenReady().then(() => {
   tray = new Tray(trayIcon);
   tray.setToolTip('PhotoLynk Server');
   
+  // Build context menu for tray
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Open PhotoLynk', click: showMainWindow },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { app.isQuitting = true; stopServer(); app.quit(); } }
+  ]);
+  
+  // Linux: must use setContextMenu as right-click event doesn't work reliably
+  if (process.platform === 'linux') {
+    tray.setContextMenu(contextMenu);
+  }
+  
   // Left-click opens the main window (unified app UI)
   tray.on('click', () => {
     showMainWindow();
   });
   
-  // Right-click shows a minimal context menu with Quit option
+  // Right-click shows context menu (Windows/macOS)
   tray.on('right-click', () => {
-    const contextMenu = Menu.buildFromTemplate([
-      { label: 'Open PhotoLynk', click: showMainWindow },
-      { type: 'separator' },
-      { label: 'Quit', click: () => { app.isQuitting = true; stopServer(); app.quit(); } }
-    ]);
     tray.popUpContextMenu(contextMenu);
   });
   
