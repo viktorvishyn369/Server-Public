@@ -861,6 +861,37 @@ function startPairingServer() {
             }
           }
           
+          // Register user on local server so login works with these credentials
+          (async () => {
+            try {
+              const localServerUrl = 'http://127.0.0.1:3000';
+              const deviceUuid = userUuid || crypto.randomUUID();
+              
+              // Try to register user on local server
+              const registerRes = await fetch(`${localServerUrl}/api/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: email,
+                  password: password,
+                  device_uuid: deviceUuid
+                })
+              });
+              
+              if (registerRes.ok) {
+                safeConsole('log', '[Pairing] User registered on local server:', email);
+              } else if (registerRes.status === 409) {
+                // User already exists - that's fine, try login instead
+                safeConsole('log', '[Pairing] User already registered on local server:', email);
+              } else {
+                const errData = await registerRes.json().catch(() => ({}));
+                safeConsole('log', '[Pairing] Local server register response:', registerRes.status, errData.error || '');
+              }
+            } catch (regErr) {
+              safeConsole('log', '[Pairing] Could not register on local server (server may not be running):', regErr.message);
+            }
+          })();
+          
           // Authenticate with StealthCloud to get token for NFT uploads
           (async () => {
             try {
