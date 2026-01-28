@@ -178,15 +178,35 @@
       });
     }
 
-    // Auto-connect on page load - this triggers Phantom's unlock popup
+    // Wait for Phantom extension to inject (can take 1-3 seconds on some browsers)
+    let phantomCheckAttempts = 0;
+    const maxPhantomChecks = 15; // Check for up to 7.5 seconds
+    
+    function waitForPhantom() {
+      phantomCheckAttempts++;
+      const provider = window.phantom?.solana || window.solana;
+      
+      if (provider?.isPhantom) {
+        // Phantom found - try to connect
+        showStatus('Phantom detected! Connecting...', 'info');
+        connectPhantom();
+      } else if (phantomCheckAttempts < maxPhantomChecks) {
+        // Keep checking - extension may still be loading
+        showStatus('Looking for Phantom wallet... (' + phantomCheckAttempts + '/' + maxPhantomChecks + ')', 'info');
+        setTimeout(waitForPhantom, 500);
+      } else {
+        // Phantom not found after all attempts
+        showStatus('Phantom wallet not detected. Make sure the extension is installed and enabled for this site.', 'error');
+        document.getElementById('connect-btn').innerHTML = '<span>📥</span> Install Phantom';
+        document.getElementById('connect-btn').onclick = function() {
+          window.open('https://phantom.app/', '_blank');
+        };
+      }
+    }
+    
+    // Start checking for Phantom after page load
     window.addEventListener('load', () => {
-      setTimeout(() => {
-        const provider = window.phantom?.solana || window.solana;
-        if (provider?.isPhantom) {
-          // Always try to connect - Phantom will show unlock popup if locked
-          connectPhantom();
-        }
-      }, 500);
+      setTimeout(waitForPhantom, 300);
     });
   </script>
 </body>
