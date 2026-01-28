@@ -310,7 +310,7 @@ async function cacheImage(url, cid) {
 
 let cachedSolPrice = null;
 let solPriceLastFetch = 0;
-const SOL_PRICE_CACHE_MS = 60000;
+const SOL_PRICE_CACHE_MS = 15000;
 
 async function getSolPrice() {
   const now = Date.now();
@@ -343,6 +343,122 @@ async function getSolPrice() {
 
 function usdToSol(usdAmount, solPrice) {
   return usdAmount / solPrice;
+}
+
+async function rpcRequest(method, params) {
+  const payload = JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: params || [] });
+  for (const endpoint of SOLANA_RPC_ENDPOINTS) {
+    try {
+      const url = new URL(endpoint);
+      const protocol = url.protocol === 'https:' ? https : http;
+      const result = await new Promise((resolve, reject) => {
+        const req = protocol.request({
+          hostname: url.hostname,
+          port: url.port || (url.protocol === 'https:' ? 443 : 80),
+          path: url.pathname + (url.search || ''),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+          timeout: 10000,
+        }, (res) => {
+          let data = '';
+          res.on('data', (c) => { data += c; });
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              if (json && json.error) return reject(new Error(json.error.message || 'RPC error'));
+              resolve(json.result);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(new Error('RPC timeout')); });
+        req.write(payload);
+        req.end();
+      });
+      return result;
+    } catch (e) {
+      continue;
+    }
+  }
+  throw new Error('All Solana RPC endpoints failed');
+}
+
+async function getRentExemptLamports(accountSize) {
+  const res = await rpcRequest('getMinimumBalanceForRentExemption', [accountSize]);
+  return typeof res === 'number' ? res : 0;
+}
+
+async function getRecentPriorityMicroLamports() {
+  const res = await rpcRequest('getRecentPrioritizationFees', []);
+  if (!Array.isArray(res) || res.length === 0) return 0;
+  const vals = res
+    .map((r) => Number(r?.prioritizationFee))
+    .filter((n) => Number.isFinite(n) && n >= 0)
+    .sort((a, b) => a - b);
+  if (vals.length === 0) return 0;
+  return vals[Math.floor(vals.length / 2)];
+}
+
+async function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes }) {
+  const fees = getCurrentFees();
+  const solPrice = await getSolPrice();
+  const isCompressed = nftType === 'compressed';
+  const useCloud = storageOption === 'cloud';
+
+  const feeUsd = isCompressed
+    ? (useCloud ? fees.APP_COMMISSION_CNFT_CLOUD_USD : fees.APP_COMMISSION_CNFT_IPFS_USD)
+    : (useCloud ? fees.APP_COMMISSION_STANDARD_CLOUD_USD : fees.APP_COMMISSION_STANDARD_IPFS_USD);
+  const feeSol = usdToSol(feeUsd, solPrice);
+
+  let rentLamports = 0;
+  let baseFeeLamports = 5000;
+  let priorityFeeLamports = 0;
+
+  if (!isCompressed) {
+    try {
+      const sizes = [82, 165, 679, 282];
+      const rents = await Promise.all(sizes.map((s) => getRentExemptLamports(s)));
+      rentLamports = rents.reduce((a, b) => a + (Number(b) || 0), 0);
+    } catch (e) {
+      rentLamports = 0;
+    }
+  }
+
+  try {
+    const microLamportsPerCu = await getRecentPriorityMicroLamports();
+    const cuEstimate = isCompressed ? 80000 : 250000;
+    priorityFeeLamports = Math.ceil((microLamportsPerCu * cuEstimate) / 1_000_000);
+  } catch (e) {
+    priorityFeeLamports = 0;
+  }
+
+  // Storage estimate (mobile-style): base + per-KB, for image + metadata
+  // Matches solana-seeker/nftOperations.js NFT_FEES.ARWEAVE_UPLOAD_BASE / ARWEAVE_PER_KB
+  const ARWEAVE_UPLOAD_BASE_USD = 0.01;
+  const ARWEAVE_PER_KB_USD = 0.00001;
+  const metadataBytes = 2000;
+  const imageBytes = (Number.isFinite(fileSizeBytes) && fileSizeBytes > 0) ? fileSizeBytes : 0;
+  const storageUsd = useCloud
+    ? 0
+    : ((ARWEAVE_UPLOAD_BASE_USD + (imageBytes / 1024) * ARWEAVE_PER_KB_USD) + (ARWEAVE_UPLOAD_BASE_USD + (metadataBytes / 1024) * ARWEAVE_PER_KB_USD));
+  const networkSol = (rentLamports + baseFeeLamports + priorityFeeLamports) / 1e9;
+  const totalSol = feeSol + networkSol + usdToSol(storageUsd, solPrice);
+  const totalUsd = totalSol * solPrice;
+
+  return {
+    solPrice,
+    fee: { usd: feeUsd, sol: feeSol },
+    network: {
+      rentLamports,
+      baseFeeLamports,
+      priorityFeeLamports,
+      sol: networkSol,
+    },
+    storage: { usd: storageUsd },
+    total: { sol: totalSol, usd: totalUsd },
+  };
 }
 
 // ============================================================================
@@ -615,6 +731,19 @@ async function mintNFT(params, onProgress) {
     const solPrice = await getSolPrice();
     const feeSol = usdToSol(feeUsd, solPrice);
     const feeLamports = Math.ceil(feeSol * 1e9);
+
+    // Estimated total (mobile-style fallback): fee + on-chain + (optional) IPFS upload
+    const STANDARD_ONCHAIN_USD = 2.60;
+    const CNFT_ONCHAIN_USD = 0.001;
+    const IPFS_STORAGE_USD = 0.03;
+    const estimatedTotalUsd = nftType === 'compressed'
+      ? (storageOption === 'cloud'
+          ? (feeUsd + CNFT_ONCHAIN_USD)
+          : (feeUsd + CNFT_ONCHAIN_USD + IPFS_STORAGE_USD))
+      : (storageOption === 'cloud'
+          ? (feeUsd + STANDARD_ONCHAIN_USD)
+          : (feeUsd + STANDARD_ONCHAIN_USD + IPFS_STORAGE_USD));
+    const estimatedTotalSol = usdToSol(estimatedTotalUsd, solPrice);
     
     console.log('[NFT] Fee:', feeUsd, 'USD =', feeSol.toFixed(6), 'SOL =', feeLamports, 'lamports');
     
@@ -626,11 +755,17 @@ async function mintNFT(params, onProgress) {
     const paymentParams = new URLSearchParams({
       recipient: NFT_COMMISSION_WALLET,
       amount: feeSol.toFixed(9),
+      feeUsd: feeUsd.toFixed(2),
       reference: reference,
       name: name || 'PhotoLynk Memory',
       imageUrl: imageUrl,
       metadataUrl: metadataUpload.gatewayUrl,
       nftType: nftType,
+      storageOption: storageOption,
+      fileSizeBytes: String(fileSize),
+      solPrice: String(solPrice),
+      estimatedTotalUsd: estimatedTotalUsd.toFixed(2),
+      estimatedTotalSol: estimatedTotalSol.toFixed(9),
       wallet: walletAddress,
     }).toString();
     
@@ -1134,11 +1269,27 @@ function openNFTMintWindow(appDataPath, credentials) {
 }
 
 function generateNFTMintHTML(fees, promo, promoDays, credentials) {
-  // Calculate prices matching mobile exactly
-  const cnftCloudPrice = fees.APP_COMMISSION_CNFT_CLOUD_USD;
-  const cnftIpfsPrice = fees.APP_COMMISSION_CNFT_IPFS_USD;
-  const nftCloudPrice = fees.APP_COMMISSION_STANDARD_CLOUD_USD;
-  const nftIpfsPrice = fees.APP_COMMISSION_STANDARD_IPFS_USD;
+  // Calculate TOTAL prices matching mobile exactly (not just fees)
+  // Mobile formula: storage + on-chain + app commission
+  // Compressed NFT: ~$0 on-chain + commission
+  // Standard NFT: ~$2.60 on-chain (rent + metaplex) + commission
+  
+  // App commission fees
+  const cnftCloudFee = fees.APP_COMMISSION_CNFT_CLOUD_USD;
+  const cnftIpfsFee = fees.APP_COMMISSION_CNFT_IPFS_USD;
+  const nftCloudFee = fees.APP_COMMISSION_STANDARD_CLOUD_USD;
+  const nftIpfsFee = fees.APP_COMMISSION_STANDARD_IPFS_USD;
+
+  // On-chain + storage approximations (matches mobile fallback display)
+  const STANDARD_ONCHAIN_USD = 2.60;  // ~0.02 SOL rent + metaplex fees
+  const CNFT_ONCHAIN_USD = 0.001;     // Near-zero for compressed
+  const IPFS_STORAGE_USD = 0.03;      // Typical image upload (mobile uses size-based estimate)
+
+  // Total prices (commission + on-chain + optional IPFS upload)
+  const cnftCloudTotal = cnftCloudFee + CNFT_ONCHAIN_USD;
+  const cnftIpfsTotal = cnftIpfsFee + CNFT_ONCHAIN_USD + IPFS_STORAGE_USD;
+  const nftCloudTotal = nftCloudFee + STANDARD_ONCHAIN_USD;
+  const nftIpfsTotal = nftIpfsFee + STANDARD_ONCHAIN_USD + IPFS_STORAGE_USD;
   
   return `<!DOCTYPE html>
 <html>
@@ -1231,7 +1382,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
           <div class="option-title">Compressed NFT (cNFT)</div>
           <div class="option-subtitle">99.99% cheaper • Same ownership • Recommended</div>
         </div>
-        <div class="option-price">$${cnftCloudPrice.toFixed(2)}</div>
+        <div class="option-price" id="compressed-price">$${cnftCloudTotal.toFixed(2)}</div>
       </div>
       <div class="option" onclick="selectType('standard', this)" data-type="standard">
         <div class="option-radio"></div>
@@ -1239,7 +1390,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
           <div class="option-title">Standard NFT</div>
           <div class="option-subtitle">Traditional • Higher on-chain cost</div>
         </div>
-        <div class="option-price">$${nftCloudPrice.toFixed(2)}</div>
+        <div class="option-price" id="standard-price">$${nftCloudTotal.toFixed(2)}</div>
       </div>
     </div>
   </div>
@@ -1251,17 +1402,17 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
         <div class="option-radio"></div>
         <div class="option-text">
           <div class="option-title">StealthCloud</div>
-          <div class="option-subtitle">Uses your storage quota • Cheapest</div>
+          <div class="option-subtitle" id="cloud-subtitle">Free storage • $${cnftCloudFee.toFixed(2)} fee</div>
         </div>
-        <div class="option-price" id="cloud-price">$${cnftCloudPrice.toFixed(2)}</div>
+        <div class="option-price" id="cloud-price">$${cnftCloudTotal.toFixed(2)}</div>
       </div>
       <div class="option" onclick="selectStorage('ipfs', this)" data-storage="ipfs">
         <div class="option-radio"></div>
         <div class="option-text">
           <div class="option-title">IPFS (Pinata)</div>
-          <div class="option-subtitle">Decentralized • Permanent</div>
+          <div class="option-subtitle" id="ipfs-subtitle">Decentralized • $${cnftIpfsFee.toFixed(2)} fee</div>
         </div>
-        <div class="option-price" id="ipfs-price">$${cnftIpfsPrice.toFixed(2)}</div>
+        <div class="option-price" id="ipfs-price">$${cnftIpfsTotal.toFixed(2)}</div>
       </div>
     </div>
   </div>
@@ -1305,12 +1456,18 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   <script>
     const { ipcRenderer } = require('electron');
     
-    // Pricing data from main process (matches mobile exactly)
     const FEES = {
-      cnft_cloud: ${cnftCloudPrice},
-      cnft_ipfs: ${cnftIpfsPrice},
-      standard_cloud: ${nftCloudPrice},
-      standard_ipfs: ${nftIpfsPrice},
+      cnft_cloud: ${cnftCloudFee.toFixed(2)},
+      cnft_ipfs: ${cnftIpfsFee.toFixed(2)},
+      standard_cloud: ${nftCloudFee.toFixed(2)},
+      standard_ipfs: ${nftIpfsFee.toFixed(2)},
+    };
+
+    const TOTALS = {
+      cnft_cloud: ${cnftCloudTotal.toFixed(2)},
+      cnft_ipfs: ${cnftIpfsTotal.toFixed(2)},
+      standard_cloud: ${nftCloudTotal.toFixed(2)},
+      standard_ipfs: ${nftIpfsTotal.toFixed(2)},
     };
     
     let selectedType = 'compressed';  // 'compressed' or 'standard'
@@ -1336,18 +1493,30 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
     }
     
     function updatePrices() {
-      // Update storage prices based on NFT type
-      const cloudPrice = selectedType === 'compressed' ? FEES.cnft_cloud : FEES.standard_cloud;
-      const ipfsPrice = selectedType === 'compressed' ? FEES.cnft_ipfs : FEES.standard_ipfs;
-      document.getElementById('cloud-price').textContent = '$' + cloudPrice.toFixed(2);
-      document.getElementById('ipfs-price').textContent = '$' + ipfsPrice.toFixed(2);
+      // Type card prices are TOTALS and depend on selected storage
+      const compressedTotal = selectedStorage === 'cloud' ? TOTALS.cnft_cloud : TOTALS.cnft_ipfs;
+      const standardTotal = selectedStorage === 'cloud' ? TOTALS.standard_cloud : TOTALS.standard_ipfs;
+      document.getElementById('compressed-price').textContent = '$' + parseFloat(compressedTotal).toFixed(2);
+      document.getElementById('standard-price').textContent = '$' + parseFloat(standardTotal).toFixed(2);
+
+      // Storage card prices are TOTALS and depend on selected type
+      const cloudTotal = selectedType === 'compressed' ? TOTALS.cnft_cloud : TOTALS.standard_cloud;
+      const ipfsTotal = selectedType === 'compressed' ? TOTALS.cnft_ipfs : TOTALS.standard_ipfs;
+      document.getElementById('cloud-price').textContent = '$' + parseFloat(cloudTotal).toFixed(2);
+      document.getElementById('ipfs-price').textContent = '$' + parseFloat(ipfsTotal).toFixed(2);
+
+      // Subtitles show FEE portion only (matches mobile “$X fee” messaging)
+      const cloudFee = selectedType === 'compressed' ? FEES.cnft_cloud : FEES.standard_cloud;
+      const ipfsFee = selectedType === 'compressed' ? FEES.cnft_ipfs : FEES.standard_ipfs;
+      document.getElementById('cloud-subtitle').textContent = 'Free storage • $' + parseFloat(cloudFee).toFixed(2) + ' fee';
+      document.getElementById('ipfs-subtitle').textContent = 'Decentralized • $' + parseFloat(ipfsFee).toFixed(2) + ' fee';
     }
     
     function getCurrentPrice() {
       if (selectedType === 'compressed') {
-        return selectedStorage === 'cloud' ? FEES.cnft_cloud : FEES.cnft_ipfs;
+        return selectedStorage === 'cloud' ? TOTALS.cnft_cloud : TOTALS.cnft_ipfs;
       } else {
-        return selectedStorage === 'cloud' ? FEES.standard_cloud : FEES.standard_ipfs;
+        return selectedStorage === 'cloud' ? TOTALS.standard_cloud : TOTALS.standard_ipfs;
       }
     }
     
@@ -1427,7 +1596,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       
       if (selectedPhoto && walletAddress && !isMinting) {
         const price = getCurrentPrice();
-        btn.innerHTML = '<span>⬡</span> Mint NFT ($' + price.toFixed(2) + ')';
+        btn.innerHTML = '<span>⬡</span> Mint NFT ($' + parseFloat(price).toFixed(2) + ')';
       }
     }
     
@@ -2154,6 +2323,7 @@ module.exports = {
   // SOL price
   getSolPrice,
   usdToSol,
+  estimateNftCostsRealtime,
   
   // Upload functions (same as mobile)
   uploadToPinata,

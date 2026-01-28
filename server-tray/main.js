@@ -1117,25 +1117,29 @@ function showMainWindow() {
     .header-btn { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text-secondary); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
     .header-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
     
-    /* Status Hero - Fixed height to prevent layout shift */
-    .status-hero { height: 160px; padding: 16px; text-align: center; background: linear-gradient(180deg, rgba(3,225,255,0.05) 0%, transparent 100%); transition: background 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .status-hero.backing-up { background: linear-gradient(180deg, rgba(3,225,255,0.08) 0%, transparent 100%); }
-    .status-hero.syncing { background: linear-gradient(180deg, rgba(74,222,128,0.08) 0%, transparent 100%); }
-    .status-icon { width: 60px; height: 60px; margin: 0 auto 10px; border-radius: 50%; background: rgba(3,225,255,0.15); border: 2px solid var(--accent); display: flex; align-items: center; justify-content: center; transition: all 0.3s; }
-    .status-icon.running { background: rgba(74,222,128,0.15); border-color: var(--success); }
-    .status-icon.backing-up, .status-icon.syncing { width: 44px; height: 44px; margin-bottom: 8px; animation: pulse 2s infinite; }
-    .status-icon.backing-up { background: rgba(3,225,255,0.2); border-color: var(--accent); }
-    .status-icon.syncing { background: rgba(74,222,128,0.2); border-color: var(--success); }
+    /* Status Hero - Fixed height to prevent layout shift - Dark green theme matching mobile */
+    .status-hero { height: 160px; padding: 16px; text-align: center; background: linear-gradient(180deg, rgba(16,185,129,0.08) 0%, rgba(6,78,59,0.15) 100%); transition: all 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .status-hero.backing-up { height: 120px; background: linear-gradient(180deg, rgba(3,225,255,0.08) 0%, transparent 100%); }
+    .status-hero.syncing { height: 120px; background: linear-gradient(180deg, rgba(74,222,128,0.08) 0%, transparent 100%); }
+    .status-icon { width: 80px; height: 80px; min-width: 80px; min-height: 80px; aspect-ratio: 1 / 1; margin: 0 auto 12px; border-radius: 50%; background: transparent; border: 2px solid rgba(16,185,129,0.25); display: flex; align-items: center; justify-content: center; transition: all 0.3s; flex-shrink: 0; }
+    .status-icon-inner { width: 64px; height: 64px; min-width: 64px; min-height: 64px; aspect-ratio: 1 / 1; border-radius: 50%; background: rgba(16,185,129,0.125); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .status-icon.running { border-color: rgba(16,185,129,0.25); }
+    .status-icon.running .status-icon-inner { background: rgba(16,185,129,0.125); }
+    .status-icon.backing-up, .status-icon.syncing { width: 56px; height: 56px; min-width: 56px; min-height: 56px; aspect-ratio: 1 / 1; margin-bottom: 8px; animation: pulse 2s infinite; }
+    .status-icon.backing-up { border-color: rgba(3,225,255,0.25); }
+    .status-icon.backing-up .status-icon-inner { width: 45px; height: 45px; min-width: 45px; min-height: 45px; background: rgba(3,225,255,0.125); }
+    .status-icon.syncing { border-color: rgba(74,222,128,0.25); }
+    .status-icon.syncing .status-icon-inner { width: 45px; height: 45px; min-width: 45px; min-height: 45px; background: rgba(74,222,128,0.125); }
     @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
-    .status-icon svg { width: 28px; height: 28px; transition: all 0.3s; }
-    .status-icon.backing-up svg, .status-icon.syncing svg { width: 20px; height: 20px; }
-    .status-title { font-size: 20px; font-weight: 600; margin-bottom: 6px; transition: all 0.3s; }
-    .status-title.running { color: var(--success); }
+    .status-icon-inner svg { width: 32px; height: 32px; transition: all 0.3s; }
+    .status-icon.backing-up .status-icon-inner svg, .status-icon.syncing .status-icon-inner svg { width: 22px; height: 22px; }
+    .status-title { font-size: 22px; font-weight: 600; margin-bottom: 6px; transition: all 0.3s; color: #10B981; }
+    .status-title.running { color: #10B981; }
     .status-title.stopped { color: var(--error); }
     .status-title.backing-up, .status-title.syncing { font-size: 16px; margin-bottom: 4px; }
     .status-title.backing-up { color: var(--accent); }
     .status-title.syncing { color: var(--success); }
-    .status-subtitle { font-size: 13px; color: var(--text-secondary); padding: 8px 16px; background: var(--bg-card); border-radius: 20px; display: inline-block; }
+    .status-subtitle { font-size: 13px; color: var(--text-secondary); padding: 8px 16px; background: transparent; border-radius: 20px; display: inline-block; }
     
     /* Inline Progress */
     .inline-progress { display: none; align-items: center; gap: 10px; margin-top: 8px; width: 100%; max-width: 280px; }
@@ -1339,6 +1343,11 @@ function showMainWindow() {
     .nft-option-title { font-size: 11px; font-weight: 500; color: var(--text-primary); }
     .nft-option-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
     .nft-option-price { font-size: 11px; font-weight: 600; color: #14F195; margin-top: 4px; }
+    .nft-cost-breakdown { margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); }
+    .nft-cost-row { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+    .nft-cost-row:first-child { margin-top: 0; }
+    .nft-cost-row strong { color: var(--text-primary); font-weight: 600; }
+    .nft-cost-meta { margin-top: 8px; font-size: 9px; color: rgba(255,255,255,0.45); }
     .nft-photo-select { border: 2px dashed var(--border); border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; }
     .nft-photo-select:hover { border-color: #9945FF; background: rgba(153,69,255,0.05); }
     .nft-photo-icon { font-size: 28px; margin-bottom: 4px; }
@@ -1367,23 +1376,29 @@ function showMainWindow() {
   <div id="main-view" class="view active">
     <div class="header">
       <div class="header-left">
-        <div class="app-title">PhotoLynk <span class="version-badge">v1.5.0</span></div>
+        <div class="app-title">PhotoLynk <span class="version-badge">v1.5.1</span></div>
         <div class="server-badge">
           <div class="server-badge-dot" id="server-dot"></div>
           <span class="server-badge-text" id="server-status">Local Server</span>
         </div>
       </div>
       <div class="header-actions">
-        <button class="header-btn" id="autostart-btn" onclick="toggleAutoStart()" title="Start on Boot">🚀</button>
-        <button class="header-btn" onclick="showView('settings')" title="Settings">⚙️</button>
+        <button class="header-btn" id="autostart-btn" onclick="toggleAutoStart()" title="Start on Boot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+        </button>
+        <button class="header-btn" onclick="showView('settings')" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
       </div>
     </div>
     
     <div class="status-hero" id="status-hero">
       <div class="status-icon" id="status-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);">
-          <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
-        </svg>
+        <div class="status-icon-inner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        </div>
       </div>
       <div class="status-title" id="status-title">Ready</div>
       <div class="status-subtitle" id="status-subtitle">Idle</div>
@@ -1579,6 +1594,14 @@ function showMainWindow() {
               <div class="nft-option-sub">Decentralized • <span id="ipfs-fee">$0.05</span> fee</div>
             </div>
           </div>
+
+          <div class="nft-cost-breakdown" id="nft-cost-breakdown" style="display:none;">
+            <div class="nft-cost-row"><span>App fee (you pay)</span><strong id="nft-cost-fee">—</strong></div>
+            <div class="nft-cost-row"><span>Network (est.)</span><strong id="nft-cost-network">—</strong></div>
+            <div class="nft-cost-row"><span>Storage (est.)</span><strong id="nft-cost-storage">—</strong></div>
+            <div class="nft-cost-row"><span>SOL/USD</span><strong id="nft-cost-sol">—</strong></div>
+            <div class="nft-cost-meta" id="nft-cost-updated">—</div>
+          </div>
         </div>
         
         <div class="nft-option-group">
@@ -1749,7 +1772,7 @@ function showMainWindow() {
         dot.classList.remove('stopped');
         status.textContent = 'Local Server';
         icon.classList.add('running');
-        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>';
         title.textContent = 'Ready';
         title.classList.remove('stopped');
         title.classList.add('running');
@@ -1757,7 +1780,7 @@ function showMainWindow() {
         dot.classList.add('stopped');
         status.textContent = 'Server Stopped';
         icon.classList.remove('running');
-        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--error);"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--error);"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>';
         title.textContent = 'Stopped';
         title.classList.remove('running');
         title.classList.add('stopped');
@@ -1929,12 +1952,12 @@ function showMainWindow() {
       
       // Update icon SVG
       if (type === 'backing-up') {
-        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>';
         title.textContent = 'Backing Up...';
         progressFill.className = 'inline-progress-fill';
         progressText.className = 'inline-progress-text';
       } else if (type === 'syncing') {
-        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>';
         title.textContent = 'Syncing...';
         progressFill.className = 'inline-progress-fill syncing';
         progressText.className = 'inline-progress-text syncing';
@@ -1967,7 +1990,7 @@ function showMainWindow() {
       if (success) {
         title.textContent = 'Complete!';
         title.className = 'status-title running';
-        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>';
         document.getElementById('inline-progress-fill').style.width = '100%';
       } else {
         title.textContent = 'Error';
@@ -1979,7 +2002,7 @@ function showMainWindow() {
       setTimeout(() => {
         hero.className = 'status-hero';
         icon.className = 'status-icon';
-        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>';
         title.className = 'status-title';
         title.textContent = 'Ready';
         subtitle.style.display = 'inline-block';
@@ -2207,6 +2230,9 @@ function showMainWindow() {
     let selectedNFTStorage = 'cloud';
     let selectedNFTPhoto = null;
     let isMinting = false;
+    let lastNftFees = null;
+    let lastNftEstimate = null;
+    let nftPriceTimer = null;
     
     // NFT Mint Panel Functions
     async function openNFTMint() {
@@ -2217,24 +2243,25 @@ function showMainWindow() {
         // Always show it
         section.style.display = 'block';
         section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        if (true) {
-          // Load fees
-          try {
-            const feesData = await ipcRenderer.invoke('get-nft-fees');
-            if (feesData && feesData.isPromo) {
-              document.getElementById('nft-promo-banner').style.display = 'block';
-              document.getElementById('promo-days').textContent = feesData.promoDaysRemaining;
-            }
-            if (feesData && feesData.fees) {
-              updateNFTPrices(feesData.fees);
-            }
-          } catch (e) {
-            console.error('Failed to load fees:', e);
+        // Load promo banner + start live pricing refresh
+        try {
+          const feesData = await ipcRenderer.invoke('get-nft-fees');
+          if (feesData && feesData.isPromo) {
+            document.getElementById('nft-promo-banner').style.display = 'block';
+            document.getElementById('promo-days').textContent = feesData.promoDaysRemaining;
+          } else {
+            document.getElementById('nft-promo-banner').style.display = 'none';
           }
-          updateMintWalletUI();
-        } else {
-          section.style.display = 'none';
+        } catch (e) {
+          console.error('Failed to load fees:', e);
         }
+
+        updateMintWalletUI();
+
+        // Refresh immediately and then periodically
+        refreshNFTPricesRealtime();
+        if (nftPriceTimer) clearInterval(nftPriceTimer);
+        nftPriceTimer = setInterval(refreshNFTPricesRealtime, 15000);
       } catch (e) {
         console.error('openNFTMint error:', e);
       }
@@ -2245,6 +2272,7 @@ function showMainWindow() {
     
     function closeNFTMint() {
       document.getElementById('nft-mint-section').style.display = 'none';
+      if (nftPriceTimer) { clearInterval(nftPriceTimer); nftPriceTimer = null; }
       resetNFTMintForm();
     }
     
@@ -2257,19 +2285,65 @@ function showMainWindow() {
       updateMintButton();
     }
     
-    function updateNFTPrices(fees) {
-      const cnftPrice = selectedNFTStorage === 'cloud' ? fees.APP_COMMISSION_CNFT_CLOUD_USD : fees.APP_COMMISSION_CNFT_IPFS_USD;
-      const nftPrice = selectedNFTStorage === 'cloud' ? fees.APP_COMMISSION_STANDARD_CLOUD_USD : fees.APP_COMMISSION_STANDARD_IPFS_USD;
-      document.getElementById('cnft-price').textContent = '$' + cnftPrice.toFixed(2);
-      document.getElementById('nft-price').textContent = '$' + nftPrice.toFixed(2);
-      
-      // Update storage option fees based on selected NFT type
-      if (selectedNFTType === 'compressed') {
-        document.getElementById('cloud-fee').textContent = '$' + fees.APP_COMMISSION_CNFT_CLOUD_USD.toFixed(2);
-        document.getElementById('ipfs-fee').textContent = '$' + fees.APP_COMMISSION_CNFT_IPFS_USD.toFixed(2);
-      } else {
-        document.getElementById('cloud-fee').textContent = '$' + fees.APP_COMMISSION_STANDARD_CLOUD_USD.toFixed(2);
-        document.getElementById('ipfs-fee').textContent = '$' + fees.APP_COMMISSION_STANDARD_IPFS_USD.toFixed(2);
+    async function refreshNFTPricesRealtime() {
+      try {
+        const feesData = await ipcRenderer.invoke('get-nft-fees');
+        if (feesData && feesData.fees) lastNftFees = feesData.fees;
+        const [cnft, standard] = await Promise.all([
+          ipcRenderer.invoke('estimate-nft-costs', { nftType: 'compressed', storageOption: selectedNFTStorage, filePath: selectedNFTPhoto }),
+          ipcRenderer.invoke('estimate-nft-costs', { nftType: 'standard', storageOption: selectedNFTStorage, filePath: selectedNFTPhoto }),
+        ]);
+        if (cnft && !cnft.error && cnft.total) {
+          document.getElementById('cnft-price').textContent = '~$' + (cnft.total.usd || 0).toFixed(2);
+        }
+        if (standard && !standard.error && standard.total) {
+          document.getElementById('nft-price').textContent = '~$' + (standard.total.usd || 0).toFixed(2);
+        }
+
+        // Storage option fee labels are still based on your app commission table
+        if (lastNftFees) {
+          if (selectedNFTType === 'compressed') {
+            document.getElementById('cloud-fee').textContent = '$' + lastNftFees.APP_COMMISSION_CNFT_CLOUD_USD.toFixed(2);
+            document.getElementById('ipfs-fee').textContent = '$' + lastNftFees.APP_COMMISSION_CNFT_IPFS_USD.toFixed(2);
+          } else {
+            document.getElementById('cloud-fee').textContent = '$' + lastNftFees.APP_COMMISSION_STANDARD_CLOUD_USD.toFixed(2);
+            document.getElementById('ipfs-fee').textContent = '$' + lastNftFees.APP_COMMISSION_STANDARD_IPFS_USD.toFixed(2);
+          }
+        }
+
+        // Selected option estimate for mint button
+        const selectedEstimate = await ipcRenderer.invoke('estimate-nft-costs', { nftType: selectedNFTType, storageOption: selectedNFTStorage, filePath: selectedNFTPhoto });
+        if (selectedEstimate && !selectedEstimate.error) {
+          lastNftEstimate = selectedEstimate;
+        }
+
+        if (lastNftEstimate && lastNftEstimate.total && lastNftEstimate.solPrice) {
+          const box = document.getElementById('nft-cost-breakdown');
+          if (box) box.style.display = 'block';
+          const solPrice = Number(lastNftEstimate.solPrice) || 0;
+          const feeUsd = Number(lastNftEstimate.fee?.usd) || 0;
+          const feeSol = Number(lastNftEstimate.fee?.sol) || (solPrice > 0 ? feeUsd / solPrice : 0);
+          const netSol = Number(lastNftEstimate.network?.sol) || 0;
+          const storageUsd = Number(lastNftEstimate.storage?.usd) || 0;
+          const storageSol = solPrice > 0 ? (storageUsd / solPrice) : 0;
+          const rentLamports = Number(lastNftEstimate.network?.rentLamports) || 0;
+          const priorityLamports = Number(lastNftEstimate.network?.priorityFeeLamports) || 0;
+
+          const feeEl = document.getElementById('nft-cost-fee');
+          const netEl = document.getElementById('nft-cost-network');
+          const stEl = document.getElementById('nft-cost-storage');
+          const solEl = document.getElementById('nft-cost-sol');
+          const updEl = document.getElementById('nft-cost-updated');
+          if (feeEl) feeEl.textContent = '$' + feeUsd.toFixed(2) + ' (' + feeSol.toFixed(6) + ' SOL)';
+          if (netEl) netEl.textContent = netSol.toFixed(6) + ' SOL (rent ' + rentLamports + ', priority ' + priorityLamports + ' lamports)';
+          if (stEl) stEl.textContent = (storageUsd > 0 ? ('$' + storageUsd.toFixed(2) + ' (' + storageSol.toFixed(6) + ' SOL)') : '$0.00');
+          if (solEl) solEl.textContent = '$' + solPrice.toFixed(2);
+          if (updEl) updEl.textContent = 'Updates every ~15s • ' + new Date().toLocaleTimeString();
+        }
+
+        updateMintButton();
+      } catch (e) {
+        console.error('refreshNFTPricesRealtime error:', e);
       }
     }
     
@@ -2277,7 +2351,7 @@ function showMainWindow() {
       selectedNFTType = type;
       el.parentElement.querySelectorAll('.nft-option').forEach(o => o.classList.remove('selected'));
       el.classList.add('selected');
-      ipcRenderer.invoke('get-nft-fees').then(data => { if (data && data.fees) updateNFTPrices(data.fees); }).catch(e => console.error('get-nft-fees error:', e));
+      refreshNFTPricesRealtime();
       updateMintButton();
     }
     
@@ -2285,7 +2359,7 @@ function showMainWindow() {
       selectedNFTStorage = storage;
       el.parentElement.querySelectorAll('.nft-option').forEach(o => o.classList.remove('selected'));
       el.classList.add('selected');
-      ipcRenderer.invoke('get-nft-fees').then(data => { if (data && data.fees) updateNFTPrices(data.fees); }).catch(e => console.error('get-nft-fees error:', e));
+      refreshNFTPricesRealtime();
       updateMintButton();
     }
     
@@ -2297,6 +2371,7 @@ function showMainWindow() {
           document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(selectedNFTPhoto);
           document.getElementById('nft-photo-select').style.display = 'none';
           document.getElementById('nft-photo-preview').style.display = 'block';
+          refreshNFTPricesRealtime();
           updateMintButton();
         }
       } catch (e) {
@@ -2308,6 +2383,7 @@ function showMainWindow() {
       selectedNFTPhoto = null;
       document.getElementById('nft-photo-select').style.display = 'block';
       document.getElementById('nft-photo-preview').style.display = 'none';
+      refreshNFTPricesRealtime();
       updateMintButton();
     }
     
@@ -2368,6 +2444,11 @@ function showMainWindow() {
     function updateMintButton() {
       const btn = document.getElementById('nft-mint-btn');
       btn.disabled = !selectedNFTPhoto || !nftWalletAddress || isMinting;
+      if (!btn.disabled && lastNftEstimate && lastNftEstimate.total) {
+        btn.innerHTML = '<span>⬡</span> Mint NFT (~$' + (lastNftEstimate.total.usd || 0).toFixed(2) + ')';
+      } else if (!isMinting) {
+        btn.innerHTML = '<span>⬡</span> Mint NFT';
+      }
     }
     
     async function doMintNFT() {
@@ -3609,6 +3690,23 @@ ipcMain.handle('get-nft-fees', () => {
 // Get SOL price
 ipcMain.handle('get-sol-price', async () => {
   return await nftDesktop.getSolPrice();
+});
+
+// Real-time NFT cost estimate (SOL price + network fee signals)
+ipcMain.handle('estimate-nft-costs', async (event, { nftType, storageOption, filePath } = {}) => {
+  try {
+    let fileSizeBytes = 0;
+    if (filePath) {
+      try {
+        fileSizeBytes = fs.statSync(filePath).size;
+      } catch (e) {
+        fileSizeBytes = 0;
+      }
+    }
+    return await nftDesktop.estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes });
+  } catch (e) {
+    return { error: e.message };
+  }
 });
 
 function showBackupWindow() {
