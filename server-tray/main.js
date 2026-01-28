@@ -1374,6 +1374,7 @@ function showMainWindow() {
         </div>
       </div>
       <div class="header-actions">
+        <button class="header-btn" id="autostart-btn" onclick="toggleAutoStart()" title="Start on Boot">🚀</button>
         <button class="header-btn" onclick="showView('settings')" title="Settings">⚙️</button>
       </div>
     </div>
@@ -1707,6 +1708,36 @@ function showMainWindow() {
       document.getElementById(viewName + '-view').classList.add('active');
     }
     window.showView = showView;
+    
+    // Auto-start on boot toggle
+    let autoStartEnabled = true; // Default to enabled
+    
+    function updateAutoStartButton() {
+      const btn = document.getElementById('autostart-btn');
+      if (autoStartEnabled) {
+        btn.style.background = 'rgba(3, 225, 255, 0.2)';
+        btn.style.borderColor = 'var(--accent)';
+        btn.title = 'Start on Boot: ON (click to disable)';
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'var(--border)';
+        btn.title = 'Start on Boot: OFF (click to enable)';
+      }
+    }
+    
+    function toggleAutoStart() {
+      autoStartEnabled = !autoStartEnabled;
+      ipcRenderer.send('set-auto-start', autoStartEnabled);
+      updateAutoStartButton();
+    }
+    window.toggleAutoStart = toggleAutoStart;
+    
+    // Get initial auto-start state
+    ipcRenderer.send('get-auto-start');
+    ipcRenderer.on('auto-start-status', (e, enabled) => {
+      autoStartEnabled = enabled;
+      updateAutoStartButton();
+    });
     
     function updateServerStatus(running) {
       const dot = document.getElementById('server-dot');
@@ -3344,6 +3375,19 @@ ipcMain.on('toggle-autostart', (event) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('autostart-changed', startOnBoot);
   }
+});
+
+ipcMain.on('set-auto-start', (event, enabled) => {
+  startOnBoot = enabled;
+  setAutostart(startOnBoot);
+  store.set('startOnBoot', startOnBoot);
+  safeConsole('log', 'Auto-start set to:', startOnBoot);
+});
+
+ipcMain.on('get-auto-start', (event) => {
+  const enabled = store.get('startOnBoot', true); // Default to true
+  startOnBoot = enabled;
+  event.reply('auto-start-status', enabled);
 });
 
 // ============================================================================
