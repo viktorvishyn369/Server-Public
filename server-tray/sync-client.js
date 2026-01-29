@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
+const sharp = require('sharp');
 
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
 const UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -106,6 +107,151 @@ function computeFileIdentity(filename, originalSize) {
   if (!normalized) return null;
   const sizeStr = typeof originalSize === 'number' && !Number.isNaN(originalSize) ? String(originalSize) : '';
   return `${normalized}:${sizeStr}`;
+}
+
+// Convert ISO date format "YYYY-MM-DDTHH:MM:SS" to EXIF format "YYYY:MM:DD HH:MM:SS"
+function isoToExifDateTime(isoDate) {
+  if (!isoDate || typeof isoDate !== 'string' || isoDate.length < 19) return null;
+  // ISO format: "2024-01-15T14:30:45" -> EXIF format: "2024:01:15 14:30:45"
+  return isoDate.slice(0, 19).replace(/-/g, ':').replace('T', ' ');
+}
+
+/**
+ * Write EXIF data to an image file using Sharp
+ * Supports JPEG, PNG, WebP, TIFF formats
+ * @param {string} filePath - Path to the image file
+ * @param {Object} exifData - EXIF data object from server
+ * @returns {Promise<boolean>} - true if successful
+ */
+async function writeExifToFile(filePath, exifData) {
+  if (!exifData || !filePath) return false;
+  
+  const ext = path.extname(filePath).toLowerCase();
+  const supportedFormats = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
+  
+  if (!supportedFormats.includes(ext)) {
+    // HEIC and other formats not supported for EXIF writing by Sharp
+    console.log(`[EXIF] Format ${ext} not supported for EXIF writing`);
+    return false;
+  }
+  
+  try {
+    // Read the image
+    const imageBuffer = fs.readFileSync(filePath);
+    
+    // Build EXIF metadata object for Sharp
+    const exifMeta = {};
+    
+    // Core identification
+    if (exifData.captureTime) {
+      const exifTime = isoToExifDateTime(exifData.captureTime);
+      if (exifTime) {
+        exifMeta.DateTimeOriginal = exifTime;
+        exifMeta.DateTimeDigitized = exifTime;
+      }
+    }
+    
+    if (exifData.make) exifMeta.Make = exifData.make;
+    if (exifData.model) exifMeta.Model = exifData.model;
+    
+    // Camera settings
+    if (exifData.exposureTime != null) exifMeta.ExposureTime = exifData.exposureTime;
+    if (exifData.fNumber != null) exifMeta.FNumber = exifData.fNumber;
+    if (exifData.iso != null) exifMeta.ISO = exifData.iso;
+    if (exifData.focalLength != null) exifMeta.FocalLength = exifData.focalLength;
+    
+    // Timezone offset (EXIF 2.31+)
+    if (exifData.offsetTimeOriginal) {
+      exifMeta.OffsetTimeOriginal = exifData.offsetTimeOriginal;
+      exifMeta.OffsetTimeDigitized = exifData.offsetTimeOriginal;
+    }
+    
+    // SubSecond precision
+    if (exifData.subSecTimeOriginal) {
+      exifMeta.SubSecTimeOriginal = exifData.subSecTimeOriginal;
+      exifMeta.SubSecTimeDigitized = exifData.subSecTimeOriginal;
+    }
+    
+    // Software
+    if (exifData.software) exifMeta.Software = exifData.software;
+    
+    // Orientation
+    if (exifData.orientation != null) exifMeta.Orientation = exifData.orientation;
+    
+    // Sharp can write EXIF via withMetadata for JPEG
+    // For full EXIF control, we use withExif (Sharp 0.33+)
+    let sharpInstance = sharp(imageBuffer);
+    
+    // Try to preserve and add EXIF
+    if (ext === '.jpg' || ext === '.jpeg') {
+      // For JPEG, Sharp can write EXIF data
+      sharpInstance = sharpInstance.withMetadata({
+        exif: {
+          IFD0: {
+            Make: exifMeta.Make,
+            Model: exifMeta.Model,
+            Software: exifMeta.Software,
+            Orientation: exifMeta.Orientation,
+          },
+          IFD2: { // EXIF IFD
+            DateTimeOriginal: exifMeta.DateTimeOriginal,
+            DateTimeDigitized: exifMeta.DateTimeDigitized,
+            ExposureTime: exifMeta.ExposureTime,
+            FNumber: exifMeta.FNumber,
+            ISO: exifMeta.ISO,
+            FocalLength: exifMeta.FocalLength,
+            OffsetTimeOriginal: exifMeta.OffsetTimeOriginal,
+            OffsetTimeDigitized: exifMeta.OffsetTimeDigitized,
+            SubSecTimeOriginal: exifMeta.SubSecTimeOriginal,
+            SubSecTimeDigitized: exifMeta.SubSecTimeDigitized,
+          }
+        }
+      });
+    } else {
+      // For other formats, just preserve existing metadata
+      sharpInstance = sharpInstance.withMetadata();
+    }
+    
+    // Write back to file
+    const outputBuffer = await sharpInstance.toBuffer();
+    fs.writeFileSync(filePath, outputBuffer);
+    
+    console.log(`[EXIF] Applied EXIF to ${path.basename(filePath)}`);
+    return true;
+  } catch (e) {
+    console.warn(`[EXIF] Write failed for ${path.basename(filePath)}:`, e.message);
+    return false;
+  }
+}
+
+/**
+ * Retrieve EXIF data from server by file hash
+ * @param {string} baseUrl - Server base URL
+ * @param {string} token - Auth token
+ * @param {string} deviceUuid - Device UUID
+ * @param {string} fileHash - File hash to lookup
+ * @returns {Promise<Object|null>} - EXIF data or null
+ */
+async function fetchExifFromServer(baseUrl, token, deviceUuid, fileHash) {
+  if (!fileHash) return null;
+  
+  try {
+    const response = await axios.get(`${baseUrl}/api/exif/${fileHash}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-Device-UUID': deviceUuid
+      },
+      timeout: 10000,
+      validateStatus: (status) => status < 500
+    });
+    
+    if (response.status === 200 && response.data?.exif) {
+      return response.data.exif;
+    }
+  } catch (e) {
+    // Non-critical - don't fail sync if EXIF retrieval fails
+  }
+  return null;
 }
 
 // Compute exact file hash (SHA-256)
@@ -449,6 +595,21 @@ class DesktopSyncClient {
           else resolve();
         });
       });
+      
+      // Apply EXIF data from server if available (for images)
+      const ext = path.extname(filename).toLowerCase();
+      const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
+      if (isImage && decryptedManifest.fileHash) {
+        try {
+          const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, decryptedManifest.fileHash);
+          if (exifData) {
+            await writeExifToFile(filePath, exifData);
+          }
+        } catch (exifErr) {
+          // Non-critical - don't fail download if EXIF write fails
+          console.log(`[EXIF] Could not apply EXIF to ${filename}:`, exifErr.message);
+        }
+      }
     } catch (e) {
       writeStream.destroy();
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -493,6 +654,22 @@ class DesktopSyncClient {
 
       fs.writeFileSync(destPath, Buffer.from(response.data));
       console.log(`[SYNC] Downloaded: ${filename}`);
+      
+      // Apply EXIF data from server if available (for images)
+      const ext = path.extname(filename).toLowerCase();
+      const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
+      if (isImage && file.fileHash) {
+        try {
+          const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, file.fileHash);
+          if (exifData) {
+            await writeExifToFile(destPath, exifData);
+          }
+        } catch (exifErr) {
+          // Non-critical - don't fail download if EXIF write fails
+          console.log(`[EXIF] Could not apply EXIF to ${filename}:`, exifErr.message);
+        }
+      }
+      
       return { downloaded: true, filename };
     } catch (e) {
       console.error(`[SYNC] Failed to download ${filename}:`, e.message);

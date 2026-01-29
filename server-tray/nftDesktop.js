@@ -9,6 +9,62 @@ const fs = require('fs');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
+const os = require('os');
+
+// Sharp for EXIF stripping (optional - best effort)
+let sharp = null;
+try {
+  sharp = require('sharp');
+  console.log('[NFT Desktop] sharp loaded for EXIF stripping');
+} catch (e) {
+  console.log('[NFT Desktop] sharp not available, EXIF stripping will be skipped');
+}
+
+/**
+ * Strip EXIF metadata from an image for privacy
+ * Creates a clean copy without date, location, device info
+ * @param {string} filePath - Original file path
+ * @returns {string|null} Path to stripped file, or null if stripping failed
+ */
+async function stripExifFromImage(filePath) {
+  try {
+    if (!sharp) {
+      console.log('[NFT] sharp not available, skipping EXIF strip');
+      return null;
+    }
+    
+    if (!filePath || !fs.existsSync(filePath)) {
+      console.log('[NFT] File not found for EXIF stripping:', filePath);
+      return null;
+    }
+    
+    // Create temp file path
+    const ext = path.extname(filePath).toLowerCase();
+    const tempPath = path.join(os.tmpdir(), `nft_stripped_${Date.now()}${ext}`);
+    
+    console.log('[NFT] Stripping EXIF from:', filePath);
+    
+    // Use sharp to re-encode without EXIF
+    // sharp automatically strips EXIF when re-encoding
+    const image = sharp(filePath);
+    const metadata = await image.metadata();
+    
+    if (ext === '.png') {
+      await image.png().toFile(tempPath);
+    } else if (ext === '.webp') {
+      await image.webp({ quality: 95 }).toFile(tempPath);
+    } else {
+      // Default to JPEG for all other formats
+      await image.jpeg({ quality: 95 }).toFile(tempPath);
+    }
+    
+    console.log('[NFT] EXIF stripped successfully:', tempPath);
+    return tempPath;
+  } catch (e) {
+    console.warn('[NFT] EXIF stripping failed:', e?.message || e);
+    return null;
+  }
+}
 
 // ============================================================================
 // SOLANA IMPORTS (same as mobile)
@@ -312,33 +368,60 @@ let cachedSolPrice = null;
 let solPriceLastFetch = 0;
 const SOL_PRICE_CACHE_MS = 15000;
 
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    try {
+      https.get(url, {
+        timeout: 10000,
+        headers: { 'Accept': 'application/json' }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }).on('error', reject);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
 async function getSolPrice() {
   const now = Date.now();
   if (cachedSolPrice && (now - solPriceLastFetch) < SOL_PRICE_CACHE_MS) {
     return cachedSolPrice;
   }
-  
-  return new Promise((resolve) => {
-    https.get('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
-      timeout: 10000,
-      headers: { 'Accept': 'application/json' }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          cachedSolPrice = json.solana?.usd || 150;
-          solPriceLastFetch = now;
-          resolve(cachedSolPrice);
-        } catch (e) {
-          resolve(cachedSolPrice || 150);
-        }
-      });
-    }).on('error', () => {
-      resolve(cachedSolPrice || 150);
-    });
-  });
+
+  const apis = [
+    { url: 'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', extract: (d) => d?.solana?.usd },
+    { url: 'https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT', extract: (d) => parseFloat(d?.price) },
+    { url: 'https://api.coincap.io/v2/assets/solana', extract: (d) => parseFloat(d?.data?.priceUsd) },
+    { url: 'https://price.jup.ag/v4/price?ids=SOL', extract: (d) => d?.data?.SOL?.price },
+  ];
+
+  for (const api of apis) {
+    try {
+      const json = await fetchJson(api.url);
+      const price = Number(api.extract(json));
+      if (Number.isFinite(price) && price > 0) {
+        cachedSolPrice = price;
+        solPriceLastFetch = now;
+        return cachedSolPrice;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  const fallback = (cachedSolPrice && cachedSolPrice > 0) ? cachedSolPrice : 150;
+  cachedSolPrice = fallback;
+  solPriceLastFetch = now;
+  return cachedSolPrice;
 }
 
 function usdToSol(usdAmount, solPrice) {
@@ -417,13 +500,8 @@ async function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes 
   let priorityFeeLamports = 0;
 
   if (!isCompressed) {
-    try {
-      const sizes = [82, 165, 679, 282];
-      const rents = await Promise.all(sizes.map((s) => getRentExemptLamports(s)));
-      rentLamports = rents.reduce((a, b) => a + (Number(b) || 0), 0);
-    } catch (e) {
-      rentLamports = 0;
-    }
+    // Match solana-seeker estimate (0.008 rent + 0.012 metaplex ~= 0.02 SOL)
+    rentLamports = 20_000_000;
   }
 
   try {
@@ -439,10 +517,13 @@ async function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes 
   const ARWEAVE_UPLOAD_BASE_USD = 0.01;
   const ARWEAVE_PER_KB_USD = 0.00001;
   const metadataBytes = 2000;
-  const imageBytes = (Number.isFinite(fileSizeBytes) && fileSizeBytes > 0) ? fileSizeBytes : 0;
-  const storageUsd = useCloud
-    ? 0
-    : ((ARWEAVE_UPLOAD_BASE_USD + (imageBytes / 1024) * ARWEAVE_PER_KB_USD) + (ARWEAVE_UPLOAD_BASE_USD + (metadataBytes / 1024) * ARWEAVE_PER_KB_USD));
+  const assumedImageBytes = 2 * 1024 * 1024;
+  const imageBytes = (Number.isFinite(fileSizeBytes) && fileSizeBytes > 0)
+    ? fileSizeBytes
+    : (useCloud ? 0 : assumedImageBytes);
+  const metadataUsd = (ARWEAVE_UPLOAD_BASE_USD + (metadataBytes / 1024) * ARWEAVE_PER_KB_USD);
+  const imageUsd = (ARWEAVE_UPLOAD_BASE_USD + (imageBytes / 1024) * ARWEAVE_PER_KB_USD);
+  const storageUsd = useCloud ? metadataUsd : (imageUsd + metadataUsd);
   const networkSol = (rentLamports + baseFeeLamports + priorityFeeLamports) / 1e9;
   const totalSol = feeSol + networkSol + usdToSol(storageUsd, solPrice);
   const totalUsd = totalSol * solPrice;
@@ -661,7 +742,7 @@ function computeContentHash(filePath) {
  * @returns {Object} { success, txSignature, mintAddress, error }
  */
 async function mintNFT(params, onProgress) {
-  const { nftType, storageOption, filePath, name, description, walletAddress, credentials } = params;
+  const { nftType, storageOption, filePath, name, description, walletAddress, credentials, stripExif } = params;
   
   try {
     onProgress?.({ status: 'Preparing...' });
@@ -670,11 +751,31 @@ async function mintNFT(params, onProgress) {
     if (!fs.existsSync(filePath)) {
       return { success: false, error: 'Image file not found' };
     }
-    const fileSize = fs.statSync(filePath).size;
+    
+    // Handle EXIF stripping if requested
+    let uploadFilePath = filePath;
+    let tempStrippedFile = null;
+    
+    if (stripExif) {
+      onProgress?.({ status: 'Removing private data...' });
+      try {
+        const strippedPath = await stripExifFromImage(filePath);
+        if (strippedPath) {
+          uploadFilePath = strippedPath;
+          tempStrippedFile = strippedPath;
+          console.log('[NFT] Using EXIF-stripped image:', strippedPath);
+        }
+      } catch (stripErr) {
+        console.warn('[NFT] EXIF stripping failed, using original:', stripErr?.message);
+        // Best effort - continue with original file
+      }
+    }
+    
+    const fileSize = fs.statSync(uploadFilePath).size;
     
     // Step 1: Compute content hash for integrity proof
     onProgress?.({ status: 'Computing integrity proof...' });
-    const contentHash = computeContentHash(filePath);
+    const contentHash = computeContentHash(uploadFilePath);
     
     // Step 2: Upload image
     onProgress?.({ status: 'Uploading image...' });
@@ -682,15 +783,20 @@ async function mintNFT(params, onProgress) {
     let imageUpload;
     if (storageOption === 'cloud' && credentials && credentials.baseUrl && credentials.token) {
       console.log('[NFT] Using StealthCloud storage');
-      imageUpload = await uploadToStealthCloud(filePath, credentials);
+      imageUpload = await uploadToStealthCloud(uploadFilePath, credentials);
       // If StealthCloud fails, fall back to IPFS
       if (!imageUpload.success) {
         console.log('[NFT] StealthCloud failed, falling back to IPFS:', imageUpload.error);
-        imageUpload = await uploadToPinata(filePath, 'image/jpeg');
+        imageUpload = await uploadToPinata(uploadFilePath, 'image/jpeg');
       }
     } else {
       console.log('[NFT] Using IPFS storage (Pinata)');
-      imageUpload = await uploadToPinata(filePath, 'image/jpeg');
+      imageUpload = await uploadToPinata(uploadFilePath, 'image/jpeg');
+    }
+    
+    // Clean up temp stripped file if created
+    if (tempStrippedFile && fs.existsSync(tempStrippedFile)) {
+      try { fs.unlinkSync(tempStrippedFile); } catch (e) { /* ignore */ }
     }
     
     if (!imageUpload.success) {
@@ -1280,16 +1386,25 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   const nftCloudFee = fees.APP_COMMISSION_STANDARD_CLOUD_USD;
   const nftIpfsFee = fees.APP_COMMISSION_STANDARD_IPFS_USD;
 
-  // On-chain + storage approximations (matches mobile fallback display)
+  // On-chain approximations (matches mobile fallback display)
   const STANDARD_ONCHAIN_USD = 2.60;  // ~0.02 SOL rent + metaplex fees
   const CNFT_ONCHAIN_USD = 0.001;     // Near-zero for compressed
-  const IPFS_STORAGE_USD = 0.03;      // Typical image upload (mobile uses size-based estimate)
 
-  // Total prices (commission + on-chain + optional IPFS upload)
-  const cnftCloudTotal = cnftCloudFee + CNFT_ONCHAIN_USD;
-  const cnftIpfsTotal = cnftIpfsFee + CNFT_ONCHAIN_USD + IPFS_STORAGE_USD;
-  const nftCloudTotal = nftCloudFee + STANDARD_ONCHAIN_USD;
-  const nftIpfsTotal = nftIpfsFee + STANDARD_ONCHAIN_USD + IPFS_STORAGE_USD;
+  // Storage approximations (mobile-style): base + per-KB, metadata always uploaded
+  const ARWEAVE_UPLOAD_BASE_USD = 0.01;
+  const ARWEAVE_PER_KB_USD = 0.00001;
+  const metadataBytes = 2000;
+  const assumedImageBytes = 2 * 1024 * 1024;
+  const metadataUsd = (ARWEAVE_UPLOAD_BASE_USD + (metadataBytes / 1024) * ARWEAVE_PER_KB_USD);
+  const imageUsdAssumed = (ARWEAVE_UPLOAD_BASE_USD + (assumedImageBytes / 1024) * ARWEAVE_PER_KB_USD);
+  const cloudStorageUsd = metadataUsd;
+  const ipfsStorageUsd = imageUsdAssumed + metadataUsd;
+
+  // Total prices (commission + on-chain + storage estimate)
+  const cnftCloudTotal = cnftCloudFee + CNFT_ONCHAIN_USD + cloudStorageUsd;
+  const cnftIpfsTotal = cnftIpfsFee + CNFT_ONCHAIN_USD + ipfsStorageUsd;
+  const nftCloudTotal = nftCloudFee + STANDARD_ONCHAIN_USD + cloudStorageUsd;
+  const nftIpfsTotal = nftIpfsFee + STANDARD_ONCHAIN_USD + ipfsStorageUsd;
   
   return `<!DOCTYPE html>
 <html>
@@ -1440,6 +1555,17 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
         <label>Description (optional)</label>
         <textarea id="nft-description" placeholder="A special moment..."></textarea>
       </div>
+      <div class="privacy-toggle" onclick="toggleStripExif()" style="display: flex; align-items: center; padding: 12px 0; cursor: pointer; border-top: 1px solid var(--border); margin-top: 12px;">
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 14px;">🛡️</span> Remove Private Data
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Strip location, date, device info from image</div>
+        </div>
+        <div id="strip-toggle" style="width: 44px; height: 24px; border-radius: 12px; background: var(--border); position: relative; transition: all 0.2s;">
+          <div id="strip-toggle-knob" style="width: 20px; height: 20px; border-radius: 10px; background: #fff; position: absolute; top: 2px; left: 2px; transition: all 0.2s;"></div>
+        </div>
+      </div>
     </div>
   </div>
   
@@ -1475,6 +1601,20 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
     let selectedPhoto = null;
     let walletAddress = null;
     let isMinting = false;
+    let stripExif = false;             // Privacy option to remove EXIF metadata
+    
+    function toggleStripExif() {
+      stripExif = !stripExif;
+      const toggle = document.getElementById('strip-toggle');
+      const knob = document.getElementById('strip-toggle-knob');
+      if (stripExif) {
+        toggle.style.background = 'var(--accent)';
+        knob.style.left = '22px';
+      } else {
+        toggle.style.background = 'var(--border)';
+        knob.style.left = '2px';
+      }
+    }
     
     function selectType(type, el) {
       selectedType = type;
@@ -1619,6 +1759,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
           name: name,
           description: description,
           walletAddress: walletAddress,
+          stripExif: stripExif,         // Privacy option to remove EXIF metadata
         });
         
         if (result.success) {

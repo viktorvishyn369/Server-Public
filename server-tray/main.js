@@ -1273,37 +1273,68 @@ function showMainWindow() {
     .nft-badge-standard .badge-hex { color: #9945FF; font-size: 16px; line-height: 1; } /* Light purple hexagon outline */
     
     /* NFT Detail View Overlay */
-    .nft-detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-primary); z-index: 1100; display: none; flex-direction: column; overflow: hidden; }
+    .nft-detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 1100; display: none; flex-direction: column; overflow: hidden; }
     .nft-detail-overlay.active { display: flex; }
-    .nft-detail-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .nft-detail-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-    .nft-detail-close { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
-    .nft-detail-close:hover { background: rgba(255,255,255,0.05); color: #ff4444; border-color: #ff4444; }
-    .nft-detail-content { flex: 1; overflow: hidden; padding: 16px; }
+    .nft-detail-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; background: rgba(20, 20, 30, 0.98); }
+    .nft-detail-header-left { flex: 1; min-width: 0; padding-right: 10px; }
+    .nft-detail-title-name { font-size: 16px; font-weight: 700; color: #fff; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nft-detail-badge-row { display: flex; gap: 6px; margin-top: 6px; }
+    .nft-chip { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 1; }
+    .nft-chip.cnft { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .nft-chip.standard { background: rgba(153, 69, 255, 0.2); color: #9945FF; }
+    .nft-chip.storage { background: rgba(153, 69, 255, 0.2); color: #9945FF; }
+    .nft-detail-close { width: 32px; height: 32px; border-radius: 10px; border: none; background: transparent; color: rgba(255,255,255,0.85); cursor: pointer; font-size: 18px; line-height: 1; }
+    .nft-detail-close:hover { color: #fff; }
+    .nft-detail-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 12px 16px 18px; -webkit-overflow-scrolling: touch; background: rgba(0,0,0,0.95); }
     .nft-detail-image { width: 100%; aspect-ratio: 1; border-radius: 16px; overflow: hidden; margin-bottom: 16px; position: relative; }
     .nft-detail-image.standard { box-shadow: 0 8px 24px rgba(153,69,255,0.4); }
     .nft-detail-image.compressed { box-shadow: 0 8px 24px rgba(20,241,149,0.3); }
     .nft-detail-image img { width: 100%; height: 100%; object-fit: cover; }
-    .nft-detail-badge { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; }
-    .nft-detail-badge.cnft { background: #1a5c2a; color: #5ddb6e; }
-    .nft-detail-badge.standard { background: #2a1a4a; color: #9945FF; }
-    .nft-detail-name { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; }
-    .nft-detail-collection { font-size: 12px; color: #9945FF; margin-bottom: 12px; }
-    .nft-detail-description { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; padding: 12px; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border); }
-    .nft-detail-info { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-    .nft-detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border); }
-    .nft-detail-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
-    .nft-detail-value { font-size: 12px; color: var(--text-primary); font-weight: 500; }
-    .nft-detail-value.address { font-family: monospace; font-size: 10px; }
-    .nft-detail-actions { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
-    .nft-action-btn { padding: 14px; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; }
-    .nft-action-btn.primary { background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); border: none; color: #fff; }
-    .nft-action-btn.primary:hover { background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%); transform: translateY(-1px); }
-    .nft-action-btn.secondary { background: transparent; border: 1px solid #9945FF; color: #9945FF; }
-    .nft-action-btn.secondary:hover { background: rgba(153,69,255,0.1); }
-    .nft-action-btn.danger { background: transparent; border: 1px solid #ff4444; color: #ff4444; }
-    .nft-action-btn.danger:hover { background: rgba(255,68,68,0.1); }
-    
+    .nft-detail-badge { display: none; }
+    .nft-detail-badge.cnft { display: none; }
+    .nft-detail-badge.standard { display: none; }
+    .nft-detail-name { display: none; }
+    .nft-detail-badges { display: none; }
+    .nft-pill { display: none; }
+    .nft-pill.cnft { display: none; }
+    .nft-pill.standard { display: none; }
+    .nft-pill.storage-cloud { display: none; }
+    .nft-pill.storage-ipfs { display: none; }
+    .nft-detail-collection { display: none; }
+    .nft-detail-description { display: none; }
+    .nft-detail-info { display: none; }
+    .nft-detail-row { display: none; }
+    .nft-detail-label { display: none; }
+    .nft-detail-value { display: none; }
+    .nft-detail-value.address { display: none; }
+    .nft-detail-actions { display: none; }
+    .nft-action-btn { display: none; }
+    .nft-action-btn.primary { display: none; }
+    .nft-action-btn.secondary { display: none; }
+    .nft-action-btn.danger { display: none; }
+
+    .nft-section { margin-top: 14px; padding: 0 2px; }
+    .nft-section-label { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.4px; }
+    .nft-owner-address { color: #9945FF; font-size: 12px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nft-divider { height: 1px; background: rgba(255,255,255,0.08); margin-top: 14px; }
+
+    .nft-verify-box { border-radius: 10px; padding: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; cursor: pointer; }
+    .nft-verify-box.success { background: rgba(34, 197, 94, 0.18); border-color: rgba(34, 197, 94, 0.28); }
+    .nft-verify-icon { width: 18px; height: 18px; flex-shrink: 0; }
+    .nft-verify-text { font-size: 13px; font-weight: 700; }
+    .nft-verify-text.success { color: #22c55e; }
+    .nft-verify-text.pending { color: rgba(255,255,255,0.85); }
+    .nft-verify-text.action { color: #9945FF; }
+
+    .nft-action-row { display: flex; gap: 10px; margin-top: 14px; }
+    .nft-mini-btn { flex: 1; border-radius: 10px; padding: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); color: #fff; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+    .nft-mini-btn:hover { border-color: rgba(255,255,255,0.16); background: rgba(255,255,255,0.08); }
+    .nft-mini-btn svg { width: 16px; height: 16px; }
+
+    .nft-transfer-main { width: 100%; margin-top: 14px; border-radius: 12px; padding: 14px; background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); border: none; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .nft-transfer-main:hover { background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%); }
+    .nft-transfer-main svg { width: 18px; height: 18px; }
+     
     /* NFT Transfer Modal */
     .nft-transfer-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1200; display: none; align-items: center; justify-content: center; padding: 20px; }
     .nft-transfer-modal.active { display: flex; }
@@ -1387,7 +1418,7 @@ function showMainWindow() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
         </button>
         <button class="header-btn" onclick="showView('settings')" title="Settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1 2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
       </div>
     </div>
@@ -1487,40 +1518,47 @@ function showMainWindow() {
       <!-- NFT Detail View Overlay -->
       <div id="nft-detail-overlay" class="nft-detail-overlay">
         <div class="nft-detail-header">
+          <div class="nft-detail-header-left">
+            <div id="nft-detail-title" class="nft-detail-title-name"></div>
+            <div class="nft-detail-badge-row">
+              <div id="nft-detail-type-chip" class="nft-chip"></div>
+              <div id="nft-detail-storage-chip" class="nft-chip storage"></div>
+            </div>
+          </div>
           <button class="nft-detail-close" onclick="closeNFTDetail()">✕</button>
-          <span class="nft-detail-title">NFT Details</span>
-          <div style="width:32px;"></div>
         </div>
         <div class="nft-detail-content">
           <div id="nft-detail-image" class="nft-detail-image">
             <img id="nft-detail-img" src="" alt="">
-            <div id="nft-detail-badge" class="nft-detail-badge"></div>
           </div>
-          <div id="nft-detail-name" class="nft-detail-name"></div>
-          <div id="nft-detail-collection" class="nft-detail-collection"></div>
-          <div id="nft-detail-description" class="nft-detail-description"></div>
-          <div class="nft-detail-info">
-            <div class="nft-detail-row">
-              <span class="nft-detail-label">Type</span>
-              <span id="nft-detail-type" class="nft-detail-value"></span>
-            </div>
-            <div class="nft-detail-row">
-              <span class="nft-detail-label">Mint Address</span>
-              <span id="nft-detail-mint" class="nft-detail-value address"></span>
-            </div>
-            <div class="nft-detail-row">
-              <span class="nft-detail-label">Owner</span>
-              <span id="nft-detail-owner" class="nft-detail-value address"></span>
+
+          <div class="nft-section">
+            <div class="nft-section-label">NFT OWNER</div>
+            <div id="nft-detail-owner-full" class="nft-owner-address"></div>
+          </div>
+
+          <div class="nft-divider"></div>
+
+          <div class="nft-section">
+            <div class="nft-section-label">BLOCKCHAIN VERIFICATION</div>
+            <div id="nft-verify-box" class="nft-verify-box" onclick="handleNFTVerifyClick()">
+              <svg class="nft-verify-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 12l2 2 4-4"></path>
+                <path d="M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"></path>
+              </svg>
+              <div id="nft-verify-text" class="nft-verify-text pending">Checking...</div>
             </div>
           </div>
-          <div class="nft-detail-actions">
-            <button class="nft-action-btn secondary" onclick="verifyNFTOnChain()">
-              <span>🔗</span> Verify on Blockchain
-            </button>
-            <button class="nft-action-btn primary" onclick="openNFTTransfer()">
-              <span>↗</span> Transfer NFT
-            </button>
+
+          <div class="nft-action-row">
+            <button id="nft-action-left" class="nft-mini-btn" onclick="openNFTTokenView()"></button>
+            <button id="nft-action-right" class="nft-mini-btn" onclick="openNFTStorageView()"></button>
           </div>
+
+          <button class="nft-transfer-main" onclick="openNFTTransfer()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            Transfer NFT
+          </button>
         </div>
       </div>
       
@@ -1952,12 +1990,12 @@ function showMainWindow() {
       
       // Update icon SVG
       if (type === 'backing-up') {
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>';
         title.textContent = 'Backing Up...';
         progressFill.className = 'inline-progress-fill';
         progressText.className = 'inline-progress-text';
       } else if (type === 'syncing') {
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--success);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>';
+        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>';
         title.textContent = 'Syncing...';
         progressFill.className = 'inline-progress-fill syncing';
         progressText.className = 'inline-progress-text syncing';
@@ -2781,23 +2819,29 @@ function showMainWindow() {
       // Set image container class for shadow
       const imageContainer = document.getElementById('nft-detail-image');
       imageContainer.className = 'nft-detail-image ' + (isCompressed ? 'compressed' : 'standard');
-      
-      // Set badge
-      const badge = document.getElementById('nft-detail-badge');
-      badge.className = 'nft-detail-badge ' + (isCompressed ? 'cnft' : 'standard');
-      badge.textContent = isCompressed ? 'Compressed' : 'Standard';
-      
-      // Set details
-      const mintAddr = nft.assetId || nft.mintAddress || nft.mint || '';
-      document.getElementById('nft-detail-name').textContent = nft.name || 'Unnamed NFT';
-      document.getElementById('nft-detail-collection').textContent = nft.collection || 'PhotoLynk Memories';
-      document.getElementById('nft-detail-description').textContent = nft.description || 'A precious memory minted as an NFT on Solana blockchain.';
-      document.getElementById('nft-detail-type').textContent = isCompressed ? 'Compressed NFT (cNFT)' : 'Standard NFT';
-      document.getElementById('nft-detail-mint').textContent = mintAddr ? (mintAddr.slice(0, 8) + '...' + mintAddr.slice(-8)) : 'N/A';
-      document.getElementById('nft-detail-owner').textContent = nftWalletAddress ? (nftWalletAddress.slice(0, 8) + '...' + nftWalletAddress.slice(-8)) : 'N/A';
-      
-      // Store mint address for verify/transfer
+
+      const mintAddr = nft.mintAddress || nft.assetId || nft.mint || '';
       currentDetailNFT.mintAddress = mintAddr;
+
+      const titleEl = document.getElementById('nft-detail-title');
+      if (titleEl) titleEl.textContent = nft.name || 'NFT';
+
+      const typeChip = document.getElementById('nft-detail-type-chip');
+      if (typeChip) {
+        typeChip.className = 'nft-chip ' + (isCompressed ? 'cnft' : 'standard');
+        typeChip.textContent = isCompressed ? 'Compressed NFT' : 'Standard NFT';
+      }
+
+      const rawImageUrl = (nft && (nft.imageUrl || nft.image)) ? String(nft.imageUrl || nft.image) : '';
+      const storageLabel = (nft.storageType ? (nft.storageType === 'cloud' ? 'StealthCloud' : 'IPFS') : (isStealthCloudUrl(rawImageUrl) ? 'StealthCloud' : 'IPFS'));
+      const storageChip = document.getElementById('nft-detail-storage-chip');
+      if (storageChip) storageChip.textContent = storageLabel;
+
+      const ownerFull = document.getElementById('nft-detail-owner-full');
+      if (ownerFull) ownerFull.textContent = nft.ownerAddress || nftWalletAddress || '';
+
+      configureNFTDetailActions(currentDetailNFT, isCompressed, storageLabel);
+      verifyNFTDetailOnOpen(currentDetailNFT);
       
       // Show overlay
       document.getElementById('nft-detail-overlay').classList.add('active');
@@ -2809,14 +2853,145 @@ function showMainWindow() {
     }
     
     function verifyNFTOnChain() {
-      const mintAddr = currentDetailNFT?.mintAddress || currentDetailNFT?.assetId || currentDetailNFT?.mint;
-      if (!mintAddr) {
-        alert('No mint address available');
+      openNFTTokenView();
+    }
+
+    function setNFTVerifyUI(state) {
+      const box = document.getElementById('nft-verify-box');
+      const text = document.getElementById('nft-verify-text');
+      if (!box || !text) return;
+
+      box.className = 'nft-verify-box';
+      text.className = 'nft-verify-text pending';
+
+      if (state === 'checking') {
+        text.textContent = 'Checking...';
+        text.className = 'nft-verify-text pending';
         return;
       }
-      // Open Solana Explorer
-      const explorerUrl = 'https://explorer.solana.com/address/' + mintAddr + '?cluster=mainnet';
-      require('electron').shell.openExternal(explorerUrl);
+
+      if (state === 'verified') {
+        box.classList.add('success');
+        text.textContent = 'Verified on Solana';
+        text.className = 'nft-verify-text success';
+        return;
+      }
+
+      if (state === 'action') {
+        text.textContent = 'Verify on Chain';
+        text.className = 'nft-verify-text action';
+        return;
+      }
+
+      text.textContent = 'Not found on-chain';
+      text.className = 'nft-verify-text pending';
+    }
+
+    async function verifyNFTDetailOnOpen(nft) {
+      try {
+        setNFTVerifyUI('checking');
+        const mintAddr = nft?.mintAddress || nft?.assetId || nft?.mint || '';
+        const txSig = nft?.txSignature || null;
+        const res = await ipcRenderer.invoke('verify-nft-on-chain', mintAddr, txSig);
+        if (res && res.verified) {
+          setNFTVerifyUI('verified');
+          if (currentDetailNFT) currentDetailNFT._verified = true;
+        } else {
+          setNFTVerifyUI('action');
+          if (currentDetailNFT) currentDetailNFT._verified = false;
+        }
+      } catch (e) {
+        setNFTVerifyUI('action');
+        if (currentDetailNFT) currentDetailNFT._verified = false;
+      }
+    }
+
+    function handleNFTVerifyClick() {
+      if (!currentDetailNFT) return;
+      if (currentDetailNFT._verified) {
+        openNFTTokenView();
+        return;
+      }
+      verifyNFTDetailOnOpen(currentDetailNFT);
+    }
+
+    function configureNFTDetailActions(nft, isCompressed, storageLabel) {
+      const left = document.getElementById('nft-action-left');
+      const right = document.getElementById('nft-action-right');
+
+      if (left) {
+        if (isCompressed) {
+          left.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>XRAY</span>';
+        } else {
+          left.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Solscan</span>';
+        }
+      }
+
+      if (right) {
+        const label = storageLabel === 'StealthCloud' ? 'Image' : 'IPFS';
+        right.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><span>' + label + '</span>';
+      }
+    }
+
+    function openNFTTokenView() {
+      if (!currentDetailNFT) return;
+      const isCompressed = currentDetailNFT.isCompressed === true || String(currentDetailNFT.mintAddress || '').startsWith('cnft_');
+      const mintAddr = String(currentDetailNFT.mintAddress || currentDetailNFT.assetId || currentDetailNFT.mint || '');
+
+      if (isCompressed) {
+        if (mintAddr.startsWith('cnft_tx_')) {
+          const txSig = mintAddr.replace('cnft_tx_', '');
+          require('electron').shell.openExternal('https://xray.helius.xyz/tx/' + txSig + '?network=mainnet');
+          return;
+        }
+        const assetId = String(currentDetailNFT.assetId || '').trim();
+        if (assetId && assetId.length > 30) {
+          require('electron').shell.openExternal('https://xray.helius.xyz/token/' + assetId + '?network=mainnet');
+          return;
+        }
+        const txSig = String(currentDetailNFT.txSignature || '').trim();
+        if (txSig) {
+          require('electron').shell.openExternal('https://xray.helius.xyz/tx/' + txSig + '?network=mainnet');
+          return;
+        }
+        return;
+      }
+
+      require('electron').shell.openExternal('https://solscan.io/token/' + encodeURIComponent(mintAddr));
+    }
+
+    async function openNFTStorageView() {
+      if (!currentDetailNFT) return;
+      const isCompressed = currentDetailNFT.isCompressed === true;
+
+      const rawImageUrl = (currentDetailNFT && (currentDetailNFT.imageUrl || currentDetailNFT.image)) ? String(currentDetailNFT.imageUrl || currentDetailNFT.image) : '';
+      const isCloud = currentDetailNFT.storageType === 'cloud' || (!currentDetailNFT.storageType && isStealthCloudUrl(rawImageUrl));
+      if (isCloud) {
+        if (rawImageUrl) require('electron').shell.openExternal(rawImageUrl);
+        return;
+      }
+
+      let imgUrl = rawImageUrl;
+      let cid = extractIPFSCid(imgUrl);
+
+      if (!cid && currentDetailNFT.metadataUrl) {
+        try {
+          const result = await ipcRenderer.invoke('fetch-nft-image-from-metadata', currentDetailNFT.metadataUrl, isCompressed);
+          if (result && result.imageUrl) {
+            imgUrl = result.imageUrl;
+            cid = extractIPFSCid(imgUrl);
+          }
+        } catch (e) {}
+      }
+
+      if (cid) {
+        require('electron').shell.openExternal('https://ipfs.io/ipfs/' + cid);
+        return;
+      }
+
+      if (imgUrl) {
+        require('electron').shell.openExternal(imgUrl);
+      }
     }
     
     function openNFTTransfer() {
@@ -2949,6 +3124,9 @@ function showMainWindow() {
     window.openNFTDetail = openNFTDetail;
     window.closeNFTDetail = closeNFTDetail;
     window.verifyNFTOnChain = verifyNFTOnChain;
+    window.openNFTTokenView = openNFTTokenView;
+    window.openNFTStorageView = openNFTStorageView;
+    window.handleNFTVerifyClick = handleNFTVerifyClick;
     window.openNFTTransfer = openNFTTransfer;
     window.closeNFTTransfer = closeNFTTransfer;
     window.confirmNFTTransfer = confirmNFTTransfer;
