@@ -767,6 +767,60 @@ function getPairingData() {
 }
 
 // ============================================================================
+// REFRESH QR CODE IN MAIN WINDOW - Called after pairing to update with new token
+// ============================================================================
+
+function refreshQRCodeInMainWindow() {
+  const QRCode = require('qrcode');
+  const pairingData = getPairingData();
+  const qrDataString = JSON.stringify(pairingData);
+  
+  // Refresh in main window (small QR) - preload new image before swapping
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
+      if (err) {
+        safeConsole('error', '[Pairing] Failed to regenerate QR code:', err);
+        return;
+      }
+      
+      // Preload image then swap instantly - no flicker
+      mainWindow.webContents.executeJavaScript(`
+        (function() {
+          var newImg = new Image();
+          newImg.onload = function() {
+            var qrImg = document.querySelector('.qr-code');
+            if (qrImg) qrImg.src = '${qrUrl}';
+          };
+          newImg.src = '${qrUrl}';
+        })();
+      `);
+      
+      safeConsole('log', '[Pairing] QR code refreshed in main window');
+    });
+  }
+  
+  // Also refresh in separate QR window if open (large QR)
+  if (qrWindow && !qrWindow.isDestroyed()) {
+    QRCode.toDataURL(qrDataString, { width: 280, margin: 2 }, (err, qrUrl) => {
+      if (err) return;
+      
+      qrWindow.webContents.executeJavaScript(`
+        (function() {
+          var newImg = new Image();
+          newImg.onload = function() {
+            var qrImg = document.querySelector('.qr-code');
+            if (qrImg) qrImg.src = '${qrUrl}';
+          };
+          newImg.src = '${qrUrl}';
+        })();
+      `);
+      
+      safeConsole('log', '[Pairing] QR code refreshed in QR window');
+    });
+  }
+}
+
+// ============================================================================
 // PAIRING HTTP SERVER - Receives credentials from mobile during QR pairing
 // ============================================================================
 
@@ -818,6 +872,9 @@ function startPairingServer() {
           // Generate new pairing token for security (one-time use)
           const newToken = generatePairingToken();
           store.set('pairingToken', newToken);
+          
+          // Refresh QR code in main window with new token
+          refreshQRCodeInMainWindow();
           
           safeConsole('log', '[Pairing] Credentials received from mobile for:', email);
           
