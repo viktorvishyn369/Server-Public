@@ -779,6 +779,29 @@ class DesktopBackupClient {
       if (response.data && response.data.duplicate) {
         return { duplicate: true };
       }
+      
+      // Store EXIF for images (non-blocking, fire-and-forget)
+      // This enables mobile sync to retrieve and apply EXIF
+      const fileHash = response.data?.fileHash;
+      const isImage = /\.(jpg|jpeg|png|heic|heif|gif|bmp|webp|tiff?)$/i.test(fileName);
+      if (fileHash && isImage) {
+        this.extractFullExif(filePath).then(fullExif => {
+          if (fullExif && (fullExif.captureTime || fullExif.make || fullExif.gpsLatitude != null)) {
+            axios.post(`${baseUrl}/api/exif/store`, {
+              fileHash,
+              exif: fullExif,
+              platform: 'desktop'
+            }, {
+              headers: {
+                'Authorization': `Bearer ${this.token}`,
+                'X-Device-UUID': this.deviceUuid
+              },
+              timeout: 10000
+            }).catch(e => console.log('[EXIF] Store failed (non-critical):', e?.message));
+          }
+        }).catch(() => {});
+      }
+      
       return { duplicate: false };
     }, 3, 2000); // 3 retries with 2s base delay
   }
