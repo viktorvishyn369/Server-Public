@@ -1407,7 +1407,7 @@ function showMainWindow() {
   <div id="main-view" class="view active">
     <div class="header">
       <div class="header-left">
-        <div class="app-title">PhotoLynk <span class="version-badge">v1.5.1</span></div>
+        <div class="app-title">PhotoLynk <span class="version-badge">v1.5.2</span></div>
         <div class="server-badge">
           <div class="server-badge-dot" id="server-dot"></div>
           <span class="server-badge-text" id="server-status">Local Server</span>
