@@ -116,8 +116,9 @@ function hammingDistance64(a, b) {
 }
 
 // Cross-platform deduplication threshold for 64-bit dHash
-// Threshold of 0 bits = exact match only (identical to mobile apps)
-const CROSS_PLATFORM_DHASH_THRESHOLD = 0;
+// Threshold of 3 bits = ~5% tolerance for cross-platform decoder differences
+// Must match mobile backup (solana-seeker/duplicateScanner.js) and server (server.js)
+const CROSS_PLATFORM_DHASH_THRESHOLD = 3;
 
 // Find a matching perceptual hash using Hamming distance (fuzzy matching)
 // Returns { match: boolean, distance: number } for logging
