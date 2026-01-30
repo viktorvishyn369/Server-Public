@@ -1100,6 +1100,15 @@ function showMainWindow() {
   const photoFolders = store.get('backupFolders') || [];
   const defaultDownloadPath = path.join(os.homedir(), 'Pictures', 'PhotoLynk Sync');
   const savedDownloadPath = store.get('syncDownloadPath') || defaultDownloadPath;
+  
+  // Compute initial uploads path with UUID if credentials exist
+  let initialUploadsPath = uploadsPath;
+  if (credentials.email && credentials.password) {
+    const userUuid = computeUserUuidSync(credentials.email, credentials.password);
+    if (userUuid) {
+      initialUploadsPath = path.join(uploadsPath, userUuid);
+    }
+  }
   const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim();
   
   mainWindow = new BrowserWindow({
@@ -1176,24 +1185,30 @@ function showMainWindow() {
     
     /* Status Hero - Fixed height to prevent layout shift - Dark green theme matching mobile */
     .status-hero { height: 160px; padding: 16px; text-align: center; background: linear-gradient(180deg, rgba(16,185,129,0.08) 0%, rgba(6,78,59,0.15) 100%); transition: all 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .status-hero.backing-up { height: 120px; background: linear-gradient(180deg, rgba(3,225,255,0.08) 0%, transparent 100%); }
-    .status-hero.syncing { height: 120px; background: linear-gradient(180deg, rgba(74,222,128,0.08) 0%, transparent 100%); }
+    .status-hero.backing-up { height: 160px; background: linear-gradient(180deg, rgba(3,225,255,0.08) 0%, transparent 100%); }
+    .status-hero.syncing { height: 160px; background: linear-gradient(180deg, rgba(74,222,128,0.08) 0%, transparent 100%); }
+    .status-hero.creating-nft { height: 70px; padding: 8px 16px; flex-direction: row; gap: 12px; background: linear-gradient(180deg, rgba(168,85,247,0.08) 0%, rgba(168,85,247,0.15) 100%); }
+    .status-hero.creating-nft .status-icon { width: 44px; height: 44px; min-width: 44px; min-height: 44px; margin: 0; border-color: rgba(168,85,247,0.4); animation: pulse 1.5s infinite; }
+    .status-hero.creating-nft .status-icon-inner { width: 34px; height: 34px; min-width: 34px; min-height: 34px; background: rgba(168,85,247,0.2); }
+    .status-hero.creating-nft .status-icon-inner svg { width: 18px; height: 18px; stroke: #A855F7; }
+    .status-hero.creating-nft .status-title { font-size: 14px; margin-bottom: 0; color: #A855F7; }
+    .status-hero.creating-nft .status-subtitle { font-size: 11px; padding: 0; }
     .status-icon { width: 80px; height: 80px; min-width: 80px; min-height: 80px; aspect-ratio: 1 / 1; margin: 0 auto 12px; border-radius: 50%; background: transparent; border: 2px solid rgba(16,185,129,0.25); display: flex; align-items: center; justify-content: center; transition: all 0.3s; flex-shrink: 0; }
     .status-icon-inner { width: 64px; height: 64px; min-width: 64px; min-height: 64px; aspect-ratio: 1 / 1; border-radius: 50%; background: rgba(16,185,129,0.125); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .status-icon.running { border-color: rgba(16,185,129,0.25); }
     .status-icon.running .status-icon-inner { background: rgba(16,185,129,0.125); }
-    .status-icon.backing-up, .status-icon.syncing { width: 56px; height: 56px; min-width: 56px; min-height: 56px; aspect-ratio: 1 / 1; margin-bottom: 8px; animation: pulse 2s infinite; }
+    .status-icon.backing-up, .status-icon.syncing { width: 80px; height: 80px; min-width: 80px; min-height: 80px; aspect-ratio: 1 / 1; margin-bottom: 12px; animation: pulse 2s infinite; }
     .status-icon.backing-up { border-color: rgba(3,225,255,0.25); }
-    .status-icon.backing-up .status-icon-inner { width: 45px; height: 45px; min-width: 45px; min-height: 45px; background: rgba(3,225,255,0.125); }
+    .status-icon.backing-up .status-icon-inner { width: 64px; height: 64px; min-width: 64px; min-height: 64px; background: rgba(3,225,255,0.125); }
     .status-icon.syncing { border-color: rgba(74,222,128,0.25); }
-    .status-icon.syncing .status-icon-inner { width: 45px; height: 45px; min-width: 45px; min-height: 45px; background: rgba(74,222,128,0.125); }
+    .status-icon.syncing .status-icon-inner { width: 64px; height: 64px; min-width: 64px; min-height: 64px; background: rgba(74,222,128,0.125); }
     @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
     .status-icon-inner svg { width: 32px; height: 32px; transition: all 0.3s; }
-    .status-icon.backing-up .status-icon-inner svg, .status-icon.syncing .status-icon-inner svg { width: 22px; height: 22px; }
+    .status-icon.backing-up .status-icon-inner svg, .status-icon.syncing .status-icon-inner svg { width: 32px; height: 32px; }
     .status-title { font-size: 22px; font-weight: 600; margin-bottom: 6px; transition: all 0.3s; color: #10B981; }
     .status-title.running { color: #10B981; }
     .status-title.stopped { color: var(--error); }
-    .status-title.backing-up, .status-title.syncing { font-size: 16px; margin-bottom: 4px; }
+    .status-title.backing-up, .status-title.syncing { font-size: 22px; margin-bottom: 6px; }
     .status-title.backing-up { color: var(--accent); }
     .status-title.syncing { color: var(--success); }
     .status-subtitle { font-size: 13px; color: var(--text-secondary); padding: 8px 16px; background: transparent; border-radius: 20px; display: inline-block; }
@@ -1786,7 +1801,7 @@ function showMainWindow() {
       <div class="section-title">LOCAL STORAGE</div>
       <div class="card">
         <div class="form-row">
-          <div class="form-group" style="flex: 1;"><input class="form-input" type="text" id="uploads-path" value="${uploadsPath || ''}" readonly style="font-size: 11px; cursor: text;"></div>
+          <div class="form-group" style="flex: 1;"><input class="form-input" type="text" id="uploads-path" value="${initialUploadsPath || uploadsPath || ''}" readonly style="font-size: 11px; cursor: text;"></div>
         </div>
         <div class="folder-actions" style="margin-top: 10px;">
           <button class="folder-btn" onclick="copyUploadsPath()">📋 Copy</button>
@@ -1954,7 +1969,9 @@ function showMainWindow() {
     async function getUserUploadsPath() {
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
+      console.log('[UUID] Computing for email:', email, 'hasPassword:', !!password);
       const uuid = await computeUserUuid(email, password);
+      console.log('[UUID] Computed UUID:', uuid);
       if (uuid) {
         cachedUuid = uuid;
         return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + uuid;
@@ -1970,29 +1987,33 @@ function showMainWindow() {
     
     async function updateUploadsPathDisplay() {
       const pathEl = document.getElementById('uploads-path');
-      pathEl.value = await getUserUploadsPath();
+      const newPath = await getUserUploadsPath();
+      console.log('[UI] Updating uploads path to:', newPath);
+      pathEl.value = newPath;
     }
     
     // Update path when email or password changes
     try {
       document.getElementById('email').addEventListener('input', updateUploadsPathDisplay);
       document.getElementById('password').addEventListener('input', updateUploadsPathDisplay);
-      updateUploadsPathDisplay(); // Initial update
+      // Initial update - run after a short delay to ensure form values are populated
+      setTimeout(async () => {
+        await updateUploadsPathDisplay();
+        console.log('[UI] Initial uploads path updated');
+      }, 100);
     } catch (e) {
       console.error('Event listener setup error:', e);
     }
     
     async function openUploadsFolder() { 
-      // Use the path from the input field directly (it already has the UUID)
-      const pathEl = document.getElementById('uploads-path');
-      const pathToOpen = pathEl ? pathEl.value : await getUserUploadsPath();
+      // Always compute fresh path with UUID
+      const pathToOpen = await getUserUploadsPath();
       ipcRenderer.send('open-folder', pathToOpen); 
     }
     window.openUploadsFolder = openUploadsFolder;
     async function copyUploadsPath() { 
-      // Use the path from the input field directly (it already has the UUID)
-      const pathEl = document.getElementById('uploads-path');
-      const pathToCopy = pathEl ? pathEl.value : await getUserUploadsPath();
+      // Always compute fresh path with UUID
+      const pathToCopy = await getUserUploadsPath();
       const btn = event.target;
       const originalText = btn.textContent;
       
@@ -2550,6 +2571,14 @@ function showMainWindow() {
       if (isMinting || !selectedNFTPhoto || !nftWalletAddress) return;
       isMinting = true;
       
+      // Squeeze hero during NFT creation
+      const hero = document.getElementById('status-hero');
+      const title = document.getElementById('status-title');
+      const subtitle = document.getElementById('status-subtitle');
+      hero.classList.add('creating-nft');
+      title.textContent = 'Creating NFT';
+      subtitle.textContent = 'Uploading...';
+      
       const btn = document.getElementById('nft-mint-btn');
       btn.disabled = true;
       btn.innerHTML = '<span>⏳</span> Minting...';
@@ -2574,6 +2603,9 @@ function showMainWindow() {
             closeNFTMint();
             btn.style.background = '';
             isMinting = false;
+            // Restore hero after NFT creation
+            hero.classList.remove('creating-nft');
+            updateServerStatus(serverRunning);
           }, 3000);
         } else {
           throw new Error(result.error || 'Minting failed');
@@ -2586,12 +2618,18 @@ function showMainWindow() {
           btn.style.background = '';
           btn.innerHTML = '<span>⬡</span> Mint NFT';
           updateMintButton();
+          // Restore hero after NFT creation failure
+          hero.classList.remove('creating-nft');
+          updateServerStatus(serverRunning);
         }, 3000);
       }
     }
     
     ipcRenderer.on('mint-progress', (e, data) => {
       document.getElementById('nft-mint-btn').innerHTML = '<span>⏳</span> ' + data.status;
+      // Update hero subtitle with progress
+      const subtitle = document.getElementById('status-subtitle');
+      if (subtitle) subtitle.textContent = data.status;
     });
     
     // Poll for mint success from browser
@@ -4643,6 +4681,8 @@ let activeSyncClient = null;
 
 ipcMain.on('start-desktop-sync', async (event, config) => {
   try {
+    safeConsole('log', `[SYNC] Config received:`, JSON.stringify({ source: config.source, email: config.email, downloadPath: config.downloadPath, hasPassword: !!config.password }));
+    
     store.set('backupCredentials', {
       email: config.email,
       password: config.password,
@@ -4650,14 +4690,26 @@ ipcMain.on('start-desktop-sync', async (event, config) => {
       remotePort: config.remotePort
     });
     
-    // downloadPath already contains user UUID from UI (getUserUploadsPath)
-    safeConsole('log', `[SYNC] Saving to: ${config.downloadPath}`);
-    store.set('syncDownloadPath', config.downloadPath);
+    // Compute UUID v5 from email:password and ensure we save to user folder
+    const userUuid = computeUserUuidSync(config.email, config.password);
+    let downloadPath = config.downloadPath;
+    
+    // If downloadPath doesn't already contain the UUID, append it
+    if (userUuid && !downloadPath.includes(userUuid)) {
+      downloadPath = path.join(uploadsPath, userUuid);
+      safeConsole('log', `[SYNC] Computed user UUID: ${userUuid}`);
+    }
+    
+    safeConsole('log', `[SYNC] Saving to: ${downloadPath}`);
+    store.set('syncDownloadPath', downloadPath);
+    
+    // Update config with correct path
+    config.downloadPath = downloadPath;
     
     event.reply('sync-progress', { message: 'Connecting...', progress: 0.02 });
     
-    if (!fs.existsSync(config.downloadPath)) {
-      fs.mkdirSync(config.downloadPath, { recursive: true });
+    if (!fs.existsSync(downloadPath)) {
+      fs.mkdirSync(downloadPath, { recursive: true });
     }
     
     const { DesktopSyncClient } = require('./sync-client');

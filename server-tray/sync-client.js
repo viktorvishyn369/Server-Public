@@ -173,40 +173,47 @@ async function writeExifToFile(filePath, exifData) {
     }
     
     // Software
-    if (exifData.software) exifMeta.Software = exifData.software;
+    if (exifData.software) exifMeta.Software = String(exifData.software);
     
-    // Orientation
-    if (exifData.orientation != null) exifMeta.Orientation = exifData.orientation;
+    // Orientation - must be string for Sharp
+    if (exifData.orientation != null) exifMeta.Orientation = String(exifData.orientation);
     
     // Sharp can write EXIF via withMetadata for JPEG
     // For full EXIF control, we use withExif (Sharp 0.33+)
     let sharpInstance = sharp(imageBuffer);
     
+    // Build IFD0 object, only including defined values
+    const ifd0 = {};
+    if (exifMeta.Make) ifd0.Make = exifMeta.Make;
+    if (exifMeta.Model) ifd0.Model = exifMeta.Model;
+    if (exifMeta.Software) ifd0.Software = exifMeta.Software;
+    if (exifMeta.Orientation) ifd0.Orientation = exifMeta.Orientation;
+    
+    // Build EXIF IFD object, only including defined values
+    const ifd2 = {};
+    if (exifMeta.DateTimeOriginal) ifd2.DateTimeOriginal = exifMeta.DateTimeOriginal;
+    if (exifMeta.DateTimeDigitized) ifd2.DateTimeDigitized = exifMeta.DateTimeDigitized;
+    if (exifMeta.ExposureTime != null) ifd2.ExposureTime = String(exifMeta.ExposureTime);
+    if (exifMeta.FNumber != null) ifd2.FNumber = String(exifMeta.FNumber);
+    if (exifMeta.ISO != null) ifd2.ISO = String(exifMeta.ISO);
+    if (exifMeta.FocalLength != null) ifd2.FocalLength = String(exifMeta.FocalLength);
+    if (exifMeta.OffsetTimeOriginal) ifd2.OffsetTimeOriginal = exifMeta.OffsetTimeOriginal;
+    if (exifMeta.OffsetTimeDigitized) ifd2.OffsetTimeDigitized = exifMeta.OffsetTimeDigitized;
+    if (exifMeta.SubSecTimeOriginal) ifd2.SubSecTimeOriginal = String(exifMeta.SubSecTimeOriginal);
+    if (exifMeta.SubSecTimeDigitized) ifd2.SubSecTimeDigitized = String(exifMeta.SubSecTimeDigitized);
+    
     // Try to preserve and add EXIF
     if (ext === '.jpg' || ext === '.jpeg') {
-      // For JPEG, Sharp can write EXIF data
-      sharpInstance = sharpInstance.withMetadata({
-        exif: {
-          IFD0: {
-            Make: exifMeta.Make,
-            Model: exifMeta.Model,
-            Software: exifMeta.Software,
-            Orientation: exifMeta.Orientation,
-          },
-          IFD2: { // EXIF IFD
-            DateTimeOriginal: exifMeta.DateTimeOriginal,
-            DateTimeDigitized: exifMeta.DateTimeDigitized,
-            ExposureTime: exifMeta.ExposureTime,
-            FNumber: exifMeta.FNumber,
-            ISO: exifMeta.ISO,
-            FocalLength: exifMeta.FocalLength,
-            OffsetTimeOriginal: exifMeta.OffsetTimeOriginal,
-            OffsetTimeDigitized: exifMeta.OffsetTimeDigitized,
-            SubSecTimeOriginal: exifMeta.SubSecTimeOriginal,
-            SubSecTimeDigitized: exifMeta.SubSecTimeDigitized,
-          }
-        }
-      });
+      // For JPEG, Sharp can write EXIF data - only include non-empty objects
+      const exifObj = {};
+      if (Object.keys(ifd0).length > 0) exifObj.IFD0 = ifd0;
+      if (Object.keys(ifd2).length > 0) exifObj.IFD2 = ifd2;
+      
+      if (Object.keys(exifObj).length > 0) {
+        sharpInstance = sharpInstance.withMetadata({ exif: exifObj });
+      } else {
+        sharpInstance = sharpInstance.withMetadata();
+      }
     } else {
       // For other formats, just preserve existing metadata
       sharpInstance = sharpInstance.withMetadata();
@@ -380,6 +387,7 @@ class DesktopSyncClient {
 
   async login() {
     const baseUrl = this.getBaseUrl();
+    console.log(`[SYNC] Login to ${baseUrl} as ${this.config.email}, source=${this.config.source}`);
     this.progressCallback({ message: 'Logging in...', progress: 0.02 });
 
     return withRetry(async () => {
@@ -396,6 +404,7 @@ class DesktopSyncClient {
       if (response.data && response.data.token) {
         this.token = response.data.token;
         this.deviceUuid = this.getDeviceId();
+        console.log(`[SYNC] Login successful, token received`);
         return true;
       }
       throw new Error('No token received');

@@ -786,7 +786,9 @@ class DesktopBackupClient {
       const isImage = /\.(jpg|jpeg|png|heic|heif|gif|bmp|webp|tiff?)$/i.test(fileName);
       if (fileHash && isImage) {
         this.extractFullExif(filePath).then(fullExif => {
+          console.log('[EXIF] Desktop extraction for', fileName, '- captureTime:', fullExif?.captureTime, 'make:', fullExif?.make);
           if (fullExif && (fullExif.captureTime || fullExif.make || fullExif.gpsLatitude != null)) {
+            console.log('[EXIF] Storing full EXIF for', fileName, 'hash:', fileHash?.substring(0, 16), 'to:', baseUrl);
             axios.post(`${baseUrl}/api/exif/store`, {
               fileHash,
               exif: fullExif,
@@ -797,9 +799,12 @@ class DesktopBackupClient {
                 'X-Device-UUID': this.deviceUuid
               },
               timeout: 10000
-            }).catch(e => console.log('[EXIF] Store failed (non-critical):', e?.message));
+            }).then(() => console.log('[EXIF] Store success:', fileName))
+              .catch(e => console.log('[EXIF] Store failed (non-critical):', e?.message));
+          } else {
+            console.log('[EXIF] Skipping store - no meaningful EXIF data for', fileName);
           }
-        }).catch(() => {});
+        }).catch(e => console.log('[EXIF] Extract failed:', e?.message));
       }
       
       return { duplicate: false };
