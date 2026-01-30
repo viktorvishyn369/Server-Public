@@ -1965,17 +1965,42 @@ function showMainWindow() {
       }
     }
     
+    // Initialize cachedUuid from initialUploadsPath if it contains a UUID
     let cachedUuid = null;
+    const initialPath = "${(initialUploadsPath || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}";
+    if (initialPath && initialPath !== baseUploadsPath) {
+      // Extract UUID from the path (last segment)
+      const pathSep = initialPath.includes('\\\\') ? '\\\\' : '/';
+      const segments = initialPath.split(pathSep);
+      const lastSegment = segments[segments.length - 1];
+      // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      if (lastSegment && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lastSegment)) {
+        cachedUuid = lastSegment;
+        console.log('[UUID] Initialized from stored credentials:', cachedUuid);
+      }
+    }
+    
     async function getUserUploadsPath() {
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      console.log('[UUID] Computing for email:', email, 'hasPassword:', !!password);
-      const uuid = await computeUserUuid(email, password);
-      console.log('[UUID] Computed UUID:', uuid);
-      if (uuid) {
-        cachedUuid = uuid;
-        return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + uuid;
+      
+      // If form has credentials, compute fresh UUID
+      if (email && password) {
+        console.log('[UUID] Computing for email:', email, 'hasPassword:', !!password);
+        const uuid = await computeUserUuid(email, password);
+        console.log('[UUID] Computed UUID:', uuid);
+        if (uuid) {
+          cachedUuid = uuid;
+          return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + uuid;
+        }
       }
+      
+      // Fall back to cached UUID from stored credentials
+      if (cachedUuid) {
+        console.log('[UUID] Using cached UUID:', cachedUuid);
+        return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + cachedUuid;
+      }
+      
       return baseUploadsPath;
     }
     function getUserUploadsPathSync() {
