@@ -619,6 +619,45 @@ class DesktopSyncClient {
           console.log(`[EXIF] Could not apply EXIF to ${filename}:`, exifErr.message);
         }
       }
+      
+      // Register file with local server so mobile sync can get fileHash for EXIF lookup
+      try {
+        await axios.post(`http://127.0.0.1:3000/api/files/register`, {
+          filename,
+          fileHash: decryptedManifest.fileHash,
+          perceptualHash: decryptedManifest.perceptualHash,
+          size: decryptedManifest.originalSize,
+          mimeType: decryptedManifest.mimeType || 'image/jpeg'
+        }, {
+          headers: {
+            'Authorization': `Bearer ${this.token}`,
+            'X-Device-UUID': this.deviceUuid
+          },
+          timeout: 5000
+        });
+        console.log(`[SYNC] Registered file with local server: ${filename}`);
+        
+        // Also store EXIF to local server if we fetched it from StealthCloud
+        if (isImage && decryptedManifest.fileHash) {
+          const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, decryptedManifest.fileHash);
+          if (exifData) {
+            await axios.post(`http://127.0.0.1:3000/api/exif/store`, {
+              fileHash: decryptedManifest.fileHash,
+              exif: exifData,
+              platform: 'desktop'
+            }, {
+              headers: {
+                'Authorization': `Bearer ${this.token}`,
+                'X-Device-UUID': this.deviceUuid
+              },
+              timeout: 5000
+            });
+            console.log(`[SYNC] Stored EXIF to local server: ${filename}`);
+          }
+        }
+      } catch (regErr) {
+        console.log(`[SYNC] Could not register file (non-critical): ${regErr.message}`);
+      }
     } catch (e) {
       writeStream.destroy();
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
