@@ -848,14 +848,25 @@ class DesktopBackupClient {
   }
 
   // Upload manifest to StealthCloud
-  async uploadManifest(manifestId, encryptedManifest, chunkCount) {
+  // meta contains unencrypted metadata for server-side dedup and indexing
+  async uploadManifest(manifestId, encryptedManifest, chunkCount, meta = {}) {
     const baseUrl = this.getBaseUrl();
     const url = `${baseUrl}/api/cloud/manifests`;
 
     const response = await axios.post(url, {
       manifestId,
       encryptedManifest,
-      chunkCount
+      chunkCount,
+      // Unencrypted metadata for server-side dedup and EXIF storage
+      filename: meta.filename,
+      originalSize: meta.originalSize,
+      fileHash: meta.fileHash,
+      perceptualHash: meta.perceptualHash,
+      creationTime: meta.creationTime,
+      exifCaptureTime: meta.exifCaptureTime,
+      exifMake: meta.exifMake,
+      exifModel: meta.exifModel,
+      mediaType: meta.mediaType,
     }, {
       headers: {
         'Authorization': `Bearer ${this.token}`,
@@ -1293,7 +1304,18 @@ class DesktopBackupClient {
     });
 
     // Upload manifest and check server response
-    const manifestResponse = await this.uploadManifest(manifestId, encryptedManifest, chunkIds.length);
+    // Pass metadata for server-side dedup and EXIF indexing
+    const manifestResponse = await this.uploadManifest(manifestId, encryptedManifest, chunkIds.length, {
+      filename: fileName,
+      originalSize: fileSize,
+      fileHash: exactFileHash,
+      perceptualHash: perceptualHash,
+      creationTime: fileModified ? fileModified.getTime() : null,
+      exifCaptureTime: exifData.captureTime || null,
+      exifMake: exifData.make || null,
+      exifModel: exifData.model || null,
+      mediaType: this.getMediaType(fileName),
+    });
 
     // Check if server rejected as duplicate (server-side deduplication)
     if (manifestResponse && manifestResponse.skipped) {
