@@ -2440,6 +2440,70 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
   }
 }
 
+// Estimate transfer fee from Solana network
+// Standard NFT: rent for ATA (if needed) + network fee
+// Compressed NFT: just network fee
+async function estimateTransferFee(isCompressed, recipientAddress, fromAddress) {
+  try {
+    if (!solanaAvailable) {
+      // Fallback to hardcoded estimates
+      return {
+        success: true,
+        feeLamports: isCompressed ? 8000 : 2040000,
+        feeSol: isCompressed ? 0.00008 : 0.00204,
+        breakdown: {
+          rentLamports: isCompressed ? 0 : 2039280,
+          networkFeeLamports: isCompressed ? 8000 : 5000,
+        }
+      };
+    }
+    
+    // Token account size is 165 bytes for SPL tokens
+    const TOKEN_ACCOUNT_SIZE = 165;
+    
+    // Get rent exemption for token account (only needed for standard NFTs if recipient doesn't have ATA)
+    let rentLamports = 0;
+    if (!isCompressed) {
+      rentLamports = await getRentExemptLamports(TOKEN_ACCOUNT_SIZE);
+    }
+    
+    // Get recent priority fee
+    const priorityMicroLamports = await getRecentPriorityMicroLamports();
+    
+    // Base network fee is 5000 lamports (0.000005 SOL)
+    // Priority fee is in micro-lamports per compute unit, typical tx uses ~200k CU
+    const baseFee = 5000;
+    const priorityFee = Math.ceil((priorityMicroLamports * 200000) / 1000000);
+    const networkFeeLamports = baseFee + priorityFee;
+    
+    const totalLamports = rentLamports + networkFeeLamports;
+    const feeSol = totalLamports / 1e9;
+    
+    return {
+      success: true,
+      feeLamports: totalLamports,
+      feeSol: feeSol,
+      breakdown: {
+        rentLamports: rentLamports,
+        networkFeeLamports: networkFeeLamports,
+        priorityFeeLamports: priorityFee,
+      }
+    };
+  } catch (e) {
+    console.error('[Estimate Transfer Fee] Error:', e);
+    // Fallback to hardcoded estimates
+    return {
+      success: true,
+      feeLamports: isCompressed ? 8000 : 2040000,
+      feeSol: isCompressed ? 0.00008 : 0.00204,
+      breakdown: {
+        rentLamports: isCompressed ? 0 : 2039280,
+        networkFeeLamports: isCompressed ? 8000 : 5000,
+      }
+    };
+  }
+}
+
 // ============================================================================
 // EXPORTS
 // ============================================================================
@@ -2500,6 +2564,7 @@ module.exports = {
   // NFT transfer
   transferNFT,
   buildTransferTransaction,
+  estimateTransferFee,
   
   // Windows
   openWalletConnect,

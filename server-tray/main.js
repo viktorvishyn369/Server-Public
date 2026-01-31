@@ -1428,7 +1428,12 @@ function showMainWindow() {
     .nft-transfer-cost-label { font-size: 11px; color: var(--text-muted); }
     .nft-transfer-cost-value { font-size: 13px; color: #14F195; font-weight: 600; }
     .nft-transfer-actions { display: flex; gap: 10px; }
-    .nft-transfer-actions .nft-action-btn { flex: 1; }
+    .nft-transfer-actions .nft-action-btn { flex: 1; display: flex !important; align-items: center; justify-content: center; padding: 14px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+    .nft-transfer-actions .nft-action-btn.secondary { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #888; }
+    .nft-transfer-actions .nft-action-btn.secondary:hover { background: rgba(255,255,255,0.05); }
+    .nft-transfer-actions .nft-action-btn.primary { background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); color: #fff; }
+    .nft-transfer-actions .nft-action-btn.primary:hover { background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 100%); }
+    .nft-transfer-actions .nft-action-btn.primary:disabled { background: rgba(153, 69, 255, 0.3); color: rgba(255,255,255,0.4); cursor: not-allowed; }
     
     /* NFT Mint Panel (inline) */
     .nft-mint-section { margin-top: 8px; background: var(--bg-card); border-radius: 14px; padding: 16px; border: 1px solid rgba(153,69,255,0.3); }
@@ -3114,7 +3119,7 @@ function showMainWindow() {
       }
     }
     
-    function openNFTTransfer() {
+    async function openNFTTransfer() {
       if (!currentDetailNFT) return;
       
       const isCompressed = currentDetailNFT.isCompressed === true;
@@ -3123,11 +3128,39 @@ function showMainWindow() {
       document.getElementById('nft-transfer-img').src = imageUrl;
       document.getElementById('nft-transfer-name').textContent = currentDetailNFT.name || 'Unnamed NFT';
       document.getElementById('nft-transfer-type').textContent = isCompressed ? 'Compressed NFT' : 'Standard NFT';
-      document.getElementById('nft-transfer-recipient').value = '';
       
-      // Set estimated cost (cNFTs are cheaper to transfer)
-      const cost = isCompressed ? '~0.00001 SOL' : '~0.000005 SOL';
-      document.getElementById('nft-transfer-cost').textContent = cost;
+      const recipientInput = document.getElementById('nft-transfer-recipient');
+      const confirmBtn = document.querySelector('.nft-transfer-actions .nft-action-btn.primary');
+      const costEl = document.getElementById('nft-transfer-cost');
+      
+      recipientInput.value = '';
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Confirm Transfer';
+      
+      // Add input listener to enable/disable button based on valid address
+      recipientInput.oninput = function() {
+        const addr = recipientInput.value.trim();
+        const isValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
+        confirmBtn.disabled = !isValid;
+      };
+      
+      // Fetch real-time fee estimate from Solana network
+      costEl.textContent = 'Calculating...';
+      try {
+        const feeResult = await ipcRenderer.invoke('estimate-transfer-fee', { isCompressed });
+        if (feeResult && feeResult.success) {
+          const feeSol = feeResult.feeSol;
+          // Format with appropriate decimals
+          const formatted = feeSol < 0.0001 ? feeSol.toFixed(5) : feeSol.toFixed(5);
+          costEl.textContent = '~' + formatted + ' SOL';
+        } else {
+          // Fallback to hardcoded estimates
+          costEl.textContent = isCompressed ? '~0.00008 SOL' : '~0.00204 SOL';
+        }
+      } catch (e) {
+        console.error('[Transfer Fee] Error fetching fee:', e);
+        costEl.textContent = isCompressed ? '~0.00008 SOL' : '~0.00204 SOL';
+      }
       
       document.getElementById('nft-transfer-modal').classList.add('active');
     }
@@ -3211,7 +3244,8 @@ function showMainWindow() {
                 closeNFTDetail();
                 refreshNFTAlbum();
               } else {
-                alert('Transfer failed: ' + (data.error || 'Unknown error'));
+                const isCancelled = (data.error || '').toLowerCase().includes('cancel') || (data.error || '').toLowerCase().includes('rejected');
+                showTransferCancelledModal(isCancelled);
               }
               confirmBtn.innerHTML = 'Confirm Transfer';
               confirmBtn.disabled = false;
@@ -3230,11 +3264,8 @@ function showMainWindow() {
         
       } catch (e) {
         console.error('[NFT Transfer] Error:', e);
-        if (e.message?.includes('User rejected') || e.code === 4001) {
-          alert('Transaction cancelled by user');
-        } else {
-          alert('Transfer failed: ' + e.message);
-        }
+        const isCancelled = e.message?.includes('User rejected') || e.message?.includes('cancel') || e.code === 4001;
+        showTransferCancelledModal(isCancelled);
       } finally {
         confirmBtn.innerHTML = 'Confirm Transfer';
         confirmBtn.disabled = false;
@@ -3282,6 +3313,27 @@ function showMainWindow() {
       document.body.appendChild(modal);
     }
     window.showTransferSuccessModal = showTransferSuccessModal;
+    
+    function showTransferCancelledModal(isCancelled) {
+      const existing = document.getElementById('transfer-cancelled-modal');
+      if (existing) existing.remove();
+      
+      const modal = document.createElement('div');
+      modal.id = 'transfer-cancelled-modal';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+      modal.innerHTML = \`
+        <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:20px;padding:32px;max-width:360px;width:100%;text-align:center;border:1px solid rgba(255,255,255,0.1);box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+          <div style="font-size:56px;margin-bottom:16px;">\${isCancelled ? '🚫' : '⚠️'}</div>
+          <h2 style="color:#fff;font-size:20px;margin-bottom:8px;">\${isCancelled ? 'Transfer Cancelled' : 'Transfer Failed'}</h2>
+          <p style="color:#888;font-size:13px;margin-bottom:24px;">\${isCancelled ? 'You cancelled the transaction in your wallet.' : 'Something went wrong. Please try again.'}</p>
+          <button onclick="document.getElementById('transfer-cancelled-modal').remove()" style="width:100%;padding:14px;border:1px solid rgba(255,255,255,0.2);border-radius:12px;background:transparent;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">
+            OK
+          </button>
+        </div>
+      \`;
+      document.body.appendChild(modal);
+    }
+    window.showTransferCancelledModal = showTransferCancelledModal;
     
     function renderNFTPage() {
       const grid = document.getElementById('nft-grid');
@@ -3934,6 +3986,17 @@ ipcMain.handle('sync-nfts-from-server', async () => {
 // NFT Verification handler (same as mobile)
 ipcMain.handle('verify-nft-on-chain', async (event, mintAddress, txSignature) => {
   return await nftDesktop.verifyNFTOnChain(mintAddress, txSignature);
+});
+
+// Estimate NFT transfer fee from Solana network
+ipcMain.handle('estimate-transfer-fee', async (event, { isCompressed }) => {
+  try {
+    const result = await nftDesktop.estimateTransferFee(isCompressed);
+    return result;
+  } catch (e) {
+    console.error('[Estimate Transfer Fee] Error:', e);
+    return { success: false, error: e.message };
+  }
 });
 
 // NFT Transfer - build transaction for signing using nftDesktop module
