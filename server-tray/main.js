@@ -1561,7 +1561,7 @@ function showMainWindow() {
           <div class="action-btn-icon nft-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
           <div class="action-btn-text">
             <div class="action-btn-title nft-title">NFT Memories</div>
-            <div class="action-btn-subtitle nft-subtitle">Own photos forever</div>
+            <div class="action-btn-subtitle nft-subtitle">Blockchain-signed originals</div>
           </div>
           <div class="action-btn-arrow nft-arrow">›</div>
         </div>
@@ -2613,7 +2613,7 @@ function showMainWindow() {
       btn.disabled = true;
       btn.innerHTML = '<span>⏳</span> Minting...';
       
-      const name = document.getElementById('nft-name-input').value || 'PhotoLynk Memory';
+      const name = document.getElementById('nft-name-input').value || 'NFT Memories';
       const description = document.getElementById('nft-desc-input').value || '';
       
       try {

@@ -810,7 +810,7 @@ async function mintNFT(params, onProgress) {
     // Step 3: Build and upload metadata
     onProgress?.({ status: 'Uploading metadata...' });
     const metadata = buildNFTMetadata({
-      name: name || 'PhotoLynk Memory',
+      name: name || 'NFT Memories',
       description,
       imageUrl,
       ownerAddress: walletAddress,
@@ -864,7 +864,7 @@ async function mintNFT(params, onProgress) {
       amount: feeSol.toFixed(9),
       feeUsd: feeUsd.toFixed(2),
       reference: reference,
-      name: name || 'PhotoLynk Memory',
+      name: name || 'NFT Memories',
       imageUrl: imageUrl,
       metadataUrl: metadataUpload.gatewayUrl,
       nftType: nftType,
@@ -1749,7 +1749,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       btn.disabled = true;
       btn.innerHTML = '<span>⏳</span> Minting...';
       
-      const name = document.getElementById('nft-name').value || 'PhotoLynk Memory';
+      const name = document.getElementById('nft-name').value || 'NFT Memories';
       const description = document.getElementById('nft-description').value || '';
       
       try {
