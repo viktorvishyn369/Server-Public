@@ -3980,7 +3980,8 @@ ipcMain.handle('sync-nfts-from-server', async () => {
   if (!credentials.baseUrl || !credentials.token) {
     return { success: false, error: 'Not authenticated' };
   }
-  return await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: credentials.token });
+  const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
+  return await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: authHeader });
 });
 
 // NFT Verification handler (same as mobile)

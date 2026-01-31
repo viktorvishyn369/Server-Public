@@ -652,6 +652,7 @@ async function uploadToStealthCloud(filePath, credentials) {
       resolve({ success: false, error: 'Not authenticated' });
       return;
     }
+    const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
     try {
       const fileData = fs.readFileSync(filePath);
       const fileName = `nft_${Date.now()}.jpg`;
@@ -668,7 +669,7 @@ async function uploadToStealthCloud(filePath, credentials) {
         path: '/api/nft/upload',
         method: 'POST',
         headers: {
-          'Authorization': credentials.token,
+          'Authorization': authHeader,
           'X-Device-UUID': credentials.deviceUuid || '',
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
           'Content-Length': body.length,
