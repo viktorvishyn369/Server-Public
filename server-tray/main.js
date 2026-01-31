@@ -952,7 +952,7 @@ function startPairingServer() {
           // Authenticate with StealthCloud to get token for NFT uploads
           (async () => {
             try {
-              const stealthCloudBaseUrl = 'https://api.stealthlynk.com';
+              const stealthCloudBaseUrl = 'https://stealthlynk.io';
               const { DesktopBackupClient } = require('./backup-client');
               const authClient = new DesktopBackupClient({
                 destination: 'stealthcloud',
@@ -4624,7 +4624,7 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
       await checkClient.login();
       
       // Store token and baseUrl for NFT StealthCloud uploads
-      const stealthCloudBaseUrl = 'https://api.stealthlynk.com';
+      const stealthCloudBaseUrl = 'https://stealthlynk.io';
       store.set('backupCredentials', {
         ...store.get('backupCredentials'),
         baseUrl: stealthCloudBaseUrl,
@@ -4811,7 +4811,7 @@ ipcMain.on('start-desktop-sync', async (event, config) => {
     
     // Store credentials after sync for NFT StealthCloud uploads
     if (activeSyncClient.token) {
-      const stealthCloudBaseUrl = 'https://api.stealthlynk.com';
+      const stealthCloudBaseUrl = 'https://stealthlynk.io';
       store.set('backupCredentials', {
         ...store.get('backupCredentials'),
         baseUrl: stealthCloudBaseUrl,
