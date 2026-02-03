@@ -7,11 +7,67 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
+const { execSync } = require('child_process');
 const axios = require('axios');
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
 const sharp = require('sharp');
 const heicDecode = require('heic-decode');
+
+// Get desktop device info for EXIF fallback when make/model is missing
+function getDesktopDeviceInfo() {
+  const platform = os.platform();
+  let make = null;
+  let model = null;
+  
+  try {
+    if (platform === 'darwin') {
+      // macOS - get hardware info
+      make = 'apple';
+      try {
+        const hwModel = execSync('sysctl -n hw.model', { encoding: 'utf8', timeout: 5000 }).trim();
+        model = hwModel.toLowerCase(); // e.g., "macbookpro18,1" or "mac14,2"
+      } catch (e) {
+        model = 'mac';
+      }
+    } else if (platform === 'win32') {
+      // Windows - get manufacturer and model
+      try {
+        const wmicMake = execSync('wmic computersystem get manufacturer', { encoding: 'utf8', timeout: 5000 });
+        const makeMatch = wmicMake.split('\n').find(line => line.trim() && !line.includes('Manufacturer'));
+        if (makeMatch) make = makeMatch.trim().toLowerCase();
+        
+        const wmicModel = execSync('wmic computersystem get model', { encoding: 'utf8', timeout: 5000 });
+        const modelMatch = wmicModel.split('\n').find(line => line.trim() && !line.includes('Model'));
+        if (modelMatch) model = modelMatch.trim().toLowerCase();
+      } catch (e) {
+        make = 'windows-pc';
+        model = os.hostname().toLowerCase();
+      }
+    } else if (platform === 'linux') {
+      // Linux - try to get from DMI or fallback to hostname
+      try {
+        const vendor = fs.readFileSync('/sys/class/dmi/id/sys_vendor', 'utf8').trim();
+        make = vendor.toLowerCase();
+      } catch (e) {
+        make = 'linux-pc';
+      }
+      try {
+        const productName = fs.readFileSync('/sys/class/dmi/id/product_name', 'utf8').trim();
+        model = productName.toLowerCase();
+      } catch (e) {
+        model = os.hostname().toLowerCase();
+      }
+    }
+  } catch (e) {
+    // Fallback
+    make = platform;
+    model = os.hostname().toLowerCase();
+  }
+  
+  return { make, model };
+}
 
 const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks (same as mobile)
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
@@ -465,6 +521,18 @@ class DesktopBackupClient {
     } catch (e) {
       console.warn(`[EXIF] Extraction failed for ${filePath}:`, e.message);
     }
+    
+    // Fallback to desktop device info for formats without EXIF (PNG screenshots, etc.)
+    if (!result.make || !result.model) {
+      const deviceInfo = getDesktopDeviceInfo();
+      if (!result.make && deviceInfo.make) {
+        result.make = deviceInfo.make;
+      }
+      if (!result.model && deviceInfo.model) {
+        result.model = deviceInfo.model;
+      }
+    }
+    
     return result;
   }
 
@@ -539,6 +607,18 @@ class DesktopBackupClient {
     } catch (e) {
       // Non-critical
     }
+    
+    // Fallback to desktop device info for formats without EXIF (PNG screenshots, etc.)
+    if (!result.make || !result.model) {
+      const deviceInfo = getDesktopDeviceInfo();
+      if (!result.make && deviceInfo.make) {
+        result.make = deviceInfo.make;
+      }
+      if (!result.model && deviceInfo.model) {
+        result.model = deviceInfo.model;
+      }
+    }
+    
     return result;
   }
 
@@ -784,7 +864,7 @@ class DesktopBackupClient {
       // Store EXIF for images (non-blocking, fire-and-forget)
       // This enables mobile sync to retrieve and apply EXIF
       const fileHash = response.data?.fileHash;
-      const isImage = /\.(jpg|jpeg|png|heic|heif|gif|bmp|webp|tiff?)$/i.test(fileName);
+      const isImage = /\.(jpg|jpeg|png|heic|heif|gif|bmp|webp|tiff?|raw|cr2|cr3|nef|arw|dng|orf|rw2|pef|srw|raf|psd|psb|exr|hdr|avif)$/i.test(fileName);
       if (fileHash && isImage) {
         this.extractFullExif(filePath).then(fullExif => {
           console.log('[EXIF] Desktop extraction for', fileName, '- captureTime:', fullExif?.captureTime, 'make:', fullExif?.make);

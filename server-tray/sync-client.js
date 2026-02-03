@@ -607,7 +607,7 @@ class DesktopSyncClient {
       
       // Apply EXIF data from server if available (for images)
       const ext = path.extname(filename).toLowerCase();
-      const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
+      const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif', '.gif', '.bmp', '.raw', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.pef', '.srw', '.raf', '.psd', '.psb', '.exr', '.hdr', '.avif'].includes(ext);
       if (isImage && decryptedManifest.fileHash) {
         try {
           const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, decryptedManifest.fileHash);
@@ -705,7 +705,7 @@ class DesktopSyncClient {
       
       // Apply EXIF data from server if available (for images)
       const ext = path.extname(filename).toLowerCase();
-      const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
+      const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif', '.gif', '.bmp', '.raw', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.pef', '.srw', '.raf', '.psd', '.psb', '.exr', '.hdr', '.avif'].includes(ext);
       if (isImage && file.fileHash) {
         try {
           const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, file.fileHash);

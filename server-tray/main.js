@@ -3884,7 +3884,7 @@ ipcMain.handle('select-photo-for-nft', async () => {
   const result = await dialog.showOpenDialog(parentWindow, {
     properties: ['openFile'],
     filters: [
-      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'] }
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'raw', 'cr2', 'cr3', 'nef', 'arw', 'dng', 'orf', 'rw2', 'pef', 'srw', 'raf', 'psd', 'psb', 'exr', 'hdr', 'avif'] }
     ],
     title: 'Select Photo for NFT'
   });
@@ -4670,7 +4670,7 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
     
     // Scan folders for media files
     const mediaFiles = [];
-    const extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.avif', '.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.rw2', '.orf',
+    const extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.avif', '.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.rw2', '.orf', '.pef', '.srw', '.raw', '.psd', '.psb', '.exr', '.hdr',
                         '.mp4', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.webm'];
     
     for (const folder of config.folders) {
