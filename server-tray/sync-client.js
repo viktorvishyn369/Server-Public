@@ -288,9 +288,9 @@ function hammingDistance64(a, b) {
   return dist;
 }
 
-// Sync-specific dHash threshold (6 bits = ~9% tolerance for cross-platform decoder differences)
-// This is more lenient than backup dedup (0 bits) to handle HEIC/JPEG conversion differences
-const CROSS_PLATFORM_DHASH_THRESHOLD = 6;
+// Cross-platform dHash threshold (1 bit = strict match, same as mobile and server)
+// Must match mobile sync and server for consistency
+const CROSS_PLATFORM_DHASH_THRESHOLD = 1;
 
 // Find a matching perceptual hash using Hamming distance
 function findPerceptualHashMatch(hash, hashSet, threshold = CROSS_PLATFORM_DHASH_THRESHOLD) {
