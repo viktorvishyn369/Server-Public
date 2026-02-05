@@ -135,6 +135,7 @@
     "exifreader": "^4.33.1",
     "express": "^5.2.1",
     "form-data": "^4.0.0",
+    "heic-convert": "^2.1.0",
     "heic-decode": "^2.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",

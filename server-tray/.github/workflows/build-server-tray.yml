@@ -31,26 +31,11 @@ jobs:
       - name: Install server-tray dependencies
         run: |
           cd server-tray
-          npm install
+          npm ci
           # Ensure sharp has darwin-x64 binaries
-          npm install --os=darwin --cpu=x64 sharp
+          npm install --no-save --no-package-lock --os=darwin --cpu=x64 sharp
           # Ensure ffmpeg has darwin-x64 binaries
-          npm install --os=darwin --cpu=x64 @ffmpeg-installer/ffmpeg
-
-      - name: Install server dependencies (for extraResources)
-        run: |
-          cd server
-          npm install
-          # Ensure sharp has darwin-x64 binaries for HEIC thumbnail generation
-          npm install --os=darwin --cpu=x64 sharp
-          # Ensure ffmpeg has darwin-x64 binaries for video thumbnails
-          npm install --os=darwin --cpu=x64 @ffmpeg-installer/ffmpeg
-          # Verify heic-convert is installed
-          echo "=== Checking heic-convert installation ==="
-          ls -la node_modules/heic-convert || echo "heic-convert not found!"
-          ls -la node_modules/libheif-js || echo "libheif-js not found!"
-          echo "=== Server node_modules size ==="
-          du -sh node_modules
+          npm install --no-save --no-package-lock --os=darwin --cpu=x64 @ffmpeg-installer/ffmpeg
 
       - name: Rebuild native modules for Electron
         run: |
@@ -120,26 +105,11 @@ jobs:
       - name: Install server-tray dependencies
         run: |
           cd server-tray
-          npm install
+          npm ci
           # Ensure sharp has darwin-arm64 binaries
-          npm install --os=darwin --cpu=arm64 sharp
+          npm install --no-save --no-package-lock --os=darwin --cpu=arm64 sharp
           # Ensure ffmpeg has darwin-arm64 binaries
-          npm install --os=darwin --cpu=arm64 @ffmpeg-installer/ffmpeg
-
-      - name: Install server dependencies (for extraResources)
-        run: |
-          cd server
-          npm install
-          # Ensure sharp has darwin-arm64 binaries for HEIC thumbnail generation
-          npm install --os=darwin --cpu=arm64 sharp
-          # Ensure ffmpeg has darwin-arm64 binaries for video thumbnails
-          npm install --os=darwin --cpu=arm64 @ffmpeg-installer/ffmpeg
-          # Verify heic-convert is installed
-          echo "=== Checking heic-convert installation ==="
-          ls -la node_modules/heic-convert || echo "heic-convert not found!"
-          ls -la node_modules/libheif-js || echo "libheif-js not found!"
-          echo "=== Server node_modules size ==="
-          du -sh node_modules
+          npm install --no-save --no-package-lock --os=darwin --cpu=arm64 @ffmpeg-installer/ffmpeg
 
       - name: Rebuild native modules for Electron
         run: |
@@ -203,38 +173,11 @@ jobs:
       - name: Install server-tray dependencies
         run: |
           cd server-tray
-          npm install
+          npm ci
           # Ensure sharp has win32-x64 binaries
-          npm install --os=win32 --cpu=x64 sharp
+          npm install --no-save --no-package-lock --os=win32 --cpu=x64 sharp
           # Ensure ffmpeg has win32-x64 binaries
-          npm install --os=win32 --cpu=x64 @ffmpeg-installer/ffmpeg
-
-      - name: Install server dependencies (for extraResources)
-        run: |
-          cd server
-          npm install
-          # Ensure sharp has win32-x64 binaries for HEIC thumbnail generation
-          npm install --os=win32 --cpu=x64 sharp
-          # Ensure ffmpeg has win32-x64 binaries for video thumbnails
-          npm install --os=win32 --cpu=x64 @ffmpeg-installer/ffmpeg
-          # Verify heic-convert is installed
-          echo "=== Checking heic-convert installation ==="
-          ls -la node_modules/heic-convert || echo "heic-convert not found!"
-          ls -la node_modules/libheif-js || echo "libheif-js not found!"
-          echo "=== Server node_modules size ==="
-          du -sh node_modules
-          
-      - name: Copy server with node_modules to server-tray (bypass gitignore)
-        run: |
-          cd server-tray
-          rm -rf server-bundle
-          mkdir -p server-bundle
-          cp -r ../server/* server-bundle/
-          cp -r ../server/node_modules server-bundle/
-          echo "=== Verify server-bundle has node_modules ==="
-          ls -la server-bundle/node_modules/heic-convert || echo "heic-convert not copied!"
-          echo "=== server-bundle size ==="
-          du -sh server-bundle
+          npm install --no-save --no-package-lock --os=win32 --cpu=x64 @ffmpeg-installer/ffmpeg
 
       - name: Rebuild native modules for Electron
         run: |
@@ -282,38 +225,11 @@ jobs:
       - name: Install server-tray dependencies
         run: |
           cd server-tray
-          npm install
+          npm ci
           # Ensure sharp has linux-x64 binaries
-          npm install --os=linux --cpu=x64 sharp
+          npm install --no-save --no-package-lock --os=linux --cpu=x64 sharp
           # Ensure ffmpeg has linux-x64 binaries
-          npm install --os=linux --cpu=x64 @ffmpeg-installer/ffmpeg
-
-      - name: Install server dependencies (for extraResources)
-        run: |
-          cd server
-          npm install
-          # Ensure sharp has linux-x64 binaries for HEIC thumbnail generation
-          npm install --os=linux --cpu=x64 sharp
-          # Ensure ffmpeg has linux-x64 binaries for video thumbnails
-          npm install --os=linux --cpu=x64 @ffmpeg-installer/ffmpeg
-          # Verify heic-convert is installed
-          echo "=== Checking heic-convert installation ==="
-          ls -la node_modules/heic-convert || echo "heic-convert not found!"
-          ls -la node_modules/libheif-js || echo "libheif-js not found!"
-          echo "=== Server node_modules size ==="
-          du -sh node_modules
-          
-      - name: Copy server with node_modules to server-tray (bypass gitignore)
-        run: |
-          cd server-tray
-          rm -rf server-bundle
-          mkdir -p server-bundle
-          cp -r ../server/* server-bundle/
-          cp -r ../server/node_modules server-bundle/
-          echo "=== Verify server-bundle has node_modules ==="
-          ls -la server-bundle/node_modules/heic-convert || echo "heic-convert not copied!"
-          echo "=== server-bundle size ==="
-          du -sh server-bundle
+          npm install --no-save --no-package-lock --os=linux --cpu=x64 @ffmpeg-installer/ffmpeg
 
       - name: Rebuild native modules for Electron
         run: |
