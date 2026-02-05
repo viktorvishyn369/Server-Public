@@ -51,14 +51,6 @@ jobs:
           ls -la node_modules/libheif-js || echo "libheif-js not found!"
           echo "=== Server node_modules size ==="
           du -sh node_modules
-          
-      - name: Copy server with node_modules to server-tray
-        run: |
-          rm -rf server-tray/server
-          mkdir -p server-tray/server
-          cp -r server/* server-tray/server/
-          echo "=== Verify server has node_modules ==="
-          ls -la server-tray/server/node_modules/heic-convert || echo "heic-convert not copied!"
 
       - name: Rebuild native modules for Electron
         run: |
@@ -148,14 +140,6 @@ jobs:
           ls -la node_modules/libheif-js || echo "libheif-js not found!"
           echo "=== Server node_modules size ==="
           du -sh node_modules
-          
-      - name: Copy server with node_modules to server-tray
-        run: |
-          rm -rf server-tray/server
-          mkdir -p server-tray/server
-          cp -r server/* server-tray/server/
-          echo "=== Verify server has node_modules ==="
-          ls -la server-tray/server/node_modules/heic-convert || echo "heic-convert not copied!"
 
       - name: Rebuild native modules for Electron
         run: |
@@ -240,13 +224,17 @@ jobs:
           echo "=== Server node_modules size ==="
           du -sh node_modules
           
-      - name: Copy server with node_modules to server-tray
+      - name: Copy server with node_modules to server-tray (bypass gitignore)
         run: |
-          rm -rf server-tray/server
-          mkdir -p server-tray/server
-          cp -r server/* server-tray/server/
-          echo "=== Verify server has node_modules ==="
-          ls -la server-tray/server/node_modules/heic-convert || echo "heic-convert not copied!"
+          cd server-tray
+          rm -rf server-bundle
+          mkdir -p server-bundle
+          cp -r ../server/* server-bundle/
+          cp -r ../server/node_modules server-bundle/
+          echo "=== Verify server-bundle has node_modules ==="
+          ls -la server-bundle/node_modules/heic-convert || echo "heic-convert not copied!"
+          echo "=== server-bundle size ==="
+          du -sh server-bundle
 
       - name: Rebuild native modules for Electron
         run: |
@@ -315,13 +303,17 @@ jobs:
           echo "=== Server node_modules size ==="
           du -sh node_modules
           
-      - name: Copy server with node_modules to server-tray
+      - name: Copy server with node_modules to server-tray (bypass gitignore)
         run: |
-          rm -rf server-tray/server
-          mkdir -p server-tray/server
-          cp -r server/* server-tray/server/
-          echo "=== Verify server has node_modules ==="
-          ls -la server-tray/server/node_modules/heic-convert || echo "heic-convert not copied!"
+          cd server-tray
+          rm -rf server-bundle
+          mkdir -p server-bundle
+          cp -r ../server/* server-bundle/
+          cp -r ../server/node_modules server-bundle/
+          echo "=== Verify server-bundle has node_modules ==="
+          ls -la server-bundle/node_modules/heic-convert || echo "heic-convert not copied!"
+          echo "=== server-bundle size ==="
+          du -sh server-bundle
 
       - name: Rebuild native modules for Electron
         run: |

@@ -42,15 +42,13 @@
     ],
     "extraResources": [
       {
-        "from": "server",
+        "from": "../server",
         "to": "server",
         "filter": [
           "**/*",
           "!uploads",
-          "!uploads/**",
           "!backup.db",
-          "!cloud",
-          "!cloud/**"
+          "!cloud"
         ]
       }
     ],
