@@ -1484,7 +1484,7 @@ function showMainWindow() {
   <div id="main-view" class="view active">
     <div class="header">
       <div class="header-left">
-        <div class="app-title">PhotoLynk <span class="version-badge">v1.5.5</span></div>
+        <div class="app-title">PhotoLynk <span class="version-badge">v1.5.6</span></div>
         <div class="server-badge">
           <div class="server-badge-dot" id="server-dot"></div>
           <span class="server-badge-text" id="server-status">Local Server</span>
@@ -2420,6 +2420,13 @@ function showMainWindow() {
       document.getElementById('nft-mint-section').style.display = 'none';
       if (nftPriceTimer) { clearInterval(nftPriceTimer); nftPriceTimer = null; }
       resetNFTMintForm();
+      // Reset hero status back to Ready
+      const hero = document.getElementById('status-hero');
+      const title = document.getElementById('status-title');
+      const subtitle = document.getElementById('status-subtitle');
+      if (hero) hero.classList.remove('creating-nft');
+      if (title) title.textContent = 'Ready';
+      if (subtitle) subtitle.textContent = 'Idle';
     }
     
     function resetNFTMintForm() {
@@ -3388,8 +3395,10 @@ function showMainWindow() {
           console.log('[NFT Album] Loading', nftName, (isCompressed ? '(cNFT)' : ''), ':', primaryUrl.slice(0, 50) + '...');
         }
         
-        // Add loading spinner that shows until image loads, with badge for compressed/standard
-        const badgeHtml = isCompressed 
+        // Add loading spinner that shows until image loads, with badge based on storage type
+        // StealthCloud = cNFT badge (green), IPFS = purple hexagon badge
+        const isStealthCloud = originalUrl && (originalUrl.includes('stealthlynk.io') || originalUrl.includes('stealthcloud'));
+        const badgeHtml = isStealthCloud 
           ? '<div class="nft-badge nft-badge-cnft"><span class="badge-text">cN</span></div>' 
           : '<div class="nft-badge nft-badge-standard"><span class="badge-hex">⬡</span></div>';
         item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;margin-left:-12px;margin-top:-12px;"></div>' + badgeHtml + '<img style="opacity:0;transition:opacity 0.3s;" data-original-url="' + originalUrl + '" data-fallback-url="' + originalUrl + '" data-gateway-index="0" data-retry-count="0" data-source="primary" data-compressed="' + (isCompressed ? '1' : '0') + '" data-cached="' + (isCached ? '1' : '0') + '" src="' + primaryUrl + '"><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
