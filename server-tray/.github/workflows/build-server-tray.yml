@@ -1,0 +1,329 @@
+name: Build Server Tray Apps
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos-x64:
+    runs-on: macos-15
+    env:
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install server-tray dependencies
+        run: |
+          cd server-tray
+          npm install
+          # Ensure sharp has darwin-x64 binaries
+          npm install --os=darwin --cpu=x64 sharp
+          # Ensure ffmpeg has darwin-x64 binaries
+          npm install --os=darwin --cpu=x64 @ffmpeg-installer/ffmpeg
+
+      - name: Install server dependencies (for extraResources)
+        run: |
+          cd server
+          npm install
+          # Ensure sharp has darwin-x64 binaries for HEIC thumbnail generation
+          npm install --os=darwin --cpu=x64 sharp
+          # Ensure ffmpeg has darwin-x64 binaries for video thumbnails
+          npm install --os=darwin --cpu=x64 @ffmpeg-installer/ffmpeg
+
+      - name: Rebuild native modules for Electron
+        run: |
+          cd server-tray
+          npm run rebuild-native:x64
+
+      - name: Prepare macOS code signing & notarization env
+        if: ${{ env.CSC_LINK != '' && env.CSC_KEY_PASSWORD != '' && env.APPLE_API_KEY_BASE64 != '' && env.APPLE_API_KEY_ID != '' && env.APPLE_API_ISSUER != '' }}
+        run: |
+          mkdir -p "$HOME/private_keys"
+          python3 - <<'PY'
+          import base64, os, pathlib
+          key_b64 = os.environ.get('APPLE_API_KEY_BASE64', '')
+          key_id = os.environ.get('APPLE_API_KEY_ID', '')
+          out = pathlib.Path(os.environ['HOME']) / 'private_keys' / f'AuthKey_{key_id}.p8'
+          out.write_bytes(base64.b64decode(key_b64.encode('utf-8')))
+          PY
+          echo "APPLE_API_KEY=$HOME/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8" >> "$GITHUB_ENV"
+
+      - name: Build macOS x64 DMG
+        run: |
+          cd server-tray
+          npm run build-mac:x64
+
+      - name: Rename macOS x64 artifacts (user-friendly)
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          mkdir -p server-tray/dist/release
+          for f in server-tray/dist/*.dmg; do
+            [ -e "$f" ] || continue
+            mv "$f" "server-tray/dist/release/PhotoLynk-Desktop-${TAG}-macOS-Intel.dmg"
+          done
+          for f in server-tray/dist/*.zip; do
+            [ -e "$f" ] || continue
+            mv "$f" "server-tray/dist/release/PhotoLynk-Desktop-${TAG}-macOS-Intel.zip"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64-builds
+          path: |
+            server-tray/dist/release/*
+          if-no-files-found: warn
+
+  build-macos-arm64:
+    runs-on: macos-14
+    env:
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install server-tray dependencies
+        run: |
+          cd server-tray
+          npm install
+          # Ensure sharp has darwin-arm64 binaries
+          npm install --os=darwin --cpu=arm64 sharp
+          # Ensure ffmpeg has darwin-arm64 binaries
+          npm install --os=darwin --cpu=arm64 @ffmpeg-installer/ffmpeg
+
+      - name: Install server dependencies (for extraResources)
+        run: |
+          cd server
+          npm install
+          # Ensure sharp has darwin-arm64 binaries for HEIC thumbnail generation
+          npm install --os=darwin --cpu=arm64 sharp
+          # Ensure ffmpeg has darwin-arm64 binaries for video thumbnails
+          npm install --os=darwin --cpu=arm64 @ffmpeg-installer/ffmpeg
+
+      - name: Rebuild native modules for Electron
+        run: |
+          cd server-tray
+          npm run rebuild-native:arm64
+
+      - name: Prepare macOS code signing & notarization env
+        if: ${{ env.CSC_LINK != '' && env.CSC_KEY_PASSWORD != '' && env.APPLE_API_KEY_BASE64 != '' && env.APPLE_API_KEY_ID != '' && env.APPLE_API_ISSUER != '' }}
+        run: |
+          mkdir -p "$HOME/private_keys"
+          python3 - <<'PY'
+          import base64, os, pathlib
+          key_b64 = os.environ.get('APPLE_API_KEY_BASE64', '')
+          key_id = os.environ.get('APPLE_API_KEY_ID', '')
+          out = pathlib.Path(os.environ['HOME']) / 'private_keys' / f'AuthKey_{key_id}.p8'
+          out.write_bytes(base64.b64decode(key_b64.encode('utf-8')))
+          PY
+          echo "APPLE_API_KEY=$HOME/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8" >> "$GITHUB_ENV"
+
+      - name: Build macOS arm64 DMG
+        run: |
+          cd server-tray
+          npm run build-mac:arm64
+
+      - name: Rename macOS arm64 artifacts (user-friendly)
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          mkdir -p server-tray/dist/release
+          for f in server-tray/dist/*.dmg; do
+            [ -e "$f" ] || continue
+            mv "$f" "server-tray/dist/release/PhotoLynk-Desktop-${TAG}-macOS-Apple-Silicon.dmg"
+          done
+          for f in server-tray/dist/*.zip; do
+            [ -e "$f" ] || continue
+            mv "$f" "server-tray/dist/release/PhotoLynk-Desktop-${TAG}-macOS-Apple-Silicon.zip"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64-builds
+          path: |
+            server-tray/dist/release/*
+          if-no-files-found: warn
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install server-tray dependencies
+        run: |
+          cd server-tray
+          npm install
+          # Ensure sharp has win32-x64 binaries
+          npm install --os=win32 --cpu=x64 sharp
+          # Ensure ffmpeg has win32-x64 binaries
+          npm install --os=win32 --cpu=x64 @ffmpeg-installer/ffmpeg
+
+      - name: Install server dependencies (for extraResources)
+        run: |
+          cd server
+          npm install
+          # Ensure sharp has win32-x64 binaries for HEIC thumbnail generation
+          npm install --os=win32 --cpu=x64 sharp
+          # Ensure ffmpeg has win32-x64 binaries for video thumbnails
+          npm install --os=win32 --cpu=x64 @ffmpeg-installer/ffmpeg
+
+      - name: Rebuild native modules for Electron
+        run: |
+          cd server-tray
+          npm run rebuild-native
+
+      - name: Build Windows apps
+        run: |
+          cd server-tray
+          npm run build-win
+
+      - name: Rename Windows artifacts (user-friendly)
+        shell: pwsh
+        run: |
+          $tag = "${env:GITHUB_REF_NAME}".Replace('v','')
+          New-Item -ItemType Directory -Force -Path "server-tray/dist/release" | Out-Null
+          $exe = Get-ChildItem -Path "server-tray/dist" -Filter "*.exe" | Select-Object -First 1
+          if ($exe) {
+            Move-Item $exe.FullName "server-tray/dist/release/PhotoLynk-Desktop-$tag-Windows-Setup.exe" -Force
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: |
+            server-tray/dist/release/*
+          if-no-files-found: warn
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install server-tray dependencies
+        run: |
+          cd server-tray
+          npm install
+          # Ensure sharp has linux-x64 binaries
+          npm install --os=linux --cpu=x64 sharp
+          # Ensure ffmpeg has linux-x64 binaries
+          npm install --os=linux --cpu=x64 @ffmpeg-installer/ffmpeg
+
+      - name: Install server dependencies (for extraResources)
+        run: |
+          cd server
+          npm install
+          # Ensure sharp has linux-x64 binaries for HEIC thumbnail generation
+          npm install --os=linux --cpu=x64 sharp
+          # Ensure ffmpeg has linux-x64 binaries for video thumbnails
+          npm install --os=linux --cpu=x64 @ffmpeg-installer/ffmpeg
+
+      - name: Rebuild native modules for Electron
+        run: |
+          cd server-tray
+          npm run rebuild-native
+
+      - name: Build Linux apps
+        run: |
+          cd server-tray
+          npm run build-linux
+
+      - name: Rename Linux artifacts (user-friendly)
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          mkdir -p server-tray/dist/release
+          for f in server-tray/dist/*.AppImage; do
+            [ -e "$f" ] || continue
+            mv "$f" "server-tray/dist/release/PhotoLynk-Desktop-${TAG}-Linux-x64.AppImage"
+          done
+          for f in server-tray/dist/*.deb; do
+            [ -e "$f" ] || continue
+            mv "$f" "server-tray/dist/release/PhotoLynk-Desktop-${TAG}-Linux-x64.deb"
+          done
+          for f in server-tray/dist/*.rpm; do
+            [ -e "$f" ] || continue
+            mv "$f" "server-tray/dist/release/PhotoLynk-Desktop-${TAG}-Linux-x64.rpm"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: |
+            server-tray/dist/release/*
+          if-no-files-found: warn
+
+  create-release:
+    needs: [build-macos-x64, build-macos-arm64, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: ${{ startsWith(github.ref, 'refs/tags/') && needs['build-macos-x64'].result == 'success' && needs['build-macos-arm64'].result == 'success' && needs['build-windows'].result == 'success' && needs['build-linux'].result == 'success' }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: PhotoLynk Desktop Client/Server ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            macos-x64-builds/*
+            macos-arm64-builds/*
+            windows-builds/*
+            linux-builds/*
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
