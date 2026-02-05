@@ -46,9 +46,12 @@
         "to": "server",
         "filter": [
           "**/*",
+          "node_modules/**/*",
           "!uploads",
+          "!uploads/**",
           "!backup.db",
-          "!cloud"
+          "!cloud",
+          "!cloud/**"
         ]
       }
     ],
