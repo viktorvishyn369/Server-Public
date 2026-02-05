@@ -54,11 +54,15 @@
     ],
     "asarUnpack": [
       "**/*.node",
+      "**/*.wasm",
       "**/node_modules/sqlite3/**",
       "**/node_modules/bcrypt/**",
       "**/node_modules/sharp/**/*",
       "**/node_modules/@img/**/*",
-      "**/node_modules/@ffmpeg-installer/**/*"
+      "**/node_modules/@ffmpeg-installer/**/*",
+      "**/node_modules/libheif-js/**/*",
+      "**/node_modules/heic-convert/**/*",
+      "**/node_modules/heic-decode/**/*"
     ],
     "directories": {
       "output": "dist"
