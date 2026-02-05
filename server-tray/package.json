@@ -42,11 +42,10 @@
     ],
     "extraResources": [
       {
-        "from": "../server",
+        "from": "server",
         "to": "server",
         "filter": [
           "**/*",
-          "node_modules/**/*",
           "!uploads",
           "!uploads/**",
           "!backup.db",
