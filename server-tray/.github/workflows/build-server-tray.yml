@@ -45,6 +45,12 @@ jobs:
           npm install --os=darwin --cpu=x64 sharp
           # Ensure ffmpeg has darwin-x64 binaries for video thumbnails
           npm install --os=darwin --cpu=x64 @ffmpeg-installer/ffmpeg
+          # Verify heic-convert is installed
+          echo "=== Checking heic-convert installation ==="
+          ls -la node_modules/heic-convert || echo "heic-convert not found!"
+          ls -la node_modules/libheif-js || echo "libheif-js not found!"
+          echo "=== Server node_modules size ==="
+          du -sh node_modules
 
       - name: Rebuild native modules for Electron
         run: |
@@ -128,6 +134,12 @@ jobs:
           npm install --os=darwin --cpu=arm64 sharp
           # Ensure ffmpeg has darwin-arm64 binaries for video thumbnails
           npm install --os=darwin --cpu=arm64 @ffmpeg-installer/ffmpeg
+          # Verify heic-convert is installed
+          echo "=== Checking heic-convert installation ==="
+          ls -la node_modules/heic-convert || echo "heic-convert not found!"
+          ls -la node_modules/libheif-js || echo "libheif-js not found!"
+          echo "=== Server node_modules size ==="
+          du -sh node_modules
 
       - name: Rebuild native modules for Electron
         run: |
@@ -205,6 +217,12 @@ jobs:
           npm install --os=win32 --cpu=x64 sharp
           # Ensure ffmpeg has win32-x64 binaries for video thumbnails
           npm install --os=win32 --cpu=x64 @ffmpeg-installer/ffmpeg
+          # Verify heic-convert is installed
+          echo "=== Checking heic-convert installation ==="
+          ls -la node_modules/heic-convert || echo "heic-convert not found!"
+          ls -la node_modules/libheif-js || echo "libheif-js not found!"
+          echo "=== Server node_modules size ==="
+          du -sh node_modules
 
       - name: Rebuild native modules for Electron
         run: |
@@ -266,6 +284,12 @@ jobs:
           npm install --os=linux --cpu=x64 sharp
           # Ensure ffmpeg has linux-x64 binaries for video thumbnails
           npm install --os=linux --cpu=x64 @ffmpeg-installer/ffmpeg
+          # Verify heic-convert is installed
+          echo "=== Checking heic-convert installation ==="
+          ls -la node_modules/heic-convert || echo "heic-convert not found!"
+          ls -la node_modules/libheif-js || echo "libheif-js not found!"
+          echo "=== Server node_modules size ==="
+          du -sh node_modules
 
       - name: Rebuild native modules for Electron
         run: |
