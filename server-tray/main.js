@@ -500,13 +500,20 @@ function stopLegacyService() {
 function getPort3000Listeners() {
   try {
     if (process.platform === 'win32') {
-      const out = execSync('netstat -ano | findstr :3000', { encoding: 'utf8' }).toString();
+      // Only get PIDs for LISTENING connections - TIME_WAIT has PID 0 and doesn't block binding
+      let out = '';
+      try {
+        out = execSync('netstat -ano | findstr :3000 | findstr LISTENING', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).toString();
+      } catch (e) {
+        // No LISTENING entries found
+        return [];
+      }
       const lines = out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       const pids = new Set();
       for (const line of lines) {
         const parts = line.split(/\s+/);
         const pid = parts[parts.length - 1];
-        if (pid && /^\d+$/.test(pid)) pids.add(pid);
+        if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
       }
       return Array.from(pids);
     }
@@ -554,7 +561,8 @@ function getPort3000Listeners() {
 function isPort3000InUse() {
   try {
     if (process.platform === 'win32') {
-      const out = execSync('netstat -ano | findstr :3000', { encoding: 'utf8' }).toString();
+      // Only LISTENING state actually blocks binding - ignore TIME_WAIT, CLOSE_WAIT, etc.
+      const out = execSync('netstat -ano | findstr :3000 | findstr LISTENING', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).toString();
       return out.trim().length > 0;
     }
 
