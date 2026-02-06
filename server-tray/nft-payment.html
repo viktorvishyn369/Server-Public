@@ -130,12 +130,24 @@
     }
 
     async function connectAndPay() {
-      const provider = window.phantom?.solana || window.solana;
+      let provider = window.phantom?.solana || window.solana;
       
+      // If not available, wait for user to unlock (poll for 30 seconds)
       if (!provider?.isPhantom) {
-        showStatus('Phantom wallet not found. Install it from phantom.app', 'error');
-        setTimeout(() => window.open('https://phantom.app/', '_blank'), 1500);
-        return;
+        setLoading(true);
+        showStatus('🔓 Click Phantom icon in browser toolbar to unlock...', 'info');
+        
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 500));
+          provider = window.phantom?.solana || window.solana;
+          if (provider?.isPhantom) break;
+        }
+        
+        if (!provider?.isPhantom) {
+          showStatus('Phantom not detected. Install from phantom.app', 'error');
+          setLoading(false);
+          return;
+        }
       }
 
       setLoading(true);
