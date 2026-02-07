@@ -344,6 +344,9 @@ class DesktopSyncClient {
   getBaseUrl() {
     if (this.config.source === 'stealthcloud') {
       return STEALTHCLOUD_BASE_URL;
+    } else if (this.config.source === 'local') {
+      // Local server running on this machine
+      return 'http://127.0.0.1:3000';
     } else if (this.config.source === 'remote') {
       const host = this.config.remoteAddress || '';
       const port = this.config.remotePort || '3000';
@@ -358,7 +361,7 @@ class DesktopSyncClient {
         return `https://${host}`;
       }
     } else {
-      throw new Error('Invalid source');
+      throw new Error('Invalid source (expected local, remote, or stealthcloud)');
     }
   }
 
