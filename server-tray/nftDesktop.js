@@ -169,6 +169,28 @@ const NFT_STORAGE_OPTIONS = {
   STEALTHCLOUD: 'cloud',
 };
 
+// Edition types (matches mobile nftOperations.js)
+const NFT_EDITION = {
+  OPEN: 'open',
+  LIMITED: 'limited',
+};
+
+// License options (matches mobile)
+const NFT_LICENSE_OPTIONS = [
+  { id: 'arr', label: 'All Rights Reserved', short: 'ARR' },
+  { id: 'cc-by', label: 'CC BY 4.0', short: 'CC-BY' },
+  { id: 'cc-by-sa', label: 'CC BY-SA 4.0', short: 'CC-BY-SA' },
+  { id: 'cc-by-nc', label: 'CC BY-NC 4.0', short: 'CC-BY-NC' },
+  { id: 'cc0', label: 'Public Domain (CC0)', short: 'CC0' },
+  { id: 'commercial', label: 'Commercial License', short: 'Commercial' },
+];
+
+// Commission basis points per edition
+const EDITION_ROYALTY_BPS = {
+  [NFT_EDITION.OPEN]: 250,
+  [NFT_EDITION.LIMITED]: 350,
+};
+
 // ============================================================================
 // PROMOTIONAL PRICING (matches solana-seeker/nftOperations.js exactly)
 // ============================================================================
@@ -697,30 +719,188 @@ async function uploadToStealthCloud(filePath, credentials) {
 }
 
 /**
- * Build NFT metadata (Metaplex standard - same as mobile)
+ * Compute deterministic SHA256 hash of EXIF metadata (matches mobile)
  */
-function buildNFTMetadata({ name, description, imageUrl, ownerAddress, contentHash, fileSize }) {
-  return {
+function computeExifHash(exifData) {
+  if (!exifData) return null;
+  try {
+    const sorted = {};
+    for (const key of Object.keys(exifData).sort()) {
+      if (exifData[key] != null) sorted[key] = exifData[key];
+    }
+    const json = JSON.stringify(sorted);
+    return crypto.createHash('sha256').update(json).digest('hex');
+  } catch (e) {
+    console.warn('[NFT] EXIF hash failed:', e?.message);
+    return null;
+  }
+}
+
+/**
+ * Generate optimized preview for Open Edition using sharp
+ */
+async function generateOptimizedPreview(filePath) {
+  if (!sharp) return { success: false, error: 'sharp not available' };
+  try {
+    const tempPath = path.join(os.tmpdir(), `nft_preview_${Date.now()}.jpg`);
+    await sharp(filePath).resize(1200, null, { withoutEnlargement: true }).jpeg({ quality: 75 }).toFile(tempPath);
+    return { success: true, previewPath: tempPath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Generate high-quality thumbnail for Limited Edition using sharp
+ */
+async function generateLimitedEditionThumb(filePath) {
+  if (!sharp) return { success: false, error: 'sharp not available' };
+  try {
+    const tempPath = path.join(os.tmpdir(), `nft_limited_${Date.now()}.jpg`);
+    await sharp(filePath).resize(1600, null, { withoutEnlargement: true }).jpeg({ quality: 80 }).toFile(tempPath);
+    return { success: true, thumbPath: tempPath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Apply watermark (quality reduction + metadata flag, matches mobile)
+ */
+async function burnWatermark(filePath) {
+  if (!sharp) return { success: false, error: 'sharp not available' };
+  try {
+    const tempPath = path.join(os.tmpdir(), `nft_wm_${Date.now()}.jpg`);
+    await sharp(filePath).jpeg({ quality: 60 }).toFile(tempPath);
+    return { success: true, watermarkedPath: tempPath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Encrypt an image file using NaCl secretbox (matches mobile encryptNFTImage)
+ * @param {string} filePath - Path to image
+ * @param {Buffer|Uint8Array} masterKey - 32-byte master key
+ */
+async function encryptNFTImage(filePath, masterKey) {
+  try {
+    let nacl;
+    try { nacl = require('tweetnacl'); } catch (_) {
+      return { success: false, error: 'tweetnacl not available' };
+    }
+    const plaintext = fs.readFileSync(filePath);
+    const nftKey = nacl.randomBytes(32);
+    const nonce = nacl.randomBytes(24);
+    const encrypted = nacl.secretbox(plaintext, nonce, nftKey);
+    const wrapNonce = nacl.randomBytes(24);
+    const wrappedKey = nacl.secretbox(nftKey, wrapNonce, masterKey);
+    const encPath = path.join(os.tmpdir(), `nft_enc_${Date.now()}.bin`);
+    fs.writeFileSync(encPath, Buffer.from(encrypted));
+    return {
+      success: true,
+      encryptedPath: encPath,
+      wrappedKey: Buffer.from(wrappedKey).toString('base64'),
+      wrapNonce: Buffer.from(wrapNonce).toString('base64'),
+      nonce: Buffer.from(nonce).toString('base64'),
+      originalSize: plaintext.length,
+    };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Decrypt an encrypted NFT image (matches mobile decryptNFTImage)
+ */
+async function decryptNFTImage(encryptedPath, wrappedKeyB64, wrapNonceB64, nonceB64, masterKey) {
+  try {
+    let nacl;
+    try { nacl = require('tweetnacl'); } catch (_) {
+      return { success: false, error: 'tweetnacl not available' };
+    }
+    const wrappedKey = Buffer.from(wrappedKeyB64, 'base64');
+    const wrapNonce = Buffer.from(wrapNonceB64, 'base64');
+    const nftKey = nacl.secretbox.open(wrappedKey, wrapNonce, masterKey);
+    if (!nftKey) return { success: false, error: 'Key unwrap failed' };
+    const encData = fs.readFileSync(encryptedPath);
+    const nonce = Buffer.from(nonceB64, 'base64');
+    const plaintext = nacl.secretbox.open(new Uint8Array(encData), nonce, nftKey);
+    if (!plaintext) return { success: false, error: 'Decryption failed' };
+    const decPath = path.join(os.tmpdir(), `nft_dec_${Date.now()}.jpg`);
+    fs.writeFileSync(decPath, Buffer.from(plaintext));
+    return { success: true, decryptedPath: decPath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Build NFT metadata with edition support (matches mobile buildNFTMetadata)
+ */
+function buildNFTMetadata({
+  name, description, imageUrl, ownerAddress, contentHash, fileSize,
+  edition = NFT_EDITION.OPEN, license = 'arr', watermarked = false, encrypted = false,
+  exifHash = null, cameraSerialHash = null, originalFormat = null, originalResolution = null,
+  creatorAddress = null,
+}) {
+  const isLimited = edition === NFT_EDITION.LIMITED;
+  const editionLabel = isLimited ? 'Limited' : 'Open';
+  const bps = EDITION_ROYALTY_BPS[edition] || 500;
+  const licenseEntry = NFT_LICENSE_OPTIONS.find(l => l.id === license);
+  const licenseLabel = licenseEntry ? licenseEntry.label : 'All Rights Reserved';
+  const defaultDesc = isLimited
+    ? 'Limited Edition — copyright certificate with proof of ownership'
+    : 'Open Edition — photo NFT with on-chain integrity proof';
+
+  const metadata = {
     name: name || 'PhotoLynk Photo NFT',
     symbol: 'PLNK',
-    description: description || 'Encrypted photo backup with on-chain integrity proof anchored via SHA-256 hash NFT.',
+    description: description || defaultDesc,
     image: imageUrl,
     external_url: 'https://stealthlynk.io',
     attributes: [
+      { trait_type: 'Edition', value: editionLabel },
       ...(contentHash ? [{ trait_type: 'Content Hash', value: `SHA256:${contentHash}` }] : []),
-      ...(contentHash ? [{ trait_type: 'Hash Scope', value: 'Original plaintext before encryption' }] : []),
+      ...(exifHash ? [{ trait_type: 'EXIF Hash', value: `SHA256:${exifHash}` }] : []),
+      ...(cameraSerialHash ? [{ trait_type: 'Camera Hash', value: `SHA256:${cameraSerialHash}` }] : []),
       ...(fileSize ? [{ trait_type: 'Original Size', value: `${fileSize} bytes` }] : []),
-      { trait_type: 'Proof Type', value: 'Storage Integrity' },
+      ...(originalFormat ? [{ trait_type: 'Original Format', value: originalFormat }] : []),
+      ...(originalResolution ? [{ trait_type: 'Resolution', value: originalResolution }] : []),
+      { trait_type: 'License', value: licenseLabel },
+      { trait_type: 'Watermarked', value: watermarked ? 'true' : 'false' },
+      { trait_type: 'Encrypted', value: encrypted ? 'true' : 'false' },
+      ...(isLimited ? [{ trait_type: 'Original Storage', value: 'Creator Device Only' }] : []),
+      { trait_type: 'Proof Type', value: isLimited ? 'Copyright Certificate' : 'Photo Ownership' },
       { trait_type: 'Minted With', value: 'PhotoLynk' },
       { trait_type: 'Platform', value: 'PhotoLynk Desktop' },
     ],
     properties: {
       category: 'image',
-      files: [{ uri: imageUrl, type: 'image/jpeg' }],
-      creators: [{ address: ownerAddress, share: 100 }],
+      files: [{ uri: imageUrl, type: encrypted ? 'application/octet-stream' : 'image/jpeg' }],
+      creators: [{ address: creatorAddress || ownerAddress, share: 100 }],
+      ...(encrypted ? { encryption: { method: 'NaCl-secretbox', encrypted: true } } : {}),
+      ...(isLimited ? {
+        certificate: {
+          version: 1,
+          type: 'PhotoLynk Certificate of Authenticity',
+          edition: 'Limited',
+          originalHash: contentHash ? `SHA256:${contentHash}` : null,
+          exifHash: exifHash ? `SHA256:${exifHash}` : null,
+          cameraSerialHash: cameraSerialHash ? `SHA256:${cameraSerialHash}` : null,
+          originalFormat: originalFormat || null,
+          originalResolution: originalResolution || null,
+          originalSizeBytes: fileSize || null,
+          creatorWallet: creatorAddress || ownerAddress,
+          license: licenseLabel,
+          watermarked,
+          originalStorageMode: 'creator_device_only',
+        },
+      } : {}),
     },
-    seller_fee_basis_points: 500,
+    seller_fee_basis_points: bps,
   };
+  return metadata;
 }
 
 /**
@@ -743,7 +923,22 @@ function computeContentHash(filePath) {
  * @returns {Object} { success, txSignature, mintAddress, error }
  */
 async function mintNFT(params, onProgress) {
-  const { nftType, storageOption, filePath, name, description, walletAddress, credentials, stripExif } = params;
+  const {
+    nftType, storageOption, filePath, name, description, walletAddress, credentials, stripExif,
+    // Edition parameters (matches mobile)
+    edition = NFT_EDITION.OPEN,
+    license = 'arr',
+    watermark = false,
+    encrypt = false,
+    masterKey = null,
+  } = params;
+  
+  const isLimited = edition === NFT_EDITION.LIMITED;
+  console.log('[NFT] Edition:', isLimited ? 'Limited' : 'Open', '| License:', license, '| Watermark:', watermark, '| Encrypt:', encrypt);
+  
+  if (encrypt && !masterKey) {
+    return { success: false, error: 'Master key required for encryption' };
+  }
   
   try {
     onProgress?.({ status: 'Preparing...' });
@@ -755,7 +950,7 @@ async function mintNFT(params, onProgress) {
     
     // Handle EXIF stripping if requested
     let uploadFilePath = filePath;
-    let tempStrippedFile = null;
+    let cleanupTempFiles = [];
     
     if (stripExif) {
       onProgress?.({ status: 'Removing private data...' });
@@ -763,41 +958,95 @@ async function mintNFT(params, onProgress) {
         const strippedPath = await stripExifFromImage(filePath);
         if (strippedPath) {
           uploadFilePath = strippedPath;
-          tempStrippedFile = strippedPath;
+          cleanupTempFiles.push(strippedPath);
           console.log('[NFT] Using EXIF-stripped image:', strippedPath);
         }
       } catch (stripErr) {
         console.warn('[NFT] EXIF stripping failed, using original:', stripErr?.message);
-        // Best effort - continue with original file
       }
     }
     
     const fileSize = fs.statSync(uploadFilePath).size;
     
-    // Step 1: Compute content hash for integrity proof
+    // Compute EXIF hash
+    const exifHash = computeExifHash(uploadFilePath);
+    
+    // Step 1: Compute content hash of ORIGINAL file for integrity proof
     onProgress?.({ status: 'Computing integrity proof...' });
-    const contentHash = computeContentHash(uploadFilePath);
+    const contentHash = computeContentHash(filePath);
+    
+    // ========== EDITION-SPECIFIC IMAGE PROCESSING ==========
+    let imageToUploadPath = uploadFilePath;
+    let encryptionData = null;
+    
+    if (isLimited) {
+      // LIMITED EDITION: Generate high-quality thumbnail — original stays on device
+      onProgress?.({ status: 'Creating certificate image...' });
+      const thumbResult = await generateLimitedEditionThumb(uploadFilePath);
+      if (thumbResult.success) {
+        imageToUploadPath = thumbResult.thumbPath;
+        cleanupTempFiles.push(thumbResult.thumbPath);
+      }
+    } else {
+      // OPEN EDITION: Generate optimized preview (1200px)
+      onProgress?.({ status: 'Creating preview...' });
+      const previewResult = await generateOptimizedPreview(uploadFilePath);
+      if (previewResult.success) {
+        imageToUploadPath = previewResult.previewPath;
+        cleanupTempFiles.push(previewResult.previewPath);
+      }
+    }
+    
+    // Apply watermark if requested
+    if (watermark) {
+      onProgress?.({ status: 'Applying watermark...' });
+      const wmResult = await burnWatermark(imageToUploadPath);
+      if (wmResult.success) {
+        cleanupTempFiles.push(wmResult.watermarkedPath);
+        imageToUploadPath = wmResult.watermarkedPath;
+      }
+    }
+    
+    // Encrypt image if requested
+    if (encrypt && masterKey) {
+      onProgress?.({ status: 'Encrypting image...' });
+      const encResult = await encryptNFTImage(imageToUploadPath, masterKey);
+      if (encResult.success) {
+        imageToUploadPath = encResult.encryptedPath;
+        cleanupTempFiles.push(encResult.encryptedPath);
+        encryptionData = {
+          wrappedKey: encResult.wrappedKey,
+          wrapNonce: encResult.wrapNonce,
+          nonce: encResult.nonce,
+          originalSize: encResult.originalSize,
+        };
+        console.log('[NFT] Image encrypted for upload');
+      } else {
+        console.warn('[NFT] Encryption failed, uploading unencrypted:', encResult.error);
+      }
+    }
     
     // Step 2: Upload image
     onProgress?.({ status: 'Uploading image...' });
-    console.log('[NFT] Storage option:', storageOption, 'Credentials:', credentials ? { baseUrl: credentials.baseUrl, token: credentials.token ? 'present' : 'MISSING' } : 'null');
+    const uploadContentType = (encrypt && encryptionData) ? 'application/octet-stream' : 'image/jpeg';
+    console.log('[NFT] Storage option:', storageOption, 'ContentType:', uploadContentType);
     let imageUpload;
     if (storageOption === 'cloud' && credentials && credentials.baseUrl && credentials.token) {
       console.log('[NFT] Using StealthCloud storage');
-      imageUpload = await uploadToStealthCloud(uploadFilePath, credentials);
+      imageUpload = await uploadToStealthCloud(imageToUploadPath, credentials);
       // If StealthCloud fails, fall back to IPFS
       if (!imageUpload.success) {
         console.log('[NFT] StealthCloud failed, falling back to IPFS:', imageUpload.error);
-        imageUpload = await uploadToPinata(uploadFilePath, 'image/jpeg');
+        imageUpload = await uploadToPinata(imageToUploadPath, uploadContentType);
       }
     } else {
       console.log('[NFT] Using IPFS storage (Pinata)');
-      imageUpload = await uploadToPinata(uploadFilePath, 'image/jpeg');
+      imageUpload = await uploadToPinata(imageToUploadPath, uploadContentType);
     }
     
-    // Clean up temp stripped file if created
-    if (tempStrippedFile && fs.existsSync(tempStrippedFile)) {
-      try { fs.unlinkSync(tempStrippedFile); } catch (e) { /* ignore */ }
+    // Clean up temp files (best-effort)
+    for (const tmp of cleanupTempFiles) {
+      try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
     }
     
     if (!imageUpload.success) {
@@ -807,15 +1056,21 @@ async function mintNFT(params, onProgress) {
     const imageUrl = imageUpload.imageUrl || imageUpload.gatewayUrl;
     console.log('[NFT] Image uploaded:', imageUrl);
     
-    // Step 3: Build and upload metadata
+    // Step 3: Build and upload metadata with edition support
     onProgress?.({ status: 'Uploading metadata...' });
     const metadata = buildNFTMetadata({
       name: name || 'NFT Memories',
       description,
       imageUrl,
       ownerAddress: walletAddress,
+      creatorAddress: walletAddress,
       contentHash,
       fileSize,
+      edition,
+      license,
+      watermarked: watermark,
+      encrypted: !!(encrypt && encryptionData),
+      exifHash,
     });
     
     const metadataUpload = await uploadMetadataToPinata(metadata);
@@ -2506,6 +2761,86 @@ async function estimateTransferFee(isCompressed, recipientAddress, fromAddress) 
 }
 
 // ============================================================================
+// CERTIFICATES OF AUTHENTICITY (CoA) — matches mobile nftOperations.js
+// ============================================================================
+
+/**
+ * Generate a Certificate of Authenticity JSON for a Limited Edition NFT
+ */
+function generateCertificate(nftData) {
+  if (!nftData) return null;
+  const cert = {
+    id: `cert_${nftData.mintAddress || Date.now()}`,
+    version: 1,
+    type: 'PhotoLynk Certificate of Authenticity',
+    edition: nftData.edition || 'limited',
+    mintAddress: nftData.mintAddress,
+    txSignature: nftData.txSignature,
+    creatorWallet: nftData.ownerAddress,
+    name: nftData.name,
+    description: nftData.description,
+    contentHash: null,
+    exifHash: null,
+    license: nftData.license || 'arr',
+    watermarked: !!nftData.watermarked,
+    encrypted: !!nftData.encrypted,
+    storageType: nftData.storageType,
+    imageUrl: nftData.arweaveUrl || nftData.imageUrl,
+    metadataUrl: nftData.metadataUrl,
+    createdAt: nftData.createdAt || new Date().toISOString(),
+    issuedAt: new Date().toISOString(),
+  };
+  if (nftData.metadata?.attributes) {
+    for (const attr of nftData.metadata.attributes) {
+      if (attr.trait_type === 'Content Hash') cert.contentHash = attr.value;
+      if (attr.trait_type === 'EXIF Hash') cert.exifHash = attr.value;
+    }
+  }
+  return cert;
+}
+
+/**
+ * Build a shareable text representation of a certificate
+ */
+function formatCertificateForExport(cert) {
+  if (!cert) return '';
+  const lines = [
+    '═══════════════════════════════════════════',
+    '       CERTIFICATE OF AUTHENTICITY',
+    '              PhotoLynk NFT',
+    '═══════════════════════════════════════════',
+    '',
+    `Name:           ${cert.name || 'Untitled'}`,
+    `Edition:        ${cert.edition === 'limited' ? 'Limited Edition' : 'Open Edition'}`,
+    `License:        ${cert.license || 'All Rights Reserved'}`,
+    '',
+    '── Blockchain Proof ──',
+    `Mint Address:   ${cert.mintAddress || 'N/A'}`,
+    `Transaction:    ${cert.txSignature || 'N/A'}`,
+    `Creator Wallet: ${cert.creatorWallet || 'N/A'}`,
+    '',
+    '── Integrity Proof ──',
+    `Content Hash:   ${cert.contentHash || 'N/A'}`,
+    `EXIF Hash:      ${cert.exifHash || 'N/A'}`,
+    '',
+    '── Details ──',
+    `Watermarked:    ${cert.watermarked ? 'Yes' : 'No'}`,
+    `Encrypted:      ${cert.encrypted ? 'Yes' : 'No'}`,
+    `Storage:        ${cert.storageType === 'cloud' ? 'StealthCloud' : 'IPFS'}`,
+    `Issued:         ${cert.issuedAt || cert.createdAt || 'N/A'}`,
+    '',
+    '── Verify ──',
+    `Solscan:        https://solscan.io/token/${cert.mintAddress || ''}`,
+    `Explorer:       https://explorer.solana.com/address/${cert.mintAddress || ''}`,
+    '',
+    '═══════════════════════════════════════════',
+    '  Issued by PhotoLynk • stealthlynk.io',
+    '═══════════════════════════════════════════',
+  ];
+  return lines.join('\n');
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -2572,11 +2907,26 @@ module.exports = {
   openNFTMintWindow,
   openNFTAlbumWindow,
   
+  // Edition system (matches mobile)
+  computeExifHash,
+  generateOptimizedPreview,
+  generateLimitedEditionThumb,
+  burnWatermark,
+  encryptNFTImage,
+  decryptNFTImage,
+  
+  // Certificates (matches mobile)
+  generateCertificate,
+  formatCertificateForExport,
+  
   // Constants (same as mobile)
   NFT_COMMISSION_WALLET,
   PHOTOLYNK_MERKLE_TREE,
   IPFS_GATEWAYS,
   NFT_STORAGE_OPTIONS,
+  NFT_EDITION,
+  NFT_LICENSE_OPTIONS,
+  EDITION_ROYALTY_BPS,
   SOLANA_RPC_ENDPOINTS,
   PINATA_JWT,
   

@@ -1577,6 +1577,10 @@ function showMainWindow() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           <span>Album</span>
         </div>
+        <div class="action-btn-side" style="border-color: rgba(245,158,11,0.3); color: #f59e0b;" onclick="openCertificates()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+          <span>Certs</span>
+        </div>
       </div>
       <div class="section-title centered">SOLANA NFT</div>
       
@@ -1597,6 +1601,24 @@ function showMainWindow() {
             <span>No NFTs yet. Mint your first memory!</span>
           </div>
           <div id="nft-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;padding-bottom:20px;"></div>
+        </div>
+      </div>
+      
+      <!-- Certificates Overlay -->
+      <div id="certs-overlay" class="nft-album-overlay">
+        <div class="nft-album-header">
+          <button class="nft-close-btn" onclick="closeCertificates()">✕</button>
+          <span class="nft-album-title" style="color:#f59e0b;">Certificates</span>
+          <button class="nft-refresh-btn" onclick="loadCertificates()">↻</button>
+        </div>
+        <div class="nft-album-content" style="overflow-y:auto;">
+          <div id="certs-loading" style="display:none;text-align:center;padding:40px;color:#888;">Loading...</div>
+          <div id="certs-empty" style="display:none;text-align:center;padding:40px;color:#888;">
+            <div style="font-size:32px;margin-bottom:8px;">🏆</div>
+            <div style="font-weight:600;color:#fff;margin-bottom:4px;">No Certificates Yet</div>
+            <div style="font-size:12px;">Mint a Limited Edition NFT to receive a Certificate of Authenticity</div>
+          </div>
+          <div id="certs-list" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
       </div>
       
@@ -2775,6 +2797,109 @@ function showMainWindow() {
         overlay.classList.remove('active');
       }
       stopNFTAutoRefresh();
+    }
+    
+    // ========== Certificates Functions ==========
+    let cachedCerts = [];
+    
+    function openCertificates() {
+      const overlay = document.getElementById('certs-overlay');
+      if (overlay) overlay.classList.add('active');
+      loadCertificates();
+    }
+    
+    function closeCertificates() {
+      const overlay = document.getElementById('certs-overlay');
+      if (overlay) overlay.classList.remove('active');
+    }
+    
+    async function loadCertificates() {
+      const listEl = document.getElementById('certs-list');
+      const loadingEl = document.getElementById('certs-loading');
+      const emptyEl = document.getElementById('certs-empty');
+      if (!listEl) return;
+      
+      listEl.innerHTML = '';
+      if (loadingEl) loadingEl.style.display = 'block';
+      if (emptyEl) emptyEl.style.display = 'none';
+      
+      try {
+        const result = await ipcRenderer.invoke('get-certificates');
+        cachedCerts = (result && result.certificates) ? result.certificates : [];
+      } catch (e) {
+        console.log('[Certs] Load error:', e.message);
+        cachedCerts = [];
+      }
+      
+      if (loadingEl) loadingEl.style.display = 'none';
+      
+      if (cachedCerts.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+      
+      cachedCerts.sort((a, b) => new Date(b.issuedAt || 0) - new Date(a.issuedAt || 0));
+      
+      for (const cert of cachedCerts) {
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:12px;cursor:pointer;';
+        card.onmouseenter = () => card.style.borderColor = '#f59e0b';
+        card.onmouseleave = () => card.style.borderColor = '#333';
+        
+        const dateStr = cert.issuedAt ? new Date(cert.issuedAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : 'N/A';
+        const tags = ['<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(245,158,11,0.3);border-radius:4px;color:#f59e0b;">Limited</span>'];
+        if (cert.encrypted) tags.push('<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(153,69,255,0.3);border-radius:4px;color:#9945FF;">🔒 Encrypted</span>');
+        if (cert.watermarked) tags.push('<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(34,197,94,0.3);border-radius:4px;color:#22c55e;">Watermarked</span>');
+        
+        card.innerHTML = \`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;font-size:16px;">🏆</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">\${cert.name || 'Untitled'}</div>
+              <div style="font-size:10px;color:#888;">\${dateStr}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">\${tags.join('')}</div>
+          \${cert.mintAddress ? '<div style="font-size:9px;color:#666;font-family:monospace;">' + cert.mintAddress.slice(0,20) + '...' + cert.mintAddress.slice(-8) + '</div>' : ''}
+        \`;
+        card.onclick = () => showCertDetail(cert);
+        listEl.appendChild(card);
+      }
+    }
+    
+    function showCertDetail(cert) {
+      const listEl = document.getElementById('certs-list');
+      if (!listEl) return;
+      const dateStr = cert.issuedAt ? new Date(cert.issuedAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : 'N/A';
+      
+      listEl.innerHTML = \`
+        <div style="margin-bottom:12px;">
+          <button onclick="loadCertificates()" style="background:transparent;border:1px solid #333;color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;">← Back</button>
+        </div>
+        <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:16px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <span style="font-size:28px;">🏆</span>
+            <span style="font-size:15px;font-weight:700;color:#f59e0b;">Certificate of Authenticity</span>
+          </div>
+          <div style="height:1px;background:#333;margin:12px 0;"></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Edition</span><span style="color:#fff;font-size:12px;">Limited Edition</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">License</span><span style="color:#fff;font-size:12px;">\${cert.license || 'All Rights Reserved'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Issued</span><span style="color:#fff;font-size:12px;">\${dateStr}</span></div>
+          <div style="height:1px;background:#333;margin:12px 0;"></div>
+          <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Blockchain Proof</div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Mint</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${cert.mintAddress || 'N/A'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">TX</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${cert.txSignature || 'N/A'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Creator</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${cert.creatorWallet || 'N/A'}</span></div>
+          <div style="height:1px;background:#333;margin:12px 0;"></div>
+          <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Integrity</div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Content Hash</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${cert.contentHash || 'N/A'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">EXIF Hash</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${cert.exifHash || 'N/A'}</span></div>
+          <div style="height:1px;background:#333;margin:12px 0;"></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Watermarked</span><span style="color:#fff;font-size:12px;">\${cert.watermarked ? 'Yes' : 'No'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Encrypted</span><span style="color:#fff;font-size:12px;">\${cert.encrypted ? 'Yes' : 'No'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Storage</span><span style="color:#fff;font-size:12px;">\${cert.storageType === 'cloud' ? 'StealthCloud' : 'IPFS'}</span></div>
+        </div>
+      \`;
     }
     
     // Scroll to show NFT grid with navigation buttons visible
@@ -3999,6 +4124,38 @@ ipcMain.handle('sync-nfts-from-server', async () => {
   }
   const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
   return await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: authHeader });
+});
+
+// Certificates handlers
+ipcMain.handle('get-certificates', async () => {
+  try {
+    const credentials = store.get('backupCredentials') || {};
+    if (credentials.baseUrl && credentials.token) {
+      const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
+      const https = require('https');
+      const http = require('http');
+      const url = new URL(`${credentials.baseUrl}/api/nft/certificates`);
+      const mod = url.protocol === 'https:' ? https : http;
+      return await new Promise((resolve) => {
+        const req = mod.get(url.href, { headers: { Authorization: authHeader }, timeout: 10000 }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              resolve({ certificates: json.certificates || [] });
+            } catch (e) { resolve({ certificates: [] }); }
+          });
+        });
+        req.on('error', () => resolve({ certificates: [] }));
+        req.on('timeout', () => { req.destroy(); resolve({ certificates: [] }); });
+      });
+    }
+    return { certificates: [] };
+  } catch (e) {
+    safeConsole('log', '[Certs] Fetch error:', e.message);
+    return { certificates: [] };
+  }
 });
 
 // NFT Verification handler (same as mobile)
