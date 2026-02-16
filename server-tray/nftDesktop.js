@@ -2935,7 +2935,7 @@ function formatCertificateForExport(cert) {
     '',
     'SECTION 2 — BLOCKCHAIN PROVENANCE',
     '',
-    `  Network:        Solana (Mainnet Beta)`,
+    `  Network:        Solana Mainnet`,
     `  Mint Address:   ${mint}`,
     `  Transaction:    ${tx}`,
     `  Creator Wallet: ${creator}`,
