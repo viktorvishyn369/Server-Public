@@ -193,23 +193,42 @@
     // Wait for Phantom extension to inject (can take longer if locked)
     let phantomCheckAttempts = 0;
     const maxPhantomChecks = 60; // Check for up to 30 seconds
+    let triedForceConnect = false;
     
     function waitForPhantom() {
       phantomCheckAttempts++;
       const provider = window.phantom?.solana || window.solana;
       
       if (provider?.isPhantom) {
-        // Phantom found - try to connect
+        // Phantom found - try to connect (triggers unlock popup if locked)
         showStatus('Phantom detected! Connecting...', 'info');
         connectPhantom();
+      } else if (provider && !triedForceConnect) {
+        // Provider exists but isPhantom not set (locked state) — try connect() to trigger unlock popup
+        triedForceConnect = true;
+        showStatus('🔓 Triggering Phantom unlock...', 'info');
+        try { provider.connect({ onlyIfTrusted: false }).catch(() => {}); } catch (e) {}
+        setTimeout(waitForPhantom, 2000);
       } else if (phantomCheckAttempts < maxPhantomChecks) {
         // Keep checking - extension may still be loading or locked
-        if (phantomCheckAttempts > 5) {
-          showStatus('🔓 Click Phantom icon in browser toolbar to unlock...', 'info');
+        if (phantomCheckAttempts > 5 && !triedForceConnect) {
+          // After 2.5s, try calling connect() even without provider to trigger Phantom injection
+          showStatus('🔓 Opening Phantom...', 'info');
+          triedForceConnect = true;
+          try {
+            // Some Phantom versions respond to window.solana.connect() even when locked
+            const p = window.phantom?.solana || window.solana;
+            if (p) p.connect({ onlyIfTrusted: false }).catch(() => {});
+          } catch (e) {}
+          setTimeout(waitForPhantom, 2000);
         } else {
-          showStatus('Looking for Phantom wallet...', 'info');
+          if (phantomCheckAttempts > 3) {
+            showStatus('🔓 Click Phantom icon in browser toolbar to unlock...', 'info');
+          } else {
+            showStatus('Looking for Phantom wallet...', 'info');
+          }
+          setTimeout(waitForPhantom, 500);
         }
-        setTimeout(waitForPhantom, 500);
       } else {
         // Phantom not found after all attempts
         showStatus('Phantom not detected. Install from phantom.app', 'error');

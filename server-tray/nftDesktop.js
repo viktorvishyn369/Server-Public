@@ -1397,6 +1397,21 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9) {
       cacheImage(imageUrl, cid).catch(() => {});
     }
 
+    // Extract edition/encrypted/watermarked/license from on-chain attributes
+    const attrs = item.content?.metadata?.attributes || [];
+    const getAttr = (traitName) => {
+      const a = attrs.find(at => at.trait_type === traitName);
+      return a ? a.value : null;
+    };
+    const editionRaw = getAttr('Edition');
+    const edition = editionRaw ? String(editionRaw).toLowerCase() : null;
+    const encrypted = getAttr('Encrypted') === 'true';
+    const watermarked = getAttr('Watermarked') === 'true';
+    const license = getAttr('License') || null;
+    const storageType = (imageUrl && (imageUrl.includes('stealthlynk.io') || imageUrl.includes('stealthcloud'))) ? 'cloud' : 'ipfs';
+    // Encryption data from on-chain properties (needed for decryption)
+    const encProps = item.content?.metadata?.properties?.encryption || {};
+
     nfts.push({
       mintAddress: isCompressed ? `cnft_${item.id}` : item.id,
       assetId: item.id,
@@ -1409,6 +1424,12 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9) {
       ownerAddress: walletAddress,
       isCompressed: isCompressed,
       merkleTree: item.compression?.tree || null,
+      edition: edition,
+      encrypted: encrypted,
+      watermarked: watermarked,
+      license: license,
+      storageType: storageType,
+      encryptionData: encrypted ? encProps : null,
       source: 'das',
     });
   }
