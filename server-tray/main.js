@@ -1762,6 +1762,41 @@ function showMainWindow() {
         </div>
         
         <div class="nft-option-group">
+          <div class="nft-option-label">Edition</div>
+          <div class="nft-options">
+            <div class="nft-option selected" onclick="selectNFTEdition('open', this)">
+              <div class="nft-option-title">Open Edition</div>
+              <div class="nft-option-sub">Photo on blockchain</div>
+            </div>
+            <div class="nft-option" onclick="selectNFTEdition('limited', this)">
+              <div class="nft-option-title">Limited Edition</div>
+              <div class="nft-option-sub">Copyright certificate</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="nft-option-group">
+          <div class="nft-option-label">License</div>
+          <select class="nft-input" id="nft-license-select" style="padding:10px;background:#1a1a1a;color:#fff;border:1px solid #333;border-radius:8px;font-size:12px;">
+            <option value="arr">All Rights Reserved</option>
+            <option value="cc-by">CC BY 4.0</option>
+            <option value="cc-by-sa">CC BY-SA 4.0</option>
+            <option value="cc-by-nc">CC BY-NC 4.0</option>
+            <option value="cc0">CC0 (Public Domain)</option>
+            <option value="commercial">Commercial License</option>
+          </select>
+        </div>
+        
+        <div class="nft-option-group" style="display:flex;gap:12px;">
+          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;cursor:pointer;font-size:12px;color:#888;">
+            <input type="checkbox" id="nft-watermark-check" style="accent-color:#9945FF;"> Watermark
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;cursor:pointer;font-size:12px;color:#888;">
+            <input type="checkbox" id="nft-encrypt-check" style="accent-color:#9945FF;"> Encrypt
+          </label>
+        </div>
+        
+        <div class="nft-option-group">
           <div class="nft-option-label">NFT Details</div>
           <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Memory)">
           <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)">
@@ -2404,6 +2439,7 @@ function showMainWindow() {
     let nftWalletAddress = null;
     let selectedNFTType = 'compressed';
     let selectedNFTStorage = 'cloud';
+    let selectedNFTEdition = 'open';
     let selectedNFTPhoto = null;
     let isMinting = false;
     let lastNftFees = null;
@@ -2461,10 +2497,14 @@ function showMainWindow() {
     
     function resetNFTMintForm() {
       selectedNFTPhoto = null;
+      selectedNFTEdition = 'open';
       document.getElementById('nft-photo-select').style.display = 'block';
       document.getElementById('nft-photo-preview').style.display = 'none';
       document.getElementById('nft-name-input').value = '';
       document.getElementById('nft-desc-input').value = '';
+      document.getElementById('nft-license-select').value = 'arr';
+      document.getElementById('nft-watermark-check').checked = false;
+      document.getElementById('nft-encrypt-check').checked = false;
       updateMintButton();
     }
     
@@ -2536,6 +2576,12 @@ function showMainWindow() {
       el.classList.add('selected');
       refreshNFTPricesRealtime();
       updateMintButton();
+    }
+    
+    function selectNFTEdition(edition, el) {
+      selectedNFTEdition = edition;
+      el.parentElement.querySelectorAll('.nft-option').forEach(o => o.classList.remove('selected'));
+      el.classList.add('selected');
     }
     
     function selectNFTStorage(storage, el) {
@@ -2653,6 +2699,10 @@ function showMainWindow() {
       const name = document.getElementById('nft-name-input').value || 'NFT Memories';
       const description = document.getElementById('nft-desc-input').value || '';
       
+      const license = document.getElementById('nft-license-select').value || 'arr';
+      const watermark = document.getElementById('nft-watermark-check').checked;
+      const encrypt = document.getElementById('nft-encrypt-check').checked;
+      
       try {
         const result = await ipcRenderer.invoke('mint-nft', {
           nftType: selectedNFTType,
@@ -2661,6 +2711,10 @@ function showMainWindow() {
           name: name,
           description: description,
           walletAddress: nftWalletAddress,
+          edition: selectedNFTEdition,
+          license: license,
+          watermark: watermark,
+          encrypt: encrypt,
         });
         
         if (result.success) {
@@ -2724,9 +2778,56 @@ function showMainWindow() {
       }, 300000);
     }
     
-    function showMintSuccessPopup(data) {
+    async function showMintSuccessPopup(data) {
       // Bring window to front
       ipcRenderer.send('bring-to-front');
+      
+      // Save NFT to storage + server (matches solana-seeker post-mint flow)
+      try {
+        await ipcRenderer.invoke('save-minted-nft', {
+          mintAddress: data.mintAddress || null,
+          ownerAddress: data.wallet || nftWalletAddress,
+          name: data.name || 'NFT Memories',
+          imageUrl: data.imageUrl || null,
+          metadataUrl: data.metadataUrl || null,
+          txSignature: data.mintTx || data.paymentTx || null,
+          storageType: data.storageOption || 'ipfs',
+          isCompressed: data.nftType === 'compressed',
+          edition: data.edition || 'open',
+          license: data.license || 'arr',
+          watermarked: data.watermark === 'true',
+          encrypted: data.encrypt === 'true',
+          createdAt: new Date().toISOString(),
+        });
+        console.log('[NFT] Minted NFT saved to storage');
+      } catch (saveErr) {
+        console.warn('[NFT] Post-mint save failed:', saveErr.message);
+      }
+      
+      // Generate Certificate of Authenticity for Limited Edition
+      if (data.edition === 'limited') {
+        try {
+          await ipcRenderer.invoke('generate-certificate', {
+            mintAddress: data.mintAddress || null,
+            txSignature: data.mintTx || data.paymentTx || null,
+            ownerAddress: data.wallet || nftWalletAddress,
+            name: data.name || 'NFT Memories',
+            edition: 'limited',
+            license: data.license || 'arr',
+            watermarked: data.watermark === 'true',
+            encrypted: data.encrypt === 'true',
+            storageType: data.storageOption || 'ipfs',
+            imageUrl: data.imageUrl || null,
+            metadataUrl: data.metadataUrl || null,
+            contentHash: data.contentHash || null,
+            exifHash: data.exifHash || null,
+            createdAt: new Date().toISOString(),
+          });
+          console.log('[NFT] Certificate of Authenticity generated');
+        } catch (certErr) {
+          console.warn('[NFT] Certificate generation failed:', certErr.message);
+        }
+      }
       
       // Create success overlay
       const overlay = document.createElement('div');
@@ -2801,6 +2902,30 @@ function showMainWindow() {
     
     // ========== Certificates Functions ==========
     let cachedCerts = [];
+    let certPollInterval = null;
+    
+    // Background cert polling — starts on app load, polls every 60s
+    function startCertBackgroundSync() {
+      if (certPollInterval) return;
+      // Initial sync after 5s
+      setTimeout(loadCertificatesBackground, 5000);
+      certPollInterval = setInterval(loadCertificatesBackground, 60000);
+      console.log('[Certs] Background sync started');
+    }
+    
+    async function loadCertificatesBackground() {
+      try {
+        const result = await ipcRenderer.invoke('get-certificates');
+        if (result && result.certificates) {
+          cachedCerts = result.certificates.sort((a, b) => new Date(b.issuedAt || 0) - new Date(a.issuedAt || 0));
+        }
+      } catch (e) {
+        console.log('[Certs] Background sync error:', e.message);
+      }
+    }
+    
+    // Start background cert sync immediately
+    startCertBackgroundSync();
     
     function openCertificates() {
       const overlay = document.getElementById('certs-overlay');
@@ -2819,26 +2944,39 @@ function showMainWindow() {
       const emptyEl = document.getElementById('certs-empty');
       if (!listEl) return;
       
-      listEl.innerHTML = '';
-      if (loadingEl) loadingEl.style.display = 'block';
-      if (emptyEl) emptyEl.style.display = 'none';
+      // Show cached data instantly if available
+      if (cachedCerts.length > 0) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (emptyEl) emptyEl.style.display = 'none';
+        renderCertsList(listEl);
+      } else {
+        listEl.innerHTML = '';
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (emptyEl) emptyEl.style.display = 'none';
+      }
       
+      // Refresh from server in background
       try {
         const result = await ipcRenderer.invoke('get-certificates');
         cachedCerts = (result && result.certificates) ? result.certificates : [];
       } catch (e) {
         console.log('[Certs] Load error:', e.message);
-        cachedCerts = [];
       }
       
       if (loadingEl) loadingEl.style.display = 'none';
       
       if (cachedCerts.length === 0) {
+        listEl.innerHTML = '';
         if (emptyEl) emptyEl.style.display = 'block';
         return;
       }
       
       cachedCerts.sort((a, b) => new Date(b.issuedAt || 0) - new Date(a.issuedAt || 0));
+      renderCertsList(listEl);
+    }
+    
+    function renderCertsList(listEl) {
+      listEl.innerHTML = '';
       
       for (const cert of cachedCerts) {
         const card = document.createElement('div');
@@ -2883,7 +3021,7 @@ function showMainWindow() {
           </div>
           <div style="height:1px;background:#333;margin:12px 0;"></div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Edition</span><span style="color:#fff;font-size:12px;">Limited Edition</span></div>
-          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">License</span><span style="color:#fff;font-size:12px;">\${cert.license || 'All Rights Reserved'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">License</span><span style="color:#fff;font-size:12px;">\${({'arr':'All Rights Reserved','cc-by':'CC BY 4.0','cc-by-sa':'CC BY-SA 4.0','cc-by-nc':'CC BY-NC 4.0','cc0':'Public Domain (CC0)','commercial':'Commercial License'})[cert.license] || cert.license || 'All Rights Reserved'}</span></div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Issued</span><span style="color:#fff;font-size:12px;">\${dateStr}</span></div>
           <div style="height:1px;background:#333;margin:12px 0;"></div>
           <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Blockchain Proof</div>
@@ -3611,6 +3749,7 @@ function showMainWindow() {
     window.openNFTMint = openNFTMint;
     window.closeNFTMint = closeNFTMint;
     window.selectNFTType = selectNFTType;
+    window.selectNFTEdition = selectNFTEdition;
     window.selectNFTStorage = selectNFTStorage;
     window.selectNFTPhoto = selectNFTPhoto;
     window.removeNFTPhoto = removeNFTPhoto;
@@ -4060,6 +4199,61 @@ ipcMain.handle('clear-nft-cache', async () => {
   }
 });
 
+// Save minted NFT to local storage + server sync (post-mint, matches solana-seeker)
+ipcMain.handle('save-minted-nft', async (event, nftData) => {
+  try {
+    await nftDesktop.saveNFTToStorage(nftData);
+    // Sync to server
+    const credentials = store.get('backupCredentials') || {};
+    if (credentials.baseUrl && credentials.token) {
+      const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
+      try {
+        const axios = require('axios');
+        await axios.post(`${credentials.baseUrl}/api/nft/sync`, {
+          action: 'add', nft: nftData,
+        }, { headers: { Authorization: authHeader, ...(credentials.deviceUuid ? { 'X-Device-UUID': credentials.deviceUuid } : {}) }, timeout: 10000 });
+        safeConsole('log', '[NFT] Synced to server:', nftData.mintAddress);
+      } catch (syncErr) {
+        safeConsole('log', '[NFT] Server sync failed:', syncErr.message);
+      }
+    }
+    return { success: true };
+  } catch (e) {
+    safeConsole('log', '[NFT] Save failed:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+// Generate + save + sync certificate for Limited Edition (post-mint)
+ipcMain.handle('generate-certificate', async (event, data) => {
+  try {
+    const cert = nftDesktop.generateCertificate(data);
+    if (!cert) return { success: false, error: 'Certificate generation returned null' };
+    
+    // Save locally
+    await nftDesktop.saveCertificateLocal(cert);
+    
+    // Sync to server
+    const credentials = store.get('backupCredentials') || {};
+    if (credentials.baseUrl && credentials.token) {
+      const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
+      try {
+        const axios = require('axios');
+        await axios.post(`${credentials.baseUrl}/api/nft/certificates`, {
+          action: 'add', certificate: cert,
+        }, { headers: { Authorization: authHeader, ...(credentials.deviceUuid ? { 'X-Device-UUID': credentials.deviceUuid } : {}) }, timeout: 10000 });
+        safeConsole('log', '[NFT] Certificate synced to server:', cert.id);
+      } catch (syncErr) {
+        safeConsole('log', '[NFT] Certificate server sync failed:', syncErr.message);
+      }
+    }
+    return { success: true, certId: cert.id };
+  } catch (e) {
+    safeConsole('log', '[NFT] Certificate generation failed:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
 ipcMain.handle('mint-nft', async (event, data) => {
   safeConsole('log', '[NFT] Mint request:', data);
   
@@ -4132,12 +4326,14 @@ ipcMain.handle('get-certificates', async () => {
     const credentials = store.get('backupCredentials') || {};
     if (credentials.baseUrl && credentials.token) {
       const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
+      const reqHeaders = { Authorization: authHeader };
+      if (credentials.deviceUuid) reqHeaders['X-Device-UUID'] = credentials.deviceUuid;
       const https = require('https');
       const http = require('http');
       const url = new URL(`${credentials.baseUrl}/api/nft/certificates`);
       const mod = url.protocol === 'https:' ? https : http;
       return await new Promise((resolve) => {
-        const req = mod.get(url.href, { headers: { Authorization: authHeader }, timeout: 10000 }, (res) => {
+        const req = mod.get(url.href, { headers: reqHeaders, timeout: 10000 }, (res) => {
           let data = '';
           res.on('data', chunk => data += chunk);
           res.on('end', () => {

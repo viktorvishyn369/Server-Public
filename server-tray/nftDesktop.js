@@ -968,8 +968,39 @@ async function mintNFT(params, onProgress) {
     
     const fileSize = fs.statSync(uploadFilePath).size;
     
-    // Compute EXIF hash
-    const exifHash = computeExifHash(uploadFilePath);
+    // Extract EXIF data from image, then compute hash
+    let exifHash = null;
+    try {
+      if (sharp) {
+        const imgMeta = await sharp(filePath).metadata();
+        // Build EXIF-like object from sharp metadata (matches mobile extractExifForNFT fields)
+        const exifData = {};
+        if (imgMeta.width) exifData.ImageWidth = imgMeta.width;
+        if (imgMeta.height) exifData.ImageHeight = imgMeta.height;
+        if (imgMeta.format) exifData.Format = imgMeta.format;
+        if (imgMeta.space) exifData.ColorSpace = imgMeta.space;
+        if (imgMeta.density) exifData.DPI = imgMeta.density;
+        if (imgMeta.hasAlpha !== undefined) exifData.HasAlpha = imgMeta.hasAlpha;
+        if (imgMeta.orientation) exifData.Orientation = imgMeta.orientation;
+        // Extract raw EXIF buffer if present
+        if (imgMeta.exif) {
+          try {
+            const exifParser = require('exif-reader');
+            const parsed = exifParser(imgMeta.exif);
+            if (parsed?.image) Object.assign(exifData, parsed.image);
+            if (parsed?.exif) Object.assign(exifData, parsed.exif);
+            if (parsed?.gps) exifData.GPS = parsed.gps;
+          } catch (_) {
+            // exif-reader not available or parse failed — use sharp metadata only
+          }
+        }
+        if (Object.keys(exifData).length > 0) {
+          exifHash = computeExifHash(exifData);
+        }
+      }
+    } catch (exifErr) {
+      console.warn('[NFT] EXIF extraction failed:', exifErr?.message);
+    }
     
     // Step 1: Compute content hash of ORIGINAL file for integrity proof
     onProgress?.({ status: 'Computing integrity proof...' });
@@ -1129,6 +1160,13 @@ async function mintNFT(params, onProgress) {
       estimatedTotalUsd: estimatedTotalUsd.toFixed(2),
       estimatedTotalSol: estimatedTotalSol.toFixed(9),
       wallet: walletAddress,
+      // Edition params (passed through to mint-success for post-mint save)
+      edition: edition,
+      license: license,
+      watermark: watermark ? 'true' : 'false',
+      encrypt: (encrypt && encryptionData) ? 'true' : 'false',
+      contentHash: contentHash || '',
+      exifHash: exifHash || '',
     }).toString();
     
     // Use local server to serve payment page (Phantom extension needs HTTP, not file://)
@@ -2790,13 +2828,51 @@ function generateCertificate(nftData) {
     createdAt: nftData.createdAt || new Date().toISOString(),
     issuedAt: new Date().toISOString(),
   };
+  // Try direct fields first (desktop post-mint), then metadata attributes (mobile)
+  if (nftData.contentHash) cert.contentHash = nftData.contentHash;
+  if (nftData.exifHash) cert.exifHash = nftData.exifHash;
   if (nftData.metadata?.attributes) {
     for (const attr of nftData.metadata.attributes) {
-      if (attr.trait_type === 'Content Hash') cert.contentHash = attr.value;
-      if (attr.trait_type === 'EXIF Hash') cert.exifHash = attr.value;
+      if (attr.trait_type === 'Content Hash' && !cert.contentHash) cert.contentHash = attr.value;
+      if (attr.trait_type === 'EXIF Hash' && !cert.exifHash) cert.exifHash = attr.value;
     }
   }
   return cert;
+}
+
+/**
+ * Save a certificate to local JSON file (desktop equivalent of SecureStore)
+ */
+const CERTS_FILE = 'nft_certificates.json';
+function getCertsFilePath() {
+  // Use same directory as nftStorageFile (set by initNFTStorage)
+  if (nftStorageFile) {
+    return path.join(path.dirname(nftStorageFile), CERTS_FILE);
+  }
+  // Fallback: use current directory
+  return CERTS_FILE;
+}
+
+async function saveCertificateLocal(cert) {
+  try {
+    const filePath = getCertsFilePath();
+    let certs = [];
+    if (fs.existsSync(filePath)) {
+      try { certs = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) {}
+    }
+    const idx = certs.findIndex(c => c.id === cert.id);
+    if (idx >= 0) {
+      certs[idx] = cert;
+    } else {
+      certs.unshift(cert);
+    }
+    fs.writeFileSync(filePath, JSON.stringify(certs, null, 2));
+    console.log('[NFT] Certificate saved locally:', cert.id);
+    return { success: true };
+  } catch (e) {
+    console.error('[NFT] Save certificate failed:', e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 /**
@@ -2804,38 +2880,101 @@ function generateCertificate(nftData) {
  */
 function formatCertificateForExport(cert) {
   if (!cert) return '';
+
+  const LICENSE_MAP = {
+    'arr': 'All Rights Reserved',
+    'cc-by': 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+    'cc-by-sa': 'Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)',
+    'cc-by-nc': 'Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)',
+    'cc0': 'Creative Commons Zero 1.0 Universal (CC0 — Public Domain)',
+    'commercial': 'Commercial License — Contact Rights Holder',
+  };
+  const licenseLabel = LICENSE_MAP[cert.license] || cert.license || 'All Rights Reserved';
+
+  const formatDate = (iso) => {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) +
+        ', ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+    } catch (_) { return iso; }
+  };
+
+  const issued = formatDate(cert.issuedAt || cert.createdAt);
+  const certId = cert.id || '—';
+  const mint = cert.mintAddress || '—';
+  const tx = cert.txSignature || '—';
+  const creator = cert.creatorWallet || '—';
+  const contentHash = cert.contentHash || '— not recorded —';
+  const exifHash = cert.exifHash || '— not recorded —';
+  const storage = cert.storageType === 'cloud' ? 'StealthCloud (Encrypted Private Storage)' : 'IPFS (Decentralized Public Storage)';
+
   const lines = [
-    '═══════════════════════════════════════════',
-    '       CERTIFICATE OF AUTHENTICITY',
-    '              PhotoLynk NFT',
-    '═══════════════════════════════════════════',
+    '┌─────────────────────────────────────────────────────┐',
+    '│                                                     │',
+    '│          CERTIFICATE OF AUTHENTICITY                │',
+    '│          Digital Asset — Limited Edition             │',
+    '│                                                     │',
+    '│          Issued by PhotoLynk                        │',
+    '│          https://stealthlynk.io                     │',
+    '│                                                     │',
+    '└─────────────────────────────────────────────────────┘',
     '',
-    `Name:           ${cert.name || 'Untitled'}`,
-    `Edition:        ${cert.edition === 'limited' ? 'Limited Edition' : 'Open Edition'}`,
-    `License:        ${cert.license || 'All Rights Reserved'}`,
+    `Certificate ID:   ${certId}`,
+    `Date of Issue:    ${issued}`,
     '',
-    '── Blockchain Proof ──',
-    `Mint Address:   ${cert.mintAddress || 'N/A'}`,
-    `Transaction:    ${cert.txSignature || 'N/A'}`,
-    `Creator Wallet: ${cert.creatorWallet || 'N/A'}`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
-    '── Integrity Proof ──',
-    `Content Hash:   ${cert.contentHash || 'N/A'}`,
-    `EXIF Hash:      ${cert.exifHash || 'N/A'}`,
+    'SECTION 1 — WORK IDENTIFICATION',
     '',
-    '── Details ──',
-    `Watermarked:    ${cert.watermarked ? 'Yes' : 'No'}`,
-    `Encrypted:      ${cert.encrypted ? 'Yes' : 'No'}`,
-    `Storage:        ${cert.storageType === 'cloud' ? 'StealthCloud' : 'IPFS'}`,
-    `Issued:         ${cert.issuedAt || cert.createdAt || 'N/A'}`,
+    `  Title:          ${cert.name || 'Untitled'}`,
+    `  Edition:        ${cert.edition === 'limited' ? 'Limited Edition (1 of 1)' : 'Open Edition'}`,
+    `  License:        ${licenseLabel}`,
     '',
-    '── Verify ──',
-    `Solscan:        https://solscan.io/token/${cert.mintAddress || ''}`,
-    `Explorer:       https://explorer.solana.com/address/${cert.mintAddress || ''}`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
-    '═══════════════════════════════════════════',
-    '  Issued by PhotoLynk • stealthlynk.io',
-    '═══════════════════════════════════════════',
+    'SECTION 2 — BLOCKCHAIN PROVENANCE',
+    '',
+    `  Network:        Solana (Mainnet Beta)`,
+    `  Mint Address:   ${mint}`,
+    `  Transaction:    ${tx}`,
+    `  Creator Wallet: ${creator}`,
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    'SECTION 3 — INTEGRITY VERIFICATION',
+    '',
+    `  Content Hash:   ${contentHash}`,
+    `  EXIF Hash:      ${exifHash}`,
+    '',
+    '  The above cryptographic hashes were computed at the',
+    '  time of minting and can be used to verify that the',
+    '  original work has not been altered or tampered with.',
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    'SECTION 4 — ASSET PROTECTION',
+    '',
+    `  Watermarked:    ${cert.watermarked ? 'Yes — visible watermark applied' : 'No'}`,
+    `  Encrypted:      ${cert.encrypted ? 'Yes — AES-256 encrypted at rest' : 'No'}`,
+    `  Storage:        ${storage}`,
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    'VERIFICATION',
+    '',
+    `  Solscan:   https://solscan.io/token/${cert.mintAddress || ''}`,
+    `  Explorer:  https://explorer.solana.com/address/${cert.mintAddress || ''}`,
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    'This certificate was generated automatically at the time',
+    'of minting by the PhotoLynk application. The blockchain',
+    'record serves as immutable proof of creation, ownership,',
+    'and provenance. This document may be presented as evidence',
+    'of intellectual property rights.',
+    '',
+    '© PhotoLynk — stealthlynk.io',
   ];
   return lines.join('\n');
 }
@@ -2917,6 +3056,7 @@ module.exports = {
   
   // Certificates (matches mobile)
   generateCertificate,
+  saveCertificateLocal,
   formatCertificateForExport,
   
   // Constants (same as mobile)
