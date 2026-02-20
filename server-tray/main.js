@@ -3931,9 +3931,11 @@ function showMainWindow() {
     function appendNewNFTs(fetchedNFTs) {
       if (!Array.isArray(fetchedNFTs) || fetchedNFTs.length === 0) return 0;
       const existingMap = {};
+      const existingMetaMap = {};
       allNFTs.forEach((n, i) => {
         const id = n && normalizeNFTId(n.mintAddress || n.assetId);
         if (id) existingMap[id] = i;
+        if (n && n.metadataUrl) existingMetaMap[n.metadataUrl] = i;
       });
       let added = 0;
       for (const nft of fetchedNFTs) {
@@ -3957,7 +3959,29 @@ function showMainWindow() {
           }
           continue;
         }
+        // Dedup by metadataUrl: if a tx_ temp entry exists with same metadataUrl, replace it
+        const mintStr = String(nft.mintAddress || '');
+        if (nft.metadataUrl && !mintStr.startsWith('tx_') && existingMetaMap[nft.metadataUrl] !== undefined) {
+          const oldIdx = existingMetaMap[nft.metadataUrl];
+          const old = allNFTs[oldIdx];
+          if (old && String(old.mintAddress || '').startsWith('tx_')) {
+            // Merge encryptionData from temp entry into real entry, then replace
+            if (old.encryptionData && !nft.encryptionData) nft.encryptionData = old.encryptionData;
+            if (old.thumbnailUrl && !nft.thumbnailUrl) nft.thumbnailUrl = old.thumbnailUrl;
+            if (old.edition && !nft.edition) nft.edition = old.edition;
+            if (old.encrypted && !nft.encrypted) nft.encrypted = old.encrypted;
+            if (old.watermarked && !nft.watermarked) nft.watermarked = old.watermarked;
+            if (old.license && !nft.license) nft.license = old.license;
+            if (old.imageUrl && !nft.imageUrl) nft.imageUrl = old.imageUrl;
+            allNFTs[oldIdx] = nft;
+            existingMap[id] = oldIdx;
+            existingMetaMap[nft.metadataUrl] = oldIdx;
+            console.log('[NFT Album] Replaced temp tx_ entry with real cnft_ for:', nft.name);
+            continue;
+          }
+        }
         existingMap[id] = allNFTs.length;
+        if (nft.metadataUrl) existingMetaMap[nft.metadataUrl] = allNFTs.length;
         allNFTs.push(nft);
         added++;
       }
@@ -4096,9 +4120,11 @@ function showMainWindow() {
               if (s.metadataUrl) storedByMeta[s.metadataUrl] = s;
             });
             const dasIdSet = new Set();
+            const dasMetaSet = new Set();
             result.nfts.forEach(nft => {
               const nid = normalizeNFTId(nft.mintAddress);
               dasIdSet.add(nid);
+              if (nft.metadataUrl) dasMetaSet.add(nft.metadataUrl);
               // Match by mintAddress first, then by metadataUrl (cNFT assetId may differ from stored tx-based id)
               const stored = storedMap[nid] || (nft.metadataUrl && storedByMeta[nft.metadataUrl]) || null;
               if (stored) {
@@ -4119,10 +4145,12 @@ function showMainWindow() {
                 }
               }
             });
-            // Append NFTs from server/local that DAS missed
+            // Append NFTs from server/local that DAS missed (skip tx_ entries if real cnft_ exists by metadataUrl)
             let appended = 0;
             localStoredNFTs.forEach(s => {
               if (s.mintAddress && !dasIdSet.has(normalizeNFTId(s.mintAddress))) {
+                // Skip tx_ temp entries if DAS already has the real cnft_ with same metadataUrl
+                if (String(s.mintAddress).startsWith('tx_') && s.metadataUrl && dasMetaSet.has(s.metadataUrl)) return;
                 result.nfts.push(s);
                 dasIdSet.add(normalizeNFTId(s.mintAddress));
                 appended++;
