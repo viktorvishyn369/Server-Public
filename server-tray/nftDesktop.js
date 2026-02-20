@@ -2156,6 +2156,8 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
     let metadataJson = null;
     const dasAttrs = item.content?.metadata?.attributes || [];
     let metadataFetchFailed = false;
+    // Check if DAS attributes already hint this is encrypted (need metadata for keys)
+    const dasEncryptedHint = dasAttrs.some(a => a.trait_type === 'Encrypted' && a.value === 'true');
     if (metadataUrl) {
       if (!cachedImagePath && !imageUrl) {
         metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
@@ -2174,6 +2176,9 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       } else if (!imageUrl) {
         metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
         if (!metadataJson) metadataFetchFailed = true;
+      } else if (dasEncryptedHint && !metadataJson) {
+        // Encrypted NFT with imageUrl from DAS — still need metadata for encryption keys
+        metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
       }
     }
 

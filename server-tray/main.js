@@ -2991,7 +2991,7 @@ function showMainWindow() {
               try { await ipcRenderer.invoke('purge-nft-storage'); } catch (_) {}
               try { await ipcRenderer.invoke('clear-nft-cache'); } catch (_) {}
             }
-            if (walletChanged) loadNFTAlbum();
+            loadNFTAlbum();
             // Only clear certs UI when wallet actually changed
             if (walletChanged) {
               const certsOv = document.getElementById('certs-overlay');
@@ -4362,7 +4362,27 @@ function showMainWindow() {
         })();
         }
       } else {
-        imgEl.src = imageUrl;
+        // Use IPFS gateway rotation for IPFS URLs (Pinata returns 403)
+        const detailCid = extractIPFSCid(imageUrl);
+        const detailGateways = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
+        if (detailCid) {
+          let gIdx = 0;
+          const tryGateway = () => {
+            imgEl.src = detailGateways[gIdx] + detailCid;
+          };
+          imgEl.onerror = () => {
+            gIdx++;
+            if (gIdx < detailGateways.length) {
+              console.log('[NFT Detail] Gateway', gIdx + 1, 'for', detailCid.slice(0, 8));
+              tryGateway();
+            } else {
+              imgEl.style.opacity = '0.3';
+            }
+          };
+          tryGateway();
+        } else {
+          imgEl.src = imageUrl;
+        }
         imgEl.style.opacity = '1';
       }
       
