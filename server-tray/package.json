@@ -138,6 +138,7 @@
     "heic-convert": "^2.1.0",
     "heic-decode": "^2.1.0",
     "helmet": "^8.1.0",
+    "imagetracerjs": "^1.2.6",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",

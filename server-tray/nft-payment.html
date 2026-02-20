@@ -80,9 +80,10 @@
     <div class="nft-type" id="nft-type">Compressed NFT</div>
     
     <div class="amount-box">
-      <div class="amount-label">Mint Fee</div>
+      <div class="amount-label">Estimated total</div>
       <div class="amount-value" id="amount-sol">0.000 SOL</div>
       <div class="amount-usd" id="amount-usd">≈ $0.00 USD</div>
+      <div style="font-size:10px;color:#666;margin-top:6px;">Solana fees are charged separately during mint</div>
     </div>
     
     <button class="btn btn-phantom" id="pay-btn" onclick="connectAndPay()">
@@ -164,29 +165,63 @@
         const toPubkey = new PublicKey(recipient);
         const lamports = Math.ceil(amount * LAMPORTS_PER_SOL);
 
-        showStatus('Creating transaction...', 'info');
+        // Fee wallet exemption: commission wallet pays fee to itself — skip SOL transfer
+        // but keep all calculations visible (matches mobile nftOperations.js isFeeWalletExempt)
+        const isFeeWalletExempt = pubkey === recipient;
+        let signature = null;
 
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-        );
+        if (isFeeWalletExempt) {
+          console.log('[NFT Payment] Fee wallet exempt — skipping commission transfer');
+          showStatus('Fee wallet detected — skipping payment...', 'info');
+          signature = 'fee_wallet_exempt_' + Date.now();
+        } else {
+          showStatus('Creating transaction...', 'info');
 
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPubkey;
+          const transaction = new Transaction().add(
+            SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+          );
 
-        showStatus('Please approve in Phantom...', 'info');
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+          transaction.recentBlockhash = blockhash;
+          transaction.feePayer = fromPubkey;
 
-        const signed = await provider.signTransaction(transaction);
-        showStatus('Sending transaction...', 'info');
+          showStatus('Please approve in Phantom...', 'info');
 
-        const signature = await connection.sendRawTransaction(signed.serialize());
-        showStatus('Confirming...', 'info');
+          const signed = await provider.signTransaction(transaction);
+          showStatus('Sending transaction...', 'info');
 
-        await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+          signature = await connection.sendRawTransaction(signed.serialize());
+          showStatus('Confirming...', 'info');
+
+          await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+
+          // Verify payment on server before showing success
+          showStatus('Verifying payment...', 'info');
+          try {
+            const verifyRes = await fetch('/api/nft/verify-mint-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ txSignature: signature, expectedAmount: amount })
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyData.success) {
+              throw new Error('Payment verification failed: ' + (verifyData.error || 'Unknown error'));
+            }
+            console.log('[NFT Payment] Server verified payment:', verifyData.receivedAmount, 'SOL');
+          } catch (verifyErr) {
+            console.error('[NFT Payment] Verification error:', verifyErr.message);
+            if (verifyErr.message.includes('Payment verification failed') || verifyErr.message.includes('wrong wallet') || verifyErr.message.includes('Insufficient')) {
+              throw new Error(verifyErr.message);
+            }
+            console.warn('[NFT Payment] Verification skipped (server unreachable), proceeding');
+          }
+        }
 
         document.getElementById('main-container').style.display = 'none';
         document.getElementById('success-container').style.display = 'block';
-        document.getElementById('tx-link').innerHTML = 'Transaction: <a href="https://solscan.io/tx/' + signature + '" target="_blank" style="color:#14F195;">' + signature.slice(0,8) + '...</a>';
+        document.getElementById('tx-link').innerHTML = isFeeWalletExempt
+          ? 'Fee wallet exempt — no payment required'
+          : 'Transaction: <a href="https://solscan.io/tx/' + signature + '" target="_blank" style="color:#14F195;">' + signature.slice(0,8) + '...</a>';
 
       } catch (err) {
         console.error('Payment error:', err);

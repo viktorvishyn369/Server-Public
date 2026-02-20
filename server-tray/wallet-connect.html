@@ -59,6 +59,7 @@
     <div class="logo">👻</div>
     <h1>Connect Phantom</h1>
     <p class="subtitle">Connect your Solana wallet to PhotoLynk</p>
+    <p style="color:#AB9FF2;font-size:12px;margin-top:4px;margin-bottom:20px;">If Phantom not opened, unlock wallet and refresh this page in browser</p>
     
     <div id="unlock-steps" style="display:none; text-align:left; background:rgba(255,200,0,0.1); border:1px solid rgba(255,200,0,0.3); border-radius:12px; padding:16px; margin-bottom:16px;">
       <div style="font-weight:600; color:#FFD700; margin-bottom:8px;">🔓 Unlock Required</div>
@@ -127,7 +128,9 @@
       showStatus('Opening Phantom...', 'info');
 
       try {
-        // Use connect with onlyIfTrusted: false to force popup
+        // Disconnect first to clear cached wallet, then connect fresh
+        // This ensures Phantom returns the currently active wallet, not a stale cached one
+        try { await provider.disconnect(); } catch (_) {}
         const resp = await provider.connect({ onlyIfTrusted: false });
         connectedAddress = resp.publicKey.toString();
         
@@ -144,7 +147,7 @@
         if (errMsg.includes('locked') || errMsg.includes('Unexpected error')) {
           // Show unlock instructions
           document.getElementById('unlock-steps').style.display = 'block';
-          showStatus('⏳ Unlock Phantom, then we\'ll connect automatically...', 'info');
+          showStatus('Unlock Phantom, then we will connect automatically...', 'info');
           
           // Try using request method which may trigger unlock popup
           try {
@@ -154,6 +157,7 @@
           const retryInterval = setInterval(async () => {
             try {
               const provider = window.phantom?.solana || window.solana;
+              try { await provider.disconnect(); } catch (_) {}
               const resp = await provider.connect({ onlyIfTrusted: false });
               clearInterval(retryInterval);
               connectedAddress = resp.publicKey.toString();
@@ -190,55 +194,84 @@
       });
     }
 
-    // Wait for Phantom extension to inject (can take longer if locked)
+    // Wait for Phantom extension to inject, then keep retrying after unlock
     let phantomCheckAttempts = 0;
-    const maxPhantomChecks = 60; // Check for up to 30 seconds
-    let triedForceConnect = false;
-    
+    const maxPhantomChecks = 20; // 10 seconds for initial detection
+    let retryConnectInterval = null;
+
+    function startRetryLoop() {
+      if (retryConnectInterval) return;
+      showStatus('🔓 Wallet locked - unlock Phantom, then we will connect automatically...', 'info');
+      const unlockSteps = document.getElementById('unlock-steps');
+      if (unlockSteps) unlockSteps.style.display = 'block';
+      retryConnectInterval = setInterval(async () => {
+        const p = window.phantom?.solana || window.solana;
+        if (!p) return;
+        // Disconnect first to clear cached wallet, then connect fresh
+        // This ensures Phantom returns the currently active wallet, not a stale cached one
+        try { await p.disconnect(); } catch (_) {}
+        try {
+          const resp = await p.connect({ onlyIfTrusted: false });
+          if (resp?.publicKey) {
+            clearInterval(retryConnectInterval); retryConnectInterval = null;
+            const addr = resp.publicKey.toString();
+            connectedAddress = addr;
+            document.getElementById('connect-container').style.display = 'none';
+            document.getElementById('success-container').style.display = 'block';
+            document.getElementById('wallet-address').textContent = addr;
+            fetch('http://localhost:3000/wallet-connected', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: addr }) }).catch(() => {});
+            setTimeout(() => window.close(), 2000);
+            return;
+          }
+        } catch (e) {
+          // Still locked or rejected - keep retrying silently
+        }
+      }, 1500);
+      // Stop after 3 minutes
+      setTimeout(() => {
+        if (retryConnectInterval) {
+          clearInterval(retryConnectInterval); retryConnectInterval = null;
+          showStatus('Timed out. Click Connect to try again.', 'error');
+        }
+      }, 180000);
+    }
+
     function waitForPhantom() {
       phantomCheckAttempts++;
       const provider = window.phantom?.solana || window.solana;
-      
+
       if (provider?.isPhantom) {
-        // Phantom found - try to connect (triggers unlock popup if locked)
         showStatus('Phantom detected! Connecting...', 'info');
-        connectPhantom();
-      } else if (provider && !triedForceConnect) {
-        // Provider exists but isPhantom not set (locked state) — try connect() to trigger unlock popup
-        triedForceConnect = true;
-        showStatus('🔓 Triggering Phantom unlock...', 'info');
-        try { provider.connect({ onlyIfTrusted: false }).catch(() => {}); } catch (e) {}
-        setTimeout(waitForPhantom, 2000);
-      } else if (phantomCheckAttempts < maxPhantomChecks) {
-        // Keep checking - extension may still be loading or locked
-        if (phantomCheckAttempts > 5 && !triedForceConnect) {
-          // After 2.5s, try calling connect() even without provider to trigger Phantom injection
-          showStatus('🔓 Opening Phantom...', 'info');
-          triedForceConnect = true;
-          try {
-            // Some Phantom versions respond to window.solana.connect() even when locked
-            const p = window.phantom?.solana || window.solana;
-            if (p) p.connect({ onlyIfTrusted: false }).catch(() => {});
-          } catch (e) {}
-          setTimeout(waitForPhantom, 2000);
-        } else {
-          if (phantomCheckAttempts > 3) {
-            showStatus('🔓 Click Phantom icon in browser toolbar to unlock...', 'info');
+        // Disconnect first to clear any cached/stale wallet approval
+        // Then connect fresh so Phantom returns the currently active wallet
+        provider.disconnect().catch(() => {}).then(() => {
+          return provider.connect({ onlyIfTrusted: false });
+        }).then(resp => {
+          if (resp?.publicKey) {
+            connectedAddress = resp.publicKey.toString();
+            document.getElementById('connect-container').style.display = 'none';
+            document.getElementById('success-container').style.display = 'block';
+            document.getElementById('wallet-address').textContent = connectedAddress;
+            fetch('http://localhost:3000/wallet-connected', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: connectedAddress }) }).catch(() => {});
+            setTimeout(() => window.close(), 2000);
           } else {
-            showStatus('Looking for Phantom wallet...', 'info');
+            startRetryLoop();
           }
-          setTimeout(waitForPhantom, 500);
-        }
+        }).catch(() => {
+          startRetryLoop();
+        });
+      } else if (provider && !provider.isPhantom) {
+        startRetryLoop();
+      } else if (phantomCheckAttempts < maxPhantomChecks) {
+        if (phantomCheckAttempts > 4) showStatus('Looking for Phantom... Click the Phantom icon in your toolbar if needed.', 'info');
+        setTimeout(waitForPhantom, 500);
       } else {
-        // Phantom not found after all attempts
         showStatus('Phantom not detected. Install from phantom.app', 'error');
         document.getElementById('connect-btn').innerHTML = '<span>📥</span> Install Phantom';
-        document.getElementById('connect-btn').onclick = function() {
-          window.open('https://phantom.app/', '_blank');
-        };
+        document.getElementById('connect-btn').onclick = function() { window.open('https://phantom.app/', '_blank'); };
       }
     }
-    
+
     // Start checking for Phantom after page load
     window.addEventListener('load', () => {
       setTimeout(waitForPhantom, 300);
