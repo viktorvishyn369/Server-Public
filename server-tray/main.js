@@ -6060,8 +6060,8 @@ async function pushLocalNFTsToServer(serverUrl, headers) {
       delete copy.exifData;
       delete copy.metadata;
       delete copy.attributes;
-      if (copy.imageUrl && copy.imageUrl.startsWith('data:') && copy.imageUrl.length > 5000) delete copy.imageUrl;
-      if (copy.arweaveUrl && copy.arweaveUrl.startsWith('data:') && copy.arweaveUrl.length > 5000) delete copy.arweaveUrl;
+      if (copy.imageUrl && copy.imageUrl.startsWith('data:') && !copy.imageUrl.startsWith('data:image/svg') && copy.imageUrl.length > 5000) delete copy.imageUrl;
+      if (copy.arweaveUrl && copy.arweaveUrl.startsWith('data:') && !copy.arweaveUrl.startsWith('data:image/svg') && copy.arweaveUrl.length > 5000) delete copy.arweaveUrl;
       return copy;
     });
     if (toSync.length === 0) return;
