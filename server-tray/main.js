@@ -5083,10 +5083,14 @@ function showMainWindow() {
         
         // Use cached local file if available, otherwise use IPFS gateway
         let primaryUrl = imageUrl;
+        const isDataUri = imageUrl.startsWith('data:');
         if (isCached) {
           // Local file path - use file:// protocol
           primaryUrl = 'file://' + imageUrl;
           console.log('[NFT Album] Using cached:', nftName);
+        } else if (isDataUri) {
+          // data: URIs (on-chain SVG) load instantly — no gateway needed
+          console.log('[NFT Album] Using data URI:', nftName);
         } else {
           const cid = extractIPFSCid(imageUrl);
           if (cid) {
@@ -5131,6 +5135,13 @@ function showMainWindow() {
         const img = item.querySelector('img');
         const spinner = item.querySelector('.nft-spinner');
         if (img) {
+          // data: URIs (on-chain SVG) — mark as loaded immediately, no retry/timeout
+          // (matches solana-seeker which renders SVG data URIs via a separate SvgXml path)
+          if (isDataUri) {
+            img.dataset.loaded = '1';
+            img.style.opacity = '1';
+            if (spinner) spinner.style.display = 'none';
+          } else {
           img.dataset.loaded = '0';
           img.onload = () => { 
             img.dataset.loaded = '1'; 
@@ -5193,6 +5204,7 @@ function showMainWindow() {
             });
             }
           }
+          } // close else (non-data-URI path)
         }
       });
       
