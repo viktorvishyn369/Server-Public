@@ -3746,6 +3746,8 @@ async function estimateTransferFee(isCompressed, recipientAddress, fromAddress) 
  */
 function generateCertificate(nftData) {
   if (!nftData) return null;
+  // Never generate certs for temporary tx_ entries — wait for real cnft_ ID
+  if (nftData.mintAddress && String(nftData.mintAddress).startsWith('tx_')) return null;
   const cert = {
     id: `cert_${nftData.mintAddress || Date.now()}`,
     version: 1,
