@@ -6052,16 +6052,24 @@ async function pushLocalNFTsToServer(serverUrl, headers) {
       const copy = { ...n };
       delete copy.exifData;
       delete copy.metadata;
+      delete copy.attributes;
       if (copy.imageUrl && copy.imageUrl.startsWith('data:') && copy.imageUrl.length > 5000) delete copy.imageUrl;
+      if (copy.arweaveUrl && copy.arweaveUrl.startsWith('data:') && copy.arweaveUrl.length > 5000) delete copy.arweaveUrl;
       return copy;
     });
     if (toSync.length === 0) return;
-    const BATCH = 5;
+    const BATCH = 2;
+    let pushed = 0;
     for (let i = 0; i < toSync.length; i += BATCH) {
       const batch = toSync.slice(i, i + BATCH);
-      await axios.post(`${serverUrl}/api/nft/sync`, { action: 'backup', nfts: batch }, { headers, timeout: 15000 });
+      try {
+        await axios.post(`${serverUrl}/api/nft/sync`, { action: 'backup', nfts: batch }, { headers, timeout: 30000 });
+        pushed += batch.length;
+      } catch (batchErr) {
+        safeConsole('log', '[NFT Sync] Batch', Math.floor(i / BATCH) + 1, 'failed:', batchErr.message);
+      }
     }
-    safeConsole('log', '[NFT Sync] Pushed', toSync.length, 'NFTs with encryption data to server');
+    safeConsole('log', '[NFT Sync] Pushed', pushed, '/', toSync.length, 'NFTs with encryption data to server');
   } catch (e) {
     safeConsole('log', '[NFT Sync] Push failed:', e.message);
   }
