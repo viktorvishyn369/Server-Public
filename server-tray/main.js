@@ -3169,109 +3169,7 @@ function showMainWindow() {
       // Bring window to front
       ipcRenderer.send('bring-to-front');
       
-      // Save NFT to storage + server (matches solana-seeker post-mint flow)
-      try {
-        // Retrieve cached encryptionData from mint result
-        const pendingEncData = window._pendingMintEncryptionData || null;
-        window._pendingMintEncryptionData = null;
-        const isCNFT = data.nftType === 'compressed';
-        let mintedId = String(data.mintAddress || '');
-
-        // cNFT payment page does not return mintAddress — resolve assetId from DAS
-        // by matching the metadataUrl of the freshly minted NFT
-        if (isCNFT && !mintedId && (data.metadataUrl || data.mintTx) && nftWalletAddress) {
-          try {
-            console.log('[NFT] Resolving cNFT assetId from DAS for metadataUrl:', data.metadataUrl);
-            // Poll DAS up to 5 times (cNFT indexing can take a few seconds)
-            for (let attempt = 0; attempt < 5; attempt++) {
-              if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
-              const dasRes = await ipcRenderer.invoke('fetch-user-nfts', nftWalletAddress, 1000);
-              if (dasRes && dasRes.success && Array.isArray(dasRes.nfts)) {
-                const match = dasRes.nfts.find(n =>
-                  (data.metadataUrl && n.metadataUrl && n.metadataUrl === data.metadataUrl) ||
-                  (data.name && n.name && n.name === data.name && n.txSignature === data.mintTx)
-                );
-                if (match) {
-                  // assetId stored without cnft_ prefix in DAS result
-                  mintedId = String(match.assetId || match.mintAddress || '').replace(/^cnft_/, '');
-                  console.log('[NFT] Resolved cNFT assetId:', mintedId);
-                  // Invalidate cache so next fetch is fresh
-                  _fetchNFTsInFlight = null;
-                  break;
-                }
-              }
-            }
-          } catch (dasErr) {
-            console.warn('[NFT] DAS assetId resolution failed:', dasErr.message);
-          }
-        }
-
-        // For cNFTs: use resolved assetId, or fall back to tx signature so cert is never null
-        const mintedMintAddress = isCNFT
-          ? (mintedId ? ('cnft_' + mintedId.replace(/^cnft_/, '')) : (data.mintTx ? ('tx_' + data.mintTx) : null))
-          : (mintedId || null);
-        await ipcRenderer.invoke('save-minted-nft', {
-          mintAddress: mintedMintAddress,
-          assetId: isCNFT ? (mintedId || null) : null,
-          ownerAddress: data.wallet || nftWalletAddress,
-          name: data.name || 'Photo NFT',
-          imageUrl: data.imageUrl || null,
-          metadataUrl: data.metadataUrl || null,
-          txSignature: data.mintTx || data.paymentTx || null,
-          storageType: data.storageOption || 'ipfs',
-          isCompressed: isCNFT,
-          nftType: data.nftType || 'compressed',
-          edition: data.edition || 'open',
-          license: data.license || 'arr',
-          watermarked: data.watermark === 'true',
-          encrypted: data.encrypt === 'true',
-          encryptionData: pendingEncData,
-          thumbnailUrl: window._pendingMintThumbnailUrl || null,
-          createdAt: new Date().toISOString(),
-          // Attributes from mint result — enables badge display from local storage
-          attributes: (window._pendingMintProofData?.attributes) || [],
-        });
-        window._pendingMintThumbnailUrl = null;
-        console.log('[NFT] Minted NFT saved to storage');
-      } catch (saveErr) {
-        console.warn('[NFT] Post-mint save failed:', saveErr.message);
-      }
-      
-      // Generate Certificate of Authenticity for Limited Edition
-      if (data.edition === 'limited') {
-        try {
-          const pendingProof = window._pendingMintProofData || null;
-          window._pendingMintProofData = null;
-          console.log('[NFT] Certificate: pendingProof tsaToken?', !!pendingProof?.tsaToken, 'c2pa?', !!pendingProof?.c2paManifest, 'mintTimestamp?', pendingProof?.mintTimestamp);
-          await ipcRenderer.invoke('generate-certificate', {
-            mintAddress: mintedMintAddress,
-            txSignature: data.mintTx || data.paymentTx || null,
-            ownerAddress: data.wallet || nftWalletAddress,
-            name: data.name || 'Photo NFT',
-            edition: 'limited',
-            license: data.license || 'arr',
-            watermarked: data.watermark === 'true',
-            encrypted: data.encrypt === 'true',
-            storageType: data.storageOption || 'ipfs',
-            imageUrl: data.imageUrl || null,
-            metadataUrl: data.metadataUrl || null,
-            contentHash: data.contentHash || null,
-            exifHash: data.exifHash || null,
-            createdAt: new Date().toISOString(),
-            // RFC 3161 + C2PA proof data from mint
-            tsaToken: pendingProof?.tsaToken || null,
-            tsaUrl: pendingProof?.tsaUrl || null,
-            tsaPolicy: pendingProof?.tsaPolicy || null,
-            c2paManifest: pendingProof?.c2paManifest || null,
-            mintTimestamp: pendingProof?.mintTimestamp || null,
-          });
-          console.log('[NFT] Certificate of Authenticity generated');
-        } catch (certErr) {
-          console.warn('[NFT] Certificate generation failed:', certErr.message);
-        }
-      }
-      
-      // Create success overlay
+      // Show success popup IMMEDIATELY — don't block on DAS resolution or save
       const overlay = document.createElement('div');
       overlay.id = 'mint-success-overlay';
       overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -3314,9 +3212,136 @@ function showMainWindow() {
       // Close NFT mint section
       closeNFTMint();
       
-      // Append-only refresh (do not reset current album page)
-      checkForNewNFTsOnce();
-      startNFTAutoRefresh();
+      // Background: save NFT immediately, refresh album, then resolve cNFT assetId
+      (async () => {
+        const pendingEncData = window._pendingMintEncryptionData || null;
+        window._pendingMintEncryptionData = null;
+        const isCNFT = data.nftType === 'compressed';
+        const initialId = String(data.mintAddress || '');
+
+        // Step 1: Save immediately with temporary ID (tx-based for cNFTs without mintAddress)
+        const tempMintAddress = isCNFT
+          ? (initialId ? ('cnft_' + initialId.replace(/^cnft_/, '')) : (data.mintTx ? ('tx_' + data.mintTx) : null))
+          : (initialId || null);
+        try {
+          await ipcRenderer.invoke('save-minted-nft', {
+            mintAddress: tempMintAddress,
+            assetId: isCNFT ? (initialId || null) : null,
+            ownerAddress: data.wallet || nftWalletAddress,
+            name: data.name || 'Photo NFT',
+            imageUrl: data.imageUrl || null,
+            metadataUrl: data.metadataUrl || null,
+            txSignature: data.mintTx || data.paymentTx || null,
+            storageType: data.storageOption || 'ipfs',
+            isCompressed: isCNFT,
+            nftType: data.nftType || 'compressed',
+            edition: data.edition || 'open',
+            license: data.license || 'arr',
+            watermarked: data.watermark === 'true',
+            encrypted: data.encrypt === 'true',
+            encryptionData: pendingEncData,
+            thumbnailUrl: window._pendingMintThumbnailUrl || null,
+            createdAt: new Date().toISOString(),
+            attributes: (window._pendingMintProofData?.attributes) || [],
+          });
+          window._pendingMintThumbnailUrl = null;
+          console.log('[NFT] Minted NFT saved to storage (temp ID:', tempMintAddress, ')');
+        } catch (saveErr) {
+          console.warn('[NFT] Post-mint save failed:', saveErr.message);
+        }
+
+        // Step 2: Refresh album immediately so NFT appears in grid
+        checkForNewNFTsOnce();
+        startNFTAutoRefresh();
+
+        // Step 3: For cNFTs without mintAddress, resolve real assetId from DAS in background
+        let resolvedMintAddress = tempMintAddress;
+        if (isCNFT && !initialId && (data.metadataUrl || data.mintTx) && nftWalletAddress) {
+          try {
+            console.log('[NFT] Resolving cNFT assetId from DAS for metadataUrl:', data.metadataUrl);
+            for (let attempt = 0; attempt < 5; attempt++) {
+              if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
+              const dasRes = await ipcRenderer.invoke('fetch-user-nfts', nftWalletAddress, 1000);
+              if (dasRes && dasRes.success && Array.isArray(dasRes.nfts)) {
+                const match = dasRes.nfts.find(n =>
+                  (data.metadataUrl && n.metadataUrl && n.metadataUrl === data.metadataUrl) ||
+                  (data.name && n.name && n.name === data.name && n.txSignature === data.mintTx)
+                );
+                if (match) {
+                  const realId = String(match.assetId || match.mintAddress || '').replace(/^cnft_/, '');
+                  resolvedMintAddress = 'cnft_' + realId;
+                  console.log('[NFT] Resolved cNFT assetId:', realId);
+                  _fetchNFTsInFlight = null;
+                  // Update saved NFT with real assetId
+                  try {
+                    await ipcRenderer.invoke('save-minted-nft', {
+                      mintAddress: resolvedMintAddress,
+                      assetId: realId,
+                      ownerAddress: data.wallet || nftWalletAddress,
+                      name: data.name || 'Photo NFT',
+                      imageUrl: data.imageUrl || null,
+                      metadataUrl: data.metadataUrl || null,
+                      txSignature: data.mintTx || data.paymentTx || null,
+                      storageType: data.storageOption || 'ipfs',
+                      isCompressed: true,
+                      nftType: 'compressed',
+                      edition: data.edition || 'open',
+                      license: data.license || 'arr',
+                      watermarked: data.watermark === 'true',
+                      encrypted: data.encrypt === 'true',
+                      encryptionData: pendingEncData,
+                      thumbnailUrl: window._pendingMintThumbnailUrl || null,
+                      createdAt: new Date().toISOString(),
+                      attributes: (window._pendingMintProofData?.attributes) || [],
+                    });
+                    console.log('[NFT] Updated saved NFT with resolved assetId:', resolvedMintAddress);
+                  } catch (updateErr) {
+                    console.warn('[NFT] Failed to update saved NFT with resolved assetId:', updateErr.message);
+                  }
+                  // Refresh album again with real ID
+                  checkForNewNFTsOnce();
+                  break;
+                }
+              }
+            }
+          } catch (dasErr) {
+            console.warn('[NFT] DAS assetId resolution failed:', dasErr.message);
+          }
+        }
+
+        // Step 4: Generate Certificate of Authenticity for Limited Edition
+        if (data.edition === 'limited') {
+          try {
+            const pendingProof = window._pendingMintProofData || null;
+            window._pendingMintProofData = null;
+            console.log('[NFT] Certificate: pendingProof tsaToken?', !!pendingProof?.tsaToken, 'c2pa?', !!pendingProof?.c2paManifest, 'mintTimestamp?', pendingProof?.mintTimestamp);
+            await ipcRenderer.invoke('generate-certificate', {
+              mintAddress: resolvedMintAddress,
+              txSignature: data.mintTx || data.paymentTx || null,
+              ownerAddress: data.wallet || nftWalletAddress,
+              name: data.name || 'Photo NFT',
+              edition: 'limited',
+              license: data.license || 'arr',
+              watermarked: data.watermark === 'true',
+              encrypted: data.encrypt === 'true',
+              storageType: data.storageOption || 'ipfs',
+              imageUrl: data.imageUrl || null,
+              metadataUrl: data.metadataUrl || null,
+              contentHash: data.contentHash || null,
+              exifHash: data.exifHash || null,
+              createdAt: new Date().toISOString(),
+              tsaToken: pendingProof?.tsaToken || null,
+              tsaUrl: pendingProof?.tsaUrl || null,
+              tsaPolicy: pendingProof?.tsaPolicy || null,
+              c2paManifest: pendingProof?.c2paManifest || null,
+              mintTimestamp: pendingProof?.mintTimestamp || null,
+            });
+            console.log('[NFT] Certificate of Authenticity generated');
+          } catch (certErr) {
+            console.warn('[NFT] Certificate generation failed:', certErr.message);
+          }
+        }
+      })();
     }
     
     // Start polling when minting starts
@@ -6016,6 +6041,32 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
   }
 });
 
+// Push local NFTs to server so encryptionData/thumbnailUrl reach other devices
+async function pushLocalNFTsToServer(serverUrl, headers) {
+  try {
+    const axios = require('axios');
+    const localNFTs = await nftDesktop.getStoredNFTs();
+    if (!localNFTs || localNFTs.length === 0) return;
+    // Only push NFTs that have encryptionData or thumbnailUrl (the critical fields)
+    const toSync = localNFTs.filter(n => n.mintAddress && (n.encryptionData || n.thumbnailUrl)).map(n => {
+      const copy = { ...n };
+      delete copy.exifData;
+      delete copy.metadata;
+      if (copy.imageUrl && copy.imageUrl.startsWith('data:') && copy.imageUrl.length > 5000) delete copy.imageUrl;
+      return copy;
+    });
+    if (toSync.length === 0) return;
+    const BATCH = 5;
+    for (let i = 0; i < toSync.length; i += BATCH) {
+      const batch = toSync.slice(i, i + BATCH);
+      await axios.post(`${serverUrl}/api/nft/sync`, { action: 'backup', nfts: batch }, { headers, timeout: 15000 });
+    }
+    safeConsole('log', '[NFT Sync] Pushed', toSync.length, 'NFTs with encryption data to server');
+  } catch (e) {
+    safeConsole('log', '[NFT Sync] Push failed:', e.message);
+  }
+}
+
 ipcMain.handle('sync-nfts-from-server', async () => {
   const credentials = store.get('backupCredentials') || {};
   if (!credentials.baseUrl || !credentials.email || !credentials.password) {
@@ -6034,14 +6085,19 @@ ipcMain.handle('sync-nfts-from-server', async () => {
       const authHeader = `Bearer ${loginResp.data.token}`;
       const headers = { Authorization: authHeader };
       if (credentials.deviceUuid) headers['X-Device-UUID'] = credentials.deviceUuid;
-      return await nftDesktop.syncNFTsFromServer(credentials.baseUrl, headers);
+      const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, headers);
+      // Push local NFTs back to server (ensures encryptionData etc. reach other devices)
+      pushLocalNFTsToServer(credentials.baseUrl, headers).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
+      return result;
     }
   } catch (loginErr) {
     console.log('[NFT Sync] Re-auth failed:', loginErr.message);
   }
   // Fallback: try with existing token
   const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
-  return await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: authHeader });
+  const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: authHeader });
+  pushLocalNFTsToServer(credentials.baseUrl, { Authorization: authHeader }).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
+  return result;
 });
 
 // Native clipboard write (works in data:text/html pages where navigator.clipboard is blocked)
