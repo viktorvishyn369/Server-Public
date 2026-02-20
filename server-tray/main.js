@@ -3250,7 +3250,35 @@ function showMainWindow() {
           console.warn('[NFT] Post-mint save failed:', saveErr.message);
         }
 
-        // Step 2: Refresh album immediately so NFT appears in grid
+        // Step 2: Directly append minted NFT to in-memory grid so it appears instantly
+        // (DAS cache is stale — won't include the new NFT for up to 2 minutes)
+        if (tempMintAddress) {
+          const mintedNFT = {
+            mintAddress: tempMintAddress,
+            assetId: isCNFT ? (initialId || null) : null,
+            ownerAddress: data.wallet || nftWalletAddress,
+            name: data.name || 'Photo NFT',
+            imageUrl: data.imageUrl || null,
+            image: data.imageUrl || null,
+            metadataUrl: data.metadataUrl || null,
+            txSignature: data.mintTx || data.paymentTx || null,
+            storageType: data.storageOption || 'ipfs',
+            isCompressed: isCNFT,
+            nftType: data.nftType || 'compressed',
+            edition: data.edition || 'open',
+            license: data.license || 'arr',
+            watermarked: data.watermark === 'true',
+            encrypted: data.encrypt === 'true',
+            encryptionData: pendingEncData,
+            thumbnailUrl: window._pendingMintThumbnailUrl || null,
+            createdAt: new Date().toISOString(),
+          };
+          appendNewNFTs([mintedNFT]);
+          renderNFTPage();
+        }
+        // Invalidate DAS cache so next refresh picks up the real cnft_ entry
+        _fetchNFTsCache = null;
+        _fetchNFTsCacheTs = 0;
         checkForNewNFTsOnce();
         startNFTAutoRefresh();
 
