@@ -2975,32 +2975,35 @@ function showMainWindow() {
           if (data.success && data.address) {
             clearInterval(walletPollInterval);
             walletPollInterval = null;
+            const walletChanged = nftWalletAddress && nftWalletAddress !== data.address;
             nftWalletAddress = data.address;
             walletHandledByPoll = true;
             if (hint) hint.style.display = 'none';
             updateMintWalletUI();
             // Notify main process so connectedWalletAddress stays in sync
-            // and album window (if open) also gets the broadcast
             ipcRenderer.send('wallet-connected-from-browser', data.address);
-            // Always purge on explicit wallet connect (user clicked Connect Wallet).
-            // Persisted NFTs may belong to a different wallet from a previous session.
-            allNFTs = [];
-            cachedCerts = [];
-            nftPageIndex = 0;
-            stopNFTAutoRefresh();
-            try { await ipcRenderer.invoke('purge-nft-storage'); } catch (_) {}
-            try { await ipcRenderer.invoke('clear-nft-cache'); } catch (_) {}
-            loadNFTAlbum();
-            // Immediately clear certs UI so old wallet's certs don't flash
-            const certsOv = document.getElementById('certs-overlay');
-            const certsList = document.getElementById('certs-list');
-            const certsLoading = document.getElementById('certs-loading');
-            const certsEmpty = document.getElementById('certs-empty');
-            if (certsList) certsList.innerHTML = '';
-            if (certsLoading) certsLoading.style.display = 'block';
-            if (certsEmpty) certsEmpty.style.display = 'none';
-            if (certsOv && certsOv.classList.contains('active')) {
-              loadCertificates();
+            // Only purge + clear cache when wallet actually changed
+            if (walletChanged) {
+              allNFTs = [];
+              cachedCerts = [];
+              nftPageIndex = 0;
+              stopNFTAutoRefresh();
+              try { await ipcRenderer.invoke('purge-nft-storage'); } catch (_) {}
+              try { await ipcRenderer.invoke('clear-nft-cache'); } catch (_) {}
+            }
+            if (walletChanged) loadNFTAlbum();
+            // Only clear certs UI when wallet actually changed
+            if (walletChanged) {
+              const certsOv = document.getElementById('certs-overlay');
+              const certsList = document.getElementById('certs-list');
+              const certsLoading = document.getElementById('certs-loading');
+              const certsEmpty = document.getElementById('certs-empty');
+              if (certsList) certsList.innerHTML = '';
+              if (certsLoading) certsLoading.style.display = 'block';
+              if (certsEmpty) certsEmpty.style.display = 'none';
+              if (certsOv && certsOv.classList.contains('active')) {
+                loadCertificates();
+              }
             }
             if (data.bringToFront) {
               ipcRenderer.send('bring-to-front');
@@ -3178,7 +3181,8 @@ function showMainWindow() {
       popup.style.cssText = 'background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border:1px solid #14F195;border-radius:20px;padding:24px;max-width:400px;width:100%;text-align:center;box-shadow:0 0 60px rgba(20,241,149,0.3);';
       
       const solAmount = data.amount ? data.amount.toFixed(6) : '0';
-      const usdAmount = data.amount ? (data.amount * 200).toFixed(2) : '0'; // Approximate USD
+      const _solPrice = (lastNftEstimate && lastNftEstimate.solPrice) ? Number(lastNftEstimate.solPrice) : 200;
+      const usdAmount = data.amount ? (data.amount * _solPrice).toFixed(2) : '0';
       
       var nftTypeLabel = data.nftType === 'compressed' ? 'Compressed NFT (cNFT)' : 'Standard NFT';
       var imageHtml = data.imageUrl ? '<img src="' + data.imageUrl + '" onerror="this.style.display=\\\'none\\\'" style="width:120px;height:120px;border-radius:12px;object-fit:cover;margin-bottom:20px;border:2px solid #9945FF;">' : '';
