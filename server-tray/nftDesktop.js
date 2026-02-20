@@ -3209,12 +3209,19 @@ async function removeNFTFromStorage(mintAddress, serverUrl = null, authHeaders =
 async function bulkSaveNFTs(nfts) {
   if (!nftStorageFile || !Array.isArray(nfts) || nfts.length === 0) return;
   try {
-    // Dedup by mintAddress, strip base64 to keep file small
-    const seen = new Set();
+    // Dedup by mintAddress AND metadataUrl, strip base64 to keep file small
+    const seenIds = new Set();
+    const seenMeta = new Set();
     const clean = nfts.filter(n => {
       const id = n && (n.mintAddress || n.assetId);
-      if (!id || seen.has(id)) return false;
-      seen.add(id);
+      if (!id || seenIds.has(id)) return false;
+      // Also dedup by metadataUrl to prevent tx_ + cnft_ duplicates
+      if (n.metadataUrl && seenMeta.has(n.metadataUrl)) {
+        // Skip temp tx_ entries if a real entry already exists for same metadataUrl
+        if (id.startsWith('tx_')) return false;
+      }
+      seenIds.add(id);
+      if (n.metadataUrl) seenMeta.add(n.metadataUrl);
       return true;
     }).map(n => {
       const copy = { ...n };

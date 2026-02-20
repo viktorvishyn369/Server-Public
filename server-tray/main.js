@@ -3298,6 +3298,13 @@ function showMainWindow() {
                   } catch (updateErr) {
                     console.warn('[NFT] Failed to update saved NFT with resolved assetId:', updateErr.message);
                   }
+                  // Remove old temp tx_ entry to prevent duplicates
+                  if (tempMintAddress && tempMintAddress !== resolvedMintAddress) {
+                    try {
+                      await ipcRenderer.invoke('remove-stored-nft', tempMintAddress);
+                      console.log('[NFT] Removed old temp entry:', tempMintAddress);
+                    } catch (_) {}
+                  }
                   // Refresh album again with real ID
                   checkForNewNFTsOnce();
                   break;
