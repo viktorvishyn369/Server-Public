@@ -1735,7 +1735,7 @@ function showMainWindow() {
           <div id="nft-empty" class="nft-empty" style="display: none;">
             <span>No NFTs yet. Mint your first memory!</span>
           </div>
-          <div id="nft-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;padding-bottom:20px;flex-shrink:0;"></div>
+          <div id="nft-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-shrink:0;"></div>
         </div>
       </div>
       
@@ -1747,7 +1747,10 @@ function showMainWindow() {
           <button class="nft-refresh-btn" onclick="loadCertificates()">↻</button>
         </div>
         <div class="nft-album-content" style="overflow-y:auto;">
-          <div id="certs-loading" style="display:none;text-align:center;padding:40px;color:#888;">Loading...</div>
+          <div id="certs-loading" style="display:none;text-align:center;padding:40px;color:#f59e0b;">
+            <div style="width:28px;height:28px;border:3px solid rgba(245,158,11,0.15);border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px;"></div>
+            <span style="font-size:12px;color:#b8860b;">Loading certificates...</span>
+          </div>
           <div id="certs-empty" style="display:none;text-align:center;padding:40px;color:#888;">
             <div style="font-size:32px;margin-bottom:8px;">🏆</div>
             <div style="font-weight:600;color:#fff;margin-bottom:4px;">No Certificates Yet</div>
@@ -2680,11 +2683,20 @@ function showMainWindow() {
     // NFT State
     let nftWalletAddress = null;
     // Deduplicates concurrent fetch-user-nfts calls — all callers share one in-flight DAS request
+    // TTL cache: reuse last successful result for 2 minutes to avoid DAS spam on auto-refresh
     let _fetchNFTsInFlight = null;
-    async function fetchUserNFTsCached(limit = 1000) {
+    let _fetchNFTsCache = null;
+    let _fetchNFTsCacheTs = 0;
+    const _FETCH_NFTS_TTL_MS = 120000; // 2 minutes
+    async function fetchUserNFTsCached(limit = 1000, forceRefresh = false) {
       if (!nftWalletAddress) return { success: false, nfts: [] };
+      // Return cached result if still fresh
+      if (!forceRefresh && _fetchNFTsCache && (Date.now() - _fetchNFTsCacheTs) < _FETCH_NFTS_TTL_MS) {
+        return _fetchNFTsCache;
+      }
       if (_fetchNFTsInFlight) return _fetchNFTsInFlight;
       _fetchNFTsInFlight = ipcRenderer.invoke('fetch-user-nfts', nftWalletAddress, limit)
+        .then(result => { _fetchNFTsCache = result; _fetchNFTsCacheTs = Date.now(); return result; })
         .finally(() => { _fetchNFTsInFlight = null; });
       return _fetchNFTsInFlight;
     }
@@ -3271,8 +3283,10 @@ function showMainWindow() {
       const usdAmount = data.amount ? (data.amount * 200).toFixed(2) : '0'; // Approximate USD
       
       var nftTypeLabel = data.nftType === 'compressed' ? 'Compressed NFT (cNFT)' : 'Standard NFT';
-      var imageHtml = data.imageUrl ? '<img src="' + data.imageUrl + '" style="width:120px;height:120px;border-radius:12px;object-fit:cover;margin-bottom:20px;border:2px solid #9945FF;">' : '';
+      var imageHtml = data.imageUrl ? '<img src="' + data.imageUrl + '" onerror="this.style.display=\\\'none\\\'" style="width:120px;height:120px;border-radius:12px;object-fit:cover;margin-bottom:20px;border:2px solid #9945FF;">' : '';
       var mintAddressHtml = data.mintAddress ? '<div style="display:flex;justify-content:space-between;margin-top:8px;"><span style="color:#888;font-size:12px;">Mint Address</span><span style="color:#fff;font-size:10px;font-family:monospace;">' + data.mintAddress.slice(0,8) + '...' + data.mintAddress.slice(-4) + '</span></div>' : '';
+      var isRealPaymentTx = data.paymentTx && !data.paymentTx.startsWith('fee_wallet');
+      var paymentTxHtml = isRealPaymentTx ? '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#888;font-size:12px;">Payment TX</span><a href="https://solscan.io/tx/' + data.paymentTx + '" target="_blank" style="color:#9945FF;font-size:12px;text-decoration:none;">' + data.paymentTx.slice(0,8) + '...' + data.paymentTx.slice(-4) + ' ↗</a></div>' : '';
       
       popup.innerHTML = '<div style="font-size:64px;margin-bottom:16px;">🎉</div>' +
         '<h2 style="color:#14F195;font-size:24px;margin-bottom:8px;">NFT Minted!</h2>' +
@@ -3283,10 +3297,7 @@ function showMainWindow() {
             '<span style="color:#888;font-size:12px;">Total Spent</span>' +
             '<span style="color:#14F195;font-size:14px;font-weight:600;">' + solAmount + ' SOL (~$' + usdAmount + ')</span>' +
           '</div>' +
-          '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">' +
-            '<span style="color:#888;font-size:12px;">Payment TX</span>' +
-            '<a href="https://solscan.io/tx/' + data.paymentTx + '" target="_blank" style="color:#9945FF;font-size:12px;text-decoration:none;">' + data.paymentTx.slice(0,8) + '...' + data.paymentTx.slice(-4) + ' ↗</a>' +
-          '</div>' +
+          paymentTxHtml +
           '<div style="display:flex;justify-content:space-between;">' +
             '<span style="color:#888;font-size:12px;">Mint TX</span>' +
             '<a href="https://solscan.io/tx/' + data.mintTx + '" target="_blank" style="color:#9945FF;font-size:12px;text-decoration:none;">' + data.mintTx.slice(0,8) + '...' + data.mintTx.slice(-4) + ' ↗</a>' +
@@ -3887,16 +3898,34 @@ function showMainWindow() {
 
     function appendNewNFTs(fetchedNFTs) {
       if (!Array.isArray(fetchedNFTs) || fetchedNFTs.length === 0) return 0;
-      const existingIds = new Set(
-        allNFTs
-          .map(n => n && normalizeNFTId(n.mintAddress || n.assetId))
-          .filter(Boolean)
-      );
+      const existingMap = {};
+      allNFTs.forEach((n, i) => {
+        const id = n && normalizeNFTId(n.mintAddress || n.assetId);
+        if (id) existingMap[id] = i;
+      });
       let added = 0;
       for (const nft of fetchedNFTs) {
         const id = nft && normalizeNFTId(nft.mintAddress || nft.assetId);
-        if (!id || existingIds.has(id)) continue;
-        existingIds.add(id);
+        if (!id) continue;
+        if (id in existingMap) {
+          // Update existing entry with any newly available fields (encryptionData, thumbnailUrl, etc.)
+          const existing = allNFTs[existingMap[id]];
+          if (nft.encryptionData && !existing.encryptionData) existing.encryptionData = nft.encryptionData;
+          if (nft.thumbnailUrl && !existing.thumbnailUrl) existing.thumbnailUrl = nft.thumbnailUrl;
+          if (nft.edition && !existing.edition) existing.edition = nft.edition;
+          if (nft.encrypted && !existing.encrypted) existing.encrypted = nft.encrypted;
+          if (nft.watermarked && !existing.watermarked) existing.watermarked = nft.watermarked;
+          if (nft.license && !existing.license) existing.license = nft.license;
+          if (nft.storageType && !existing.storageType) existing.storageType = nft.storageType;
+          if (nft.encrypted && nft.imageUrl && !existing.encryptionData?.wrappedKey) {
+            // Don't overwrite imageUrl if existing already has encryption keys
+          } else if (nft.encrypted && nft.imageUrl) {
+            existing.imageUrl = nft.imageUrl;
+            if (!existing.cachedPath) existing.image = nft.imageUrl;
+          }
+          continue;
+        }
+        existingMap[id] = allNFTs.length;
         allNFTs.push(nft);
         added++;
       }
@@ -3908,6 +3937,38 @@ function showMainWindow() {
       try {
         const result = await fetchUserNFTsCached();
         if (result && result.success && result.nfts) {
+          // Merge local storage data into DAS results before appending
+          // (DAS doesn't have encryptionData, thumbnailUrl, original imageUrl for encrypted NFTs)
+          try {
+            const localStoredNFTs = await ipcRenderer.invoke('get-stored-nfts') || [];
+            if (localStoredNFTs.length > 0) {
+              const storedMap = {};
+              const storedByMeta = {};
+              localStoredNFTs.forEach(s => {
+                if (s.mintAddress) storedMap[normalizeNFTId(s.mintAddress)] = s;
+                if (s.metadataUrl) storedByMeta[s.metadataUrl] = s;
+              });
+              result.nfts.forEach(nft => {
+                const nid = normalizeNFTId(nft.mintAddress);
+                const stored = storedMap[nid] || (nft.metadataUrl && storedByMeta[nft.metadataUrl]) || null;
+                if (stored) {
+                  if (stored.encryptionData) nft.encryptionData = stored.encryptionData;
+                  if (stored.thumbnailUrl) nft.thumbnailUrl = stored.thumbnailUrl;
+                  if (stored.edition && !nft.edition) nft.edition = stored.edition;
+                  if (stored.encrypted && !nft.encrypted) nft.encrypted = stored.encrypted;
+                  if (stored.watermarked && !nft.watermarked) nft.watermarked = stored.watermarked;
+                  if (stored.license && !nft.license) nft.license = stored.license;
+                  if (stored.storageType && !nft.storageType) nft.storageType = stored.storageType;
+                  if (stored.encrypted && stored.imageUrl) {
+                    nft.imageUrl = stored.imageUrl;
+                    if (!nft.cachedPath) nft.image = stored.imageUrl;
+                  }
+                }
+              });
+            }
+          } catch (_mergeErr) {
+            console.log('[NFT Album] Auto-refresh merge skipped:', _mergeErr.message);
+          }
           const oldCount = allNFTs.length;
           const added = appendNewNFTs(result.nfts);
           if (added > 0) {
@@ -3982,16 +4043,14 @@ function showMainWindow() {
           empty.style.display = 'none';
         }
 
-        // Fetch ALL NFTs (limit 1000) and merge with local storage for encryptionData
-        const result = await fetchUserNFTsCached();
+        // Fetch DAS NFTs + sync from server in parallel (not sequential)
+        const [result] = await Promise.all([
+          fetchUserNFTsCached(),
+          ipcRenderer.invoke('sync-nfts-from-server').catch(syncErr => {
+            console.log('[NFT Album] Server sync skipped:', syncErr.message);
+          }),
+        ]);
         loading.style.display = 'none';
-        
-        // Sync NFTs from server first (gets encryptionData for NFTs minted on mobile)
-        try {
-          await ipcRenderer.invoke('sync-nfts-from-server');
-        } catch (syncErr) {
-          console.log('[NFT Album] Server sync skipped:', syncErr.message);
-        }
         
         // Merge local storage data (has encryptionData, edition, etc. from minting)
         // Also APPEND any server/local NFTs that DAS didn't return (mobile may have discovered them via RPC)
@@ -3999,21 +4058,33 @@ function showMainWindow() {
           const localStoredNFTs = await ipcRenderer.invoke('get-stored-nfts') || [];
           if (localStoredNFTs.length > 0 && result && result.nfts) {
             const storedMap = {};
-            localStoredNFTs.forEach(s => { if (s.mintAddress) storedMap[normalizeNFTId(s.mintAddress)] = s; });
+            const storedByMeta = {};
+            localStoredNFTs.forEach(s => {
+              if (s.mintAddress) storedMap[normalizeNFTId(s.mintAddress)] = s;
+              if (s.metadataUrl) storedByMeta[s.metadataUrl] = s;
+            });
             const dasIdSet = new Set();
             result.nfts.forEach(nft => {
               const nid = normalizeNFTId(nft.mintAddress);
               dasIdSet.add(nid);
-              const stored = storedMap[nid];
+              // Match by mintAddress first, then by metadataUrl (cNFT assetId may differ from stored tx-based id)
+              const stored = storedMap[nid] || (nft.metadataUrl && storedByMeta[nft.metadataUrl]) || null;
               if (stored) {
                 // Merge local fields that DAS doesn't have
                 if (stored.encryptionData) nft.encryptionData = stored.encryptionData;
-                if (stored.thumbnailUrl && !nft.thumbnailUrl) nft.thumbnailUrl = stored.thumbnailUrl;
+                if (stored.thumbnailUrl) nft.thumbnailUrl = stored.thumbnailUrl;
                 if (stored.edition && !nft.edition) nft.edition = stored.edition;
-                if (stored.encrypted && !nft.encrypted && stored.encryptionData) nft.encrypted = stored.encrypted;
+                if (stored.encrypted && !nft.encrypted) nft.encrypted = stored.encrypted;
                 if (stored.watermarked && !nft.watermarked) nft.watermarked = stored.watermarked;
                 if (stored.license && !nft.license) nft.license = stored.license;
                 if (stored.storageType && !nft.storageType) nft.storageType = stored.storageType;
+                // For encrypted NFTs: DAS imageUrl is a proxied URL that can't be decrypted.
+                // Use the original upload URL from local storage (Pinata/StealthCloud) instead.
+                if (stored.encrypted && stored.imageUrl) {
+                  nft.imageUrl = stored.imageUrl;
+                  // Also update nft.image so grid uses the correct URL for decrypt
+                  if (!nft.cachedPath) nft.image = stored.imageUrl;
+                }
               }
             });
             // Append NFTs from server/local that DAS missed
@@ -4031,6 +4102,11 @@ function showMainWindow() {
           console.log('[NFT Album] Local merge skipped:', mergeErr.message);
         }
         
+        // Persist full merged NFT list so album loads instantly next time
+        if (result && result.nfts && result.nfts.length > 0) {
+          try { await ipcRenderer.invoke('bulk-save-nfts', result.nfts); } catch (_) {}
+        }
+
         if (result && result.success && result.nfts && result.nfts.length > 0) {
           if (allNFTs.length === 0) {
             allNFTs = result.nfts;
@@ -4160,7 +4236,12 @@ function showMainWindow() {
       imageContainer.style.background = '';
 
       if (nft.encrypted && nft.encryptionData) {
-        // Has real encryption keys — decrypt
+        // Has real encryption keys — decrypt (check cache first)
+        const detailCacheKey = nft.thumbnailUrl || nft.imageUrl || nft.image || nft.mintAddress;
+        if (detailCacheKey && _decryptCache[detailCacheKey]) {
+          imgEl.src = _decryptCache[detailCacheKey];
+          imgEl.style.opacity = '1';
+        } else {
         imgEl.src = '';
         imgEl.style.opacity = '0.3';
         imgEl.alt = '🔒 Decrypting...';
@@ -4173,6 +4254,8 @@ function showMainWindow() {
               imgEl.src = result.dataUrl;
               imgEl.style.opacity = '1';
               if (statusEl) statusEl.remove();
+              // Cache the result
+              if (detailCacheKey) _decryptCache[detailCacheKey] = result.dataUrl;
             } else {
               const errMsg = result?.error || 'Decryption failed';
               const friendly = errMsg.includes('403') || errMsg.includes('429') ? '🔒 Image temporarily unavailable — try again later'
@@ -4185,6 +4268,7 @@ function showMainWindow() {
             if (statusEl) statusEl.textContent = '🔒 Decryption error — try again later';
           }
         })();
+        }
       } else {
         imgEl.src = imageUrl;
         imgEl.style.opacity = '1';
@@ -4842,6 +4926,9 @@ function showMainWindow() {
     }
     window.showTransferCancelledModal = showTransferCancelledModal;
     
+    // Decrypt result cache: maps imageUrl → base64 dataUrl (survives page navigation)
+    const _decryptCache = {};
+    
     // Decrypt queue: serialize encrypted NFT image decryption to avoid 429 rate limits
     const _decryptQueue = [];
     let _decryptRunning = false;
@@ -4855,7 +4942,7 @@ function showMainWindow() {
         const task = _decryptQueue.shift();
         try { await task(); } catch (_) {}
         // Small delay between decrypts to avoid rate limits
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 500));
       }
       _decryptRunning = false;
     }
@@ -4970,8 +5057,24 @@ function showMainWindow() {
 
           if (hasEncKeys) {
             // Use decrypt queue to serialize — prevents 429 rate limits from concurrent downloads
+            const cacheKey = nft.thumbnailUrl || originalUrl || nft.mintAddress;
+            // Check decrypt cache first
+            if (cacheKey && _decryptCache[cacheKey]) {
+              img.src = _decryptCache[cacheKey];
+              img.style.opacity = '1';
+              img.dataset.loaded = '1';
+              if (spinner) spinner.style.display = 'none';
+            } else {
             enqueueDecrypt(async () => {
               try {
+                // Re-check cache (may have been populated while queued)
+                if (cacheKey && _decryptCache[cacheKey]) {
+                  img.src = _decryptCache[cacheKey];
+                  img.style.opacity = '1';
+                  img.dataset.loaded = '1';
+                  if (spinner) spinner.style.display = 'none';
+                  return;
+                }
                 const decryptUrl = (typeof originalUrl === 'string' && originalUrl.startsWith('http')) ? originalUrl : '';
                 const hasThumb = !!(nft.thumbnailUrl && nft.encryptionData?.thumbnailNonce);
                 if (!decryptUrl && !hasThumb) {
@@ -4986,6 +5089,8 @@ function showMainWindow() {
                   img.style.opacity = '1';
                   img.dataset.loaded = '1';
                   if (spinner) spinner.style.display = 'none';
+                  // Cache the result
+                  if (cacheKey) _decryptCache[cacheKey] = result.dataUrl;
                 } else {
                   // Decryption failed — show error message instead of falling back to encrypted .bin URL
                   img.style.opacity = '0.3';
@@ -4998,6 +5103,7 @@ function showMainWindow() {
                 console.log('[NFT Album] Decrypt error for', nftName, ':', e.message);
               }
             });
+            }
           }
         }
       });
@@ -5722,6 +5828,10 @@ ipcMain.handle('get-stored-nfts', async () => {
   return await nftDesktop.getStoredNFTs();
 });
 
+ipcMain.handle('bulk-save-nfts', async (event, nfts) => {
+  await nftDesktop.bulkSaveNFTs(nfts);
+});
+
 ipcMain.handle('remove-stored-nft', async (event, mintAddress) => {
   try {
     const credentials = store.get('backupCredentials') || {};
@@ -5815,20 +5925,31 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     const downloadHeaders = {};
     const isCloud = downloadUrl.includes('stealthlynk.io') || downloadUrl.includes('nft.stealthlynk.io') || downloadUrl.includes('localhost');
     if (isCloud) {
-      // Re-authenticate to get a fresh token
-      try {
-        if (credentials.baseUrl) {
-          const loginResp = await axios.post(`${credentials.baseUrl}/api/login`, {
-            email: credentials.email,
-            password: credentials.password,
-            device_uuid: credentials.deviceUuid || '',
-          }, { timeout: 10000 });
-          if (loginResp.data && loginResp.data.token) {
-            downloadHeaders['Authorization'] = `Bearer ${loginResp.data.token}`;
+      // Re-use cached token if still fresh (5 min TTL) to avoid 429 on /api/login
+      const now = Date.now();
+      if (global._scDecryptToken && global._scDecryptTokenTs && (now - global._scDecryptTokenTs) < 300000) {
+        downloadHeaders['Authorization'] = `Bearer ${global._scDecryptToken}`;
+      } else {
+        try {
+          if (credentials.baseUrl) {
+            const loginResp = await axios.post(`${credentials.baseUrl}/api/login`, {
+              email: credentials.email,
+              password: credentials.password,
+              device_uuid: credentials.deviceUuid || '',
+            }, { timeout: 10000 });
+            if (loginResp.data && loginResp.data.token) {
+              global._scDecryptToken = loginResp.data.token;
+              global._scDecryptTokenTs = Date.now();
+              downloadHeaders['Authorization'] = `Bearer ${loginResp.data.token}`;
+            }
+          }
+        } catch (authErr) {
+          safeConsole('log', '[NFT] Decrypt auth failed:', authErr.message);
+          // Use stale token as fallback if available
+          if (global._scDecryptToken) {
+            downloadHeaders['Authorization'] = `Bearer ${global._scDecryptToken}`;
           }
         }
-      } catch (authErr) {
-        safeConsole('log', '[NFT] Decrypt auth failed:', authErr.message);
       }
     }
 
@@ -5855,7 +5976,12 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
       } catch (dlErr) {
         const status = dlErr.response?.status;
         safeConsole('log', '[NFT] Decrypt download failed:', status || dlErr.message, tryUrl.slice(0, 60));
-        if (status !== 403 && status !== 429) break; // Only retry on 403/429
+        // Invalidate cached token on 401/403/429 so next attempt re-authenticates
+        if (isCloud && (status === 401 || status === 403 || status === 429)) {
+          global._scDecryptToken = null;
+          global._scDecryptTokenTs = 0;
+        }
+        if (status !== 403 && status !== 429) break; // Only retry on 403/429 (IPFS gateways)
       }
     }
     if (!downloaded) {

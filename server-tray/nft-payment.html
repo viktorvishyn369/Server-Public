@@ -194,27 +194,7 @@
           showStatus('Confirming...', 'info');
 
           await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-
-          // Verify payment on server before showing success
-          showStatus('Verifying payment...', 'info');
-          try {
-            const verifyRes = await fetch('/api/nft/verify-mint-payment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ txSignature: signature, expectedAmount: amount })
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyData.success) {
-              throw new Error('Payment verification failed: ' + (verifyData.error || 'Unknown error'));
-            }
-            console.log('[NFT Payment] Server verified payment:', verifyData.receivedAmount, 'SOL');
-          } catch (verifyErr) {
-            console.error('[NFT Payment] Verification error:', verifyErr.message);
-            if (verifyErr.message.includes('Payment verification failed') || verifyErr.message.includes('wrong wallet') || verifyErr.message.includes('Insufficient')) {
-              throw new Error(verifyErr.message);
-            }
-            console.warn('[NFT Payment] Verification skipped (server unreachable), proceeding');
-          }
+          console.log('[NFT Payment] Transaction confirmed on-chain:', signature);
         }
 
         document.getElementById('main-container').style.display = 'none';

@@ -1996,7 +1996,9 @@ async function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
  * Same implementation as mobile app's fetchCompressedNFTs
  */
 async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
-  const PAGE_SIZE = 50; // Small pages to avoid "Response is too big" (matches mobile)
+  let pageSize = 20; // Start small — auto-halves on "Response is too big"
+  const MIN_PAGE_SIZE = 5;
+  const MAX_PAGES = 50; // Desktop has no OOM concerns, fetch everything
 
   const buildDasUrls = () => {
     const urls = [];
@@ -2008,12 +2010,12 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
     return urls;
   };
 
-  const requestPage = (endpoint, page) => new Promise((resolve) => {
+  const requestPage = (endpoint, page, pgSize) => new Promise((resolve) => {
     const body = JSON.stringify({
       jsonrpc: '2.0',
       id: 'photolynk-desktop-nft-fetch',
       method: 'getAssetsByOwner',
-      params: { ownerAddress: walletAddress, page, limit: PAGE_SIZE },
+      params: { ownerAddress: walletAddress, page, limit: pgSize },
     });
     const u = new URL(endpoint.url);
     const isHttps = u.protocol === 'https:';
@@ -2037,7 +2039,7 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       res.on('end', () => {
         if (res.statusCode && res.statusCode >= 400) {
           console.error(`[DAS] ${endpoint.name} HTTP ${res.statusCode}: ${String(data).slice(0, 200)}`);
-          resolve({ ok: false, items: [] });
+          resolve({ ok: false, items: [], errorCode: res.statusCode });
           return;
         }
         let json;
@@ -2047,8 +2049,7 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
           return;
         }
         if (json?.error) {
-          console.error(`[DAS] ${endpoint.name} API error: ${JSON.stringify(json.error)}`);
-          resolve({ ok: false, items: [] });
+          resolve({ ok: false, items: [], errorCode: json.error.code, errorMsg: json.error.message });
           return;
         }
         const items = json?.result?.items;
@@ -2075,33 +2076,43 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
     req.end();
   });
 
-  // Find a working endpoint and paginate to get all assets
+  // Find a working endpoint and paginate with auto-halve on "Response is too big"
   const endpoints = buildDasUrls();
   let items = [];
-  let workingEndpoint = null;
   for (const endpoint of endpoints) {
-    const result = await requestPage(endpoint, 1);
-    if (result.ok) {
-      workingEndpoint = endpoint;
-      items = result.items;
-      const total = result.total || 0;
-      console.log(`[DAS] Using ${endpoint.name}, page 1: ${items.length} items, total: ${total}`);
-      // Fetch additional pages if there are more assets
-      if (total > items.length && items.length >= PAGE_SIZE) {
-        const maxPages = Math.min(Math.ceil(total / PAGE_SIZE), 10); // Cap at 10 pages
-        for (let page = 2; page <= maxPages; page++) {
-          const pageResult = await requestPage(endpoint, page);
-          if (pageResult.ok && pageResult.items.length > 0) {
-            console.log(`[DAS] Page ${page}: ${pageResult.items.length} items`);
-            items.push(...pageResult.items);
-          } else {
-            break;
-          }
-          if (items.length >= limit) break;
+    let dasPage = 1;
+    let found = false;
+    while (dasPage <= MAX_PAGES) {
+      console.log(`[DAS] page ${dasPage} (limit=${pageSize})...`);
+      const result = await requestPage(endpoint, dasPage, pageSize);
+
+      if (!result.ok) {
+        // "Response is too big" (-32702) — halve page size and retry same page
+        if (result.errorCode === -32702 && pageSize > MIN_PAGE_SIZE) {
+          pageSize = Math.max(MIN_PAGE_SIZE, Math.floor(pageSize / 2));
+          console.log(`[DAS] Response too big, reducing page size to ${pageSize} and retrying`);
+          continue;
         }
+        // At minimum page size and still too big — skip this page (giant on-chain SVG)
+        if (result.errorCode === -32702 && pageSize <= MIN_PAGE_SIZE) {
+          console.log(`[DAS] Page ${dasPage} has oversized NFT (>20MB), skipping`);
+          dasPage++;
+          continue;
+        }
+        // Other error on first page — try next endpoint
+        if (!found) break;
+        // Other error on later page — stop pagination
+        break;
       }
-      break;
+
+      found = true;
+      if (result.items.length === 0) break;
+      console.log(`[DAS] Page ${dasPage}: ${result.items.length} items`);
+      items.push(...result.items);
+      if (result.items.length < pageSize) break; // Last page
+      dasPage++;
     }
+    if (found) break; // Got results from this endpoint
   }
 
   if (!items.length) {
@@ -2140,14 +2151,12 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       }
     }
 
-    // Fetch full metadata JSON from json_uri (for image + attributes)
-    // Skip for encrypted NFTs — metadata is encrypted binary, keys come from stored NFTs via merge
-    // Skip if we already have image + DAS inline attributes (avoids unnecessary IPFS traffic)
+    // Always fetch full metadata JSON from json_uri (matches mobile fetchCompressedNFTs).
+    // Encrypted metadata will fail JSON parse — that's a detection signal.
     let metadataJson = null;
     const dasAttrs = item.content?.metadata?.attributes || [];
-    const looksEncrypted = dasAttrs.some(a => a.trait_type === 'Encrypted' && a.value === 'true')
-      || (item.content?.files?.[0]?.mime === 'application/octet-stream');
-    if (metadataUrl && !looksEncrypted) {
+    let metadataFetchFailed = false;
+    if (metadataUrl) {
       if (!cachedImagePath && !imageUrl) {
         metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
         if (metadataJson) {
@@ -2159,23 +2168,31 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
             cachedImagePath = getCachedImagePath(cid);
             if (cachedImagePath) console.log('[NFT Cache] Using cached image for', cid.slice(0, 8));
           }
+        } else {
+          metadataFetchFailed = true;
         }
-      } else if (!imageUrl || dasAttrs.length === 0) {
-        // Only fetch metadata if we're missing image or attributes — skip if DAS already gave us both
+      } else if (!imageUrl) {
         metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
+        if (!metadataJson) metadataFetchFailed = true;
       }
     }
 
-    const attrs = (metadataJson && Array.isArray(metadataJson.attributes)) ? metadataJson.attributes : (item.content?.metadata?.attributes || []);
+    const attrs = (metadataJson && Array.isArray(metadataJson.attributes)) ? metadataJson.attributes : dasAttrs;
     const getAttr = (traitName) => {
       const a = attrs.find(at => at.trait_type === traitName);
       return a ? a.value : null;
     };
     const editionRaw = getAttr('Edition');
     const edition = editionRaw ? String(editionRaw).toLowerCase() : null;
+    // Extract encryption keys from metadata properties (matches mobile)
+    const encProps = (metadataJson && metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
     const encryptedFromAttr = getAttr('Encrypted') === 'true';
-    const encryptedFromProps = !!(metadataJson && metadataJson.properties && metadataJson.properties.encryption && metadataJson.properties.encryption.encrypted);
-    const encrypted = encryptedFromAttr || encryptedFromProps;
+    const encryptedFromFileType = (item.content?.files?.[0]?.mime === 'application/octet-stream') || (item.content?.files?.[0]?.type === 'application/octet-stream');
+    const encryptedFromProps = !!(encProps.encrypted);
+    const encryptedFromKeys = !!(encProps.wrappedKey && encProps.nonce && encProps.wrapNonce);
+    // Heuristic: metadata fetch returned non-JSON AND DAS has no inline attributes → encrypted
+    const encryptedFromHeuristic = metadataFetchFailed && dasAttrs.length === 0;
+    const encrypted = encryptedFromAttr || encryptedFromFileType || encryptedFromProps || encryptedFromKeys || encryptedFromHeuristic;
     const watermarked = getAttr('Watermarked') === 'true';
     const license = getAttr('License') || null;
 
@@ -2199,9 +2216,6 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       }
     }
     const storageType = (imageUrl && (imageUrl.includes('stealthlynk.io') || imageUrl.includes('stealthcloud'))) ? 'cloud' : (imageUrl && imageUrl.startsWith('data:')) ? 'onchain' : (imageUrl && (imageUrl.includes('akrd.net') || imageUrl.includes('arweave.net'))) ? 'arweave' : 'ipfs';
-    const encProps = (metadataJson && metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
-    const hasRealEncKeys = !!(encProps.wrappedKey && encProps.nonce && encProps.wrapNonce);
-
     return {
       mintAddress: isCompressed ? `cnft_${item.id}` : item.id,
       assetId: item.id,
@@ -2219,7 +2233,8 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       watermarked: watermarked,
       license: license,
       storageType: storageType,
-      encryptionData: (encrypted && hasRealEncKeys) ? encProps : null,
+      // Extract only needed keys (matches mobile); keys come from metadata props or local storage merge
+      encryptionData: encryptedFromKeys ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, nonce: encProps.nonce } : null,
       attributes: attrs,
       source: 'das',
     };
@@ -2228,12 +2243,12 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
   // Process items in parallel batches of 3 (avoid 429 rate limits on IPFS gateways)
   const itemsToProcess = items.slice(0, limit);
   const nfts = [];
-  for (let i = 0; i < itemsToProcess.length; i += 3) {
-    const batch = itemsToProcess.slice(i, i + 3);
+  for (let i = 0; i < itemsToProcess.length; i += 5) {
+    const batch = itemsToProcess.slice(i, i + 5);
     const results = await Promise.all(batch.map(processItem));
     nfts.push(...results);
-    if (i + 3 < itemsToProcess.length) {
-      await new Promise(r => setTimeout(r, 200));
+    if (i + 5 < itemsToProcess.length) {
+      await new Promise(r => setTimeout(r, 100));
     }
   }
 
@@ -2285,13 +2300,25 @@ function fetchWithRedirects(url, maxRedirects = 5) {
  * Fetch image URL from IPFS metadata JSON
  * Uses ipfs.io and pinata gateways with redirect following and 15s timeout
  */
+// Negative cache: metadata URLs that returned non-JSON (encrypted) — avoid re-fetching through 3+ gateways
+const _metadataNegativeCache = {};
+const _METADATA_NEG_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
 async function fetchFullMetadata(metadataUrl, isCompressed = false) {
   if (!metadataUrl) return null;
   
   const cid = extractIPFSCid(metadataUrl);
+  const cacheKey = cid || metadataUrl;
+  
+  // Check negative cache — skip network calls for known-encrypted metadata
+  if (_metadataNegativeCache[cacheKey] && (Date.now() - _metadataNegativeCache[cacheKey]) < _METADATA_NEG_CACHE_TTL) {
+    return null;
+  }
+  
   const gatewayList = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
   const gateways = cid ? gatewayList.map(g => g + cid) : [metadataUrl];
   
+  let sawNonJson = false;
   for (const gateway of gateways) {
     try {
       console.log('[NFT] Trying metadata gateway:', gateway.slice(0, 50));
@@ -2303,15 +2330,24 @@ async function fetchFullMetadata(metadataUrl, isCompressed = false) {
           if (json.image) {
             console.log('[NFT] Got image from metadata:', json.image.slice(0, 60));
           }
+          // Clear negative cache on success
+          delete _metadataNegativeCache[cacheKey];
           return json;
         } catch (e) {
           // Not valid JSON — likely encrypted metadata
           console.log('[NFT] Metadata at', gateway.slice(0, 50), 'is not JSON (likely encrypted)');
+          sawNonJson = true;
+          break; // No point trying other gateways — same CID will be non-JSON everywhere
         }
       }
     } catch (e) {
       console.log('[NFT] Gateway failed:', e.message);
     }
+  }
+  
+  // Cache negative result so we don't re-fetch encrypted metadata on next scan
+  if (sawNonJson) {
+    _metadataNegativeCache[cacheKey] = Date.now();
   }
   
   return null;
@@ -3170,6 +3206,30 @@ async function removeNFTFromStorage(mintAddress, serverUrl = null, authHeaders =
   }
 }
 
+async function bulkSaveNFTs(nfts) {
+  if (!nftStorageFile || !Array.isArray(nfts) || nfts.length === 0) return;
+  try {
+    // Dedup by mintAddress, strip base64 to keep file small
+    const seen = new Set();
+    const clean = nfts.filter(n => {
+      const id = n && (n.mintAddress || n.assetId);
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }).map(n => {
+      const copy = { ...n };
+      // Strip large base64 fields to prevent file bloat
+      if (copy.imageBase64) delete copy.imageBase64;
+      if (copy.thumbnailBase64) delete copy.thumbnailBase64;
+      return copy;
+    });
+    fs.writeFileSync(nftStorageFile, JSON.stringify(clean, null, 2));
+    console.log('[NFT Storage] Bulk saved', clean.length, 'NFTs');
+  } catch (e) {
+    console.error('[NFT Storage] Bulk save failed:', e.message);
+  }
+}
+
 async function getNFTByMintAddress(mintAddress) {
   const nfts = await getStoredNFTs();
   return nfts.find(nft => nft.mintAddress === mintAddress);
@@ -3202,7 +3262,7 @@ async function syncNFTsFromServer(serverUrl, authHeaders) {
           if (serverNFT.encryptionData && !local.encryptionData) { local.encryptionData = serverNFT.encryptionData; merged++; }
           if (serverNFT.thumbnailUrl && !local.thumbnailUrl) { local.thumbnailUrl = serverNFT.thumbnailUrl; merged++; }
           if (serverNFT.edition && !local.edition) { local.edition = serverNFT.edition; merged++; }
-          if (serverNFT.encrypted && !local.encrypted && serverNFT.encryptionData) { local.encrypted = serverNFT.encrypted; merged++; }
+          if (serverNFT.encrypted && !local.encrypted) { local.encrypted = serverNFT.encrypted; merged++; }
           if (serverNFT.watermarked && !local.watermarked) { local.watermarked = serverNFT.watermarked; merged++; }
           if (serverNFT.license && !local.license) { local.license = serverNFT.license; merged++; }
           if (serverNFT.storageType && !local.storageType) { local.storageType = serverNFT.storageType; merged++; }
@@ -3965,6 +4025,7 @@ module.exports = {
   getStoredNFTs,
   saveNFTToStorage,
   removeNFTFromStorage,
+  bulkSaveNFTs,
   getNFTByMintAddress,
   syncNFTsFromServer,
   
