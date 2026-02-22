@@ -783,7 +783,7 @@ function refreshQRCodeInMainWindow() {
   const pairingData = getPairingData();
   const qrDataString = JSON.stringify(pairingData);
   
-  // Refresh in main window (small QR) - preload new image before swapping
+  // Refresh in main window (QR modal) - preload new image before swapping
   if (mainWindow && !mainWindow.isDestroyed()) {
     QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
       if (err) {
@@ -1196,35 +1196,29 @@ function showMainWindow() {
     .header-btn { width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--text-secondary); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
     .header-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
     
-    /* Status Hero - Card matching mobile */
-    .status-hero { margin: 8px 12px; padding: 14px 16px; text-align: center; background: linear-gradient(180deg, rgba(16,185,129,0.10) 0%, rgba(6,78,59,0.18) 100%); border: 1px solid rgba(16,185,129,0.15); border-radius: 16px; transition: all 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .status-hero.backing-up { background: linear-gradient(180deg, rgba(3,225,255,0.10) 0%, rgba(3,225,255,0.04) 100%); border-color: rgba(3,225,255,0.15); }
-    .status-hero.syncing { background: linear-gradient(180deg, rgba(74,222,128,0.10) 0%, rgba(74,222,128,0.04) 100%); border-color: rgba(74,222,128,0.15); }
-    .status-hero.creating-nft { padding: 8px 16px; flex-direction: row; gap: 12px; background: linear-gradient(180deg, rgba(168,85,247,0.08) 0%, rgba(168,85,247,0.15) 100%); border-color: rgba(168,85,247,0.2); }
-    .status-hero.creating-nft .status-icon { width: 44px; height: 44px; min-width: 44px; min-height: 44px; margin: 0; border-color: rgba(168,85,247,0.4); animation: pulse 1.5s infinite; }
-    .status-hero.creating-nft .status-icon-inner { width: 34px; height: 34px; min-width: 34px; min-height: 34px; background: rgba(168,85,247,0.2); }
-    .status-hero.creating-nft .status-icon-inner svg { width: 18px; height: 18px; stroke: #A855F7; }
-    .status-hero.creating-nft .status-title { font-size: 14px; margin-bottom: 0; color: #A855F7; }
-    .status-hero.creating-nft .status-subtitle { font-size: 11px; padding: 0; }
-    .status-icon { width: 42px; height: 42px; min-width: 42px; min-height: 42px; aspect-ratio: 1 / 1; margin: 0 auto 6px; border-radius: 50%; background: transparent; border: 2px solid rgba(16,185,129,0.25); display: flex; align-items: center; justify-content: center; transition: all 0.3s; flex-shrink: 0; }
-    .status-icon-inner { width: 32px; height: 32px; min-width: 32px; min-height: 32px; aspect-ratio: 1 / 1; border-radius: 50%; background: rgba(16,185,129,0.125); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .status-icon.running { border-color: rgba(16,185,129,0.25); }
-    .status-icon.running .status-icon-inner { background: rgba(16,185,129,0.125); }
-    .status-icon.backing-up, .status-icon.syncing { width: 42px; height: 42px; min-width: 42px; min-height: 42px; margin-bottom: 6px; animation: pulse 2s infinite; }
-    .status-icon.backing-up { border-color: rgba(3,225,255,0.25); }
-    .status-icon.backing-up .status-icon-inner { width: 32px; height: 32px; min-width: 32px; min-height: 32px; background: rgba(3,225,255,0.125); }
-    .status-icon.syncing { border-color: rgba(74,222,128,0.25); }
-    .status-icon.syncing .status-icon-inner { width: 32px; height: 32px; min-width: 32px; min-height: 32px; background: rgba(74,222,128,0.125); }
+    /* Quick Stats Card — matches Solana mobile style */
+    .quick-stats { margin: 8px 12px; padding: 6px 8px; background: linear-gradient(135deg, rgba(0,255,163,0.07) 0%, #111114 50%, rgba(0,255,163,0.03) 100%); border: none; border-radius: 16px; transition: all 0.3s; position: relative; overflow: hidden; }
+    .quick-stats::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 60%; background: linear-gradient(180deg, rgba(0,255,163,0.09) 0%, rgba(0,255,163,0.03) 40%, transparent 100%); pointer-events: none; border-radius: 16px 16px 0 0; }
+    .quick-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; background: transparent; border-radius: 10px; overflow: hidden; position: relative; z-index: 1; }
+    .qs-cell { background: transparent; padding: 8px 6px; display: flex; align-items: center; gap: 8px; }
+    .qs-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }
+    .qs-text { min-width: 0; flex: 1; }
+    .qs-label { font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); line-height: 1; margin-bottom: 2px; }
+    .qs-value { font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+    .qs-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .qs-dot.green { background: #00FFA3; box-shadow: 0 0 6px rgba(0,255,163,0.5); }
+    .qs-dot.red { background: #EF4444; box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+    .qs-dot.yellow { background: #F59E0B; box-shadow: 0 0 6px rgba(245,158,11,0.5); }
+    /* Active operation state — hides grid, shows inline progress */
+    .quick-stats.active-op { text-align: center; }
+    .quick-stats.active-op .quick-stats-grid { display: none; }
+    .quick-stats.active-op .qs-progress { display: flex; }
+    .qs-progress { display: none; flex-direction: column; align-items: center; padding: 4px 0; }
+    .qs-progress-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .qs-progress-title.backing-up { color: var(--accent); }
+    .qs-progress-title.syncing { color: var(--success); }
+    .qs-progress-title.creating-nft { color: #A855F7; }
     @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
-    .status-icon-inner svg { width: 20px; height: 20px; transition: all 0.3s; }
-    .status-icon.backing-up .status-icon-inner svg, .status-icon.syncing .status-icon-inner svg { width: 20px; height: 20px; }
-    .status-title { font-size: 16px; font-weight: 600; margin-bottom: 2px; transition: all 0.3s; color: #10B981; }
-    .status-title.running { color: #10B981; }
-    .status-title.stopped { color: var(--error); }
-    .status-title.backing-up, .status-title.syncing { font-size: 16px; margin-bottom: 2px; }
-    .status-title.backing-up { color: var(--accent); }
-    .status-title.syncing { color: var(--success); }
-    .status-subtitle { font-size: 11px; color: var(--text-secondary); padding: 0; background: transparent; border-radius: 20px; display: inline-block; }
     
     /* Inline Progress */
     .inline-progress { display: none; align-items: center; gap: 10px; margin-top: 8px; width: 100%; max-width: 280px; }
@@ -1321,14 +1315,25 @@ function showMainWindow() {
     .server-option-title { font-size: 14px; font-weight: 500; }
     .server-option-subtitle { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
     
-    /* QR Section */
-    .qr-section { display: flex; gap: 12px; align-items: center; padding: 12px; background: linear-gradient(135deg, rgba(17,17,20,0.95) 0%, rgba(17,17,20,0.8) 100%); border-radius: 14px; border: 1px solid var(--border); }
-    .qr-container { background: #fff; padding: 10px; border-radius: 12px; flex-shrink: 0; }
-    .qr-code { width: 90px; height: 90px; display: block; }
-    .qr-info { flex: 1; }
-    .qr-info h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-    .qr-info p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
-    .ip-badge { margin-top: 10px; padding: 8px 12px; background: rgba(3,225,255,0.1); border: 1px solid rgba(3,225,255,0.3); border-radius: 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+    /* Pair Mobile trigger button */
+    .pair-btn { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: linear-gradient(135deg, rgba(3,225,255,0.08) 0%, rgba(3,225,255,0.03) 100%); border: 1px solid rgba(3,225,255,0.2); border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+    .pair-btn:hover { background: rgba(3,225,255,0.12); border-color: rgba(3,225,255,0.4); }
+    .pair-btn-icon { font-size: 18px; }
+    .pair-btn-text { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .pair-btn-sub { font-size: 11px; color: var(--text-secondary); }
+    .pair-btn-arrow { font-size: 18px; color: var(--text-muted); margin-left: auto; }
+
+    /* QR Pairing Modal Overlay */
+    .qr-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 9000; align-items: center; justify-content: center; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+    .qr-overlay.open { display: flex; }
+    .qr-modal { background: linear-gradient(135deg, #111114 0%, #0a0a0d 100%); border: 1px solid var(--border); border-radius: 20px; padding: 28px; max-width: 340px; width: 90%; text-align: center; position: relative; box-shadow: 0 0 60px rgba(3,225,255,0.1); }
+    .qr-modal-close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+    .qr-modal-close:hover { background: rgba(255,255,255,0.12); color: var(--text-primary); }
+    .qr-modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary); }
+    .qr-modal p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 20px; }
+    .qr-container { background: #fff; padding: 14px; border-radius: 14px; display: inline-block; margin-bottom: 16px; }
+    .qr-code { width: 180px; height: 180px; display: block; }
+    .ip-badge { padding: 8px 14px; background: rgba(3,225,255,0.1); border: 1px solid rgba(3,225,255,0.3); border-radius: 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
     .ip-badge span { color: var(--accent); font-weight: 600; font-family: monospace; }
     
     /* Form inputs */
@@ -1566,18 +1571,41 @@ function showMainWindow() {
     .nft-wallet-connect { margin-left: auto; padding: 4px 10px; border-radius: 5px; border: 1px solid #9945FF; background: transparent; color: #9945FF; cursor: pointer; font-size: 10px; }
     .nft-guide-btn { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #9945FF; background: transparent; color: #9945FF; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 6px; padding: 0; line-height: 16px; }
     .nft-guide-btn:hover { background: rgba(153,69,255,0.2); }
-    .nft-guide-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
-    .nft-guide-modal { background: #1a1a1a; border-radius: 16px; padding: 16px; width: 100%; max-width: 420px; max-height: 80vh; display: flex; flex-direction: column; border: 1px solid rgba(153,69,255,0.3); }
-    .nft-guide-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .nft-guide-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .nft-guide-modal { background: #111; border-radius: 14px; padding: 16px; width: 100%; max-width: 440px; max-height: 82vh; display: flex; flex-direction: column; border: 1px solid rgba(255,255,255,0.08); }
+    .nft-guide-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     .nft-guide-scroll { overflow-y: auto; flex: 1; padding-right: 4px; }
-    .nft-guide-section { margin-bottom: 10px; }
-    .nft-guide-title { font-size: 12px; font-weight: 600; color: #fff; margin-bottom: 3px; }
-    .nft-guide-text { font-size: 11px; color: #a1a1aa; line-height: 16px; }
-    .nft-guide-divider { font-size: 11px; font-weight: 700; color: #9945FF; text-transform: uppercase; letter-spacing: 0.3px; margin: 12px 0 8px; }
-    .nft-guide-card { background: rgba(153,69,255,0.08); border: 1px solid rgba(153,69,255,0.15); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
-    .nft-guide-pros { font-size: 11px; color: #22c55e; line-height: 15px; margin-top: 4px; }
-    .nft-guide-cons { font-size: 11px; color: #f59e0b; line-height: 15px; margin-top: 2px; }
-    .nft-guide-close-btn { width: 100%; padding: 10px; border: none; border-radius: 10px; background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 12px; }
+    .nft-guide-scroll::-webkit-scrollbar { width: 3px; }
+    .nft-guide-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+    .nft-guide-subtitle { font-size: 11px; color: #71717a; line-height: 15px; margin-bottom: 14px; }
+    .nft-guide-label { font-size: 9px; font-weight: 600; color: #52525b; text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 6px; }
+    .nft-guide-example { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 11px; margin-bottom: 6px; }
+    .nft-guide-ex-head { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+    .nft-guide-ex-tag { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0; }
+    .nft-guide-ex-name { font-size: 12px; font-weight: 600; color: #e4e4e7; }
+    .nft-guide-ex-desc { font-size: 10.5px; color: #a1a1aa; line-height: 15px; margin-bottom: 5px; }
+    .nft-guide-ex-row { display: flex; gap: 4px; flex-wrap: wrap; }
+    .nft-guide-chip { font-size: 9px; padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.05); color: #a1a1aa; }
+    .nft-guide-chip.green { background: rgba(34,197,94,0.1); color: #4ade80; }
+    .nft-guide-chip.amber { background: rgba(245,158,11,0.1); color: #fbbf24; }
+    .nft-guide-chip.red { background: rgba(239,68,68,0.1); color: #f87171; }
+    .nft-guide-detail { border-top: 1px solid rgba(255,255,255,0.05); margin-top: 6px; }
+    .nft-guide-detail-toggle { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 0; cursor: pointer; user-select: none; }
+    .nft-guide-detail-toggle span { font-size: 10px; color: #52525b; }
+    .nft-guide-detail-toggle .arrow { font-size: 9px; color: #52525b; transition: transform 0.15s; }
+    .nft-guide-detail-body { max-height: 0; overflow: hidden; transition: max-height 0.2s ease; }
+    .nft-guide-detail.open .nft-guide-detail-body { max-height: 300px; }
+    .nft-guide-detail.open .arrow { transform: rotate(90deg); }
+    .nft-guide-detail-inner { padding: 5px 0 2px; }
+    .nft-guide-pro, .nft-guide-con { font-size: 10px; line-height: 14px; padding-left: 10px; position: relative; margin-bottom: 2px; }
+    .nft-guide-pro { color: #71717a; }
+    .nft-guide-pro::before { content: '+'; position: absolute; left: 0; color: #4ade80; font-weight: 700; }
+    .nft-guide-con { color: #71717a; }
+    .nft-guide-con::before { content: '–'; position: absolute; left: 0; color: #f59e0b; font-weight: 700; }
+    .nft-guide-note { font-size: 10px; color: #52525b; line-height: 14px; background: rgba(255,255,255,0.02); border-radius: 6px; padding: 8px 10px; margin-top: 4px; }
+    .nft-guide-note strong { color: #a1a1aa; font-weight: 600; }
+    .nft-guide-hl { color: #e4e4e7; font-weight: 600; }
+    .nft-guide-close-btn { width: 100%; padding: 10px; border: none; border-radius: 10px; background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px; }
     .nft-guide-close-btn:hover { box-shadow: 0 4px 16px rgba(153,69,255,0.4); }
     .nft-mint-btn { width: 100%; padding: 12px; border: none; border-radius: 10px; background: linear-gradient(135deg, #9945FF 0%, #7B3FE4 100%); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; }
     .nft-mint-btn:hover { box-shadow: 0 6px 20px rgba(153,69,255,0.4); }
@@ -1600,31 +1628,59 @@ function showMainWindow() {
         </div>
       </div>
       <div class="header-actions">
+        <button class="header-btn" onclick="openPairModal()" title="Pair Mobile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
         <button class="header-btn" id="autostart-btn" onclick="toggleAutoStart()" title="Start on Boot">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
         </button>
       </div>
     </div>
     
-    <div class="status-hero" id="status-hero">
-      <div class="status-icon" id="status-icon">
-        <div class="status-icon-inner">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
+    <div class="quick-stats" id="status-hero">
+      <div class="quick-stats-grid" id="qs-grid">
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(3,225,255,0.12);">👤</div>
+          <div class="qs-text">
+            <div class="qs-label">Account</div>
+            <div class="qs-value" id="qs-account">${credentials.email || 'Not paired'}</div>
+          </div>
+        </div>
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(16,185,129,0.12);">
+            <div class="qs-dot green" id="qs-server-dot"></div>
+          </div>
+          <div class="qs-text">
+            <div class="qs-label">Server</div>
+            <div class="qs-value" id="qs-server">Starting...</div>
+          </div>
+        </div>
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(99,102,241,0.12);">☁️</div>
+          <div class="qs-text">
+            <div class="qs-label">Last Backup</div>
+            <div class="qs-value" id="qs-backup">—</div>
+          </div>
+        </div>
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(153,69,255,0.12);">⬡</div>
+          <div class="qs-text">
+            <div class="qs-label">NFTs</div>
+            <div class="qs-value" id="qs-nfts">—</div>
+          </div>
         </div>
       </div>
-      <div class="status-title" id="status-title">Ready</div>
-      <div class="status-subtitle" id="status-subtitle">Idle</div>
-      
-      <!-- Inline Progress (hidden by default) -->
-      <div class="inline-progress" id="inline-progress">
-        <div class="inline-progress-bar">
-          <div class="inline-progress-fill" id="inline-progress-fill"></div>
+      <!-- Inline Progress (hidden by default, shown during operations) -->
+      <div class="qs-progress" id="qs-progress">
+        <div class="qs-progress-title" id="qs-progress-title">Processing...</div>
+        <div class="inline-progress" id="inline-progress" style="display:flex;">
+          <div class="inline-progress-bar">
+            <div class="inline-progress-fill" id="inline-progress-fill"></div>
+          </div>
+          <div class="inline-progress-text" id="inline-progress-text">0%</div>
         </div>
-        <div class="inline-progress-text" id="inline-progress-text">0%</div>
+        <div class="inline-status-message" id="inline-status-message"></div>
       </div>
-      <div class="inline-status-message" id="inline-status-message"></div>
     </div>
     
     <div class="content">
@@ -1654,17 +1710,11 @@ function showMainWindow() {
             <div class="action-btn-arrow">›</div>
           </div>
         </div>
-        <div class="qr-section">
-          <div class="qr-container">
-            <img class="qr-code" src="${qrImage}" alt="QR Code">
-          </div>
-          <div class="qr-info">
-            <h3>📱 Pair Mobile</h3>
-            <p>Scan with PhotoLynk app to connect and sync credentials</p>
-            <div class="ip-badge">🔗 <span>${pairingData.ip}:${pairingData.port}</span></div>
-          </div>
-        </div>
 
+        <div class="section-header-row">
+          <div class="section-dot" style="background:#9945FF;"></div>
+          <div><div class="section-header-label" style="color:#9945FF;">SOLANA NFT</div><div class="section-header-sub">Blockchain-signed originals</div></div>
+        </div>
         <div class="action-row">
           <div class="action-btn nft" onclick="openNFTMint()">
             <div class="action-btn-icon nft-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
@@ -1902,11 +1952,7 @@ function showMainWindow() {
           </div>
 
           <div class="nft-cost-breakdown" id="nft-cost-breakdown" style="display:none;">
-            <div class="nft-cost-row"><span>App fee (you pay)</span><strong id="nft-cost-fee">—</strong></div>
-            <div class="nft-cost-row"><span>Network (est.)</span><strong id="nft-cost-network">—</strong></div>
-            <div class="nft-cost-row"><span>Storage (est.)</span><strong id="nft-cost-storage">—</strong></div>
-            <div class="nft-cost-row"><span>SOL/USD</span><strong id="nft-cost-sol">—</strong></div>
-            <div class="nft-cost-meta" id="nft-cost-updated">—</div>
+            <div class="nft-cost-row"><span>Estimated cost</span><strong id="nft-cost-total">—</strong></div>
           </div>
         </div>
         
@@ -1937,7 +1983,7 @@ function showMainWindow() {
         <div class="nft-option-group">
           <div class="nft-option-label">NFT Details</div>
           <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Memory)">
-          <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)">
+          <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)" style="display:none">
         </div>
         
         <!-- 8. Wallet & Mint -->
@@ -2035,73 +2081,114 @@ function showMainWindow() {
   <div id="nft-guide-overlay" class="nft-guide-overlay" style="display:none;" onclick="if(event.target===this)closeNFTGuide()">
     <div class="nft-guide-modal">
       <div class="nft-guide-header">
-        <div style="font-size:15px;font-weight:700;color:#fff;">Your Photo Album on the Blockchain</div>
+        <div style="font-size:14px;font-weight:700;color:#fff;">Creating Photo NFTs</div>
         <button class="nft-mint-close" onclick="closeNFTGuide()">✕</button>
       </div>
+      <div class="nft-guide-subtitle">Turn any photo into a blockchain-verified asset you fully own. No account needed — just a Solana wallet. Pick the option that fits your goal.</div>
       <div class="nft-guide-scroll">
-        <div class="nft-guide-section">
-          <div class="nft-guide-title">💡 What is a Photo NFT?</div>
-          <div class="nft-guide-text">Your photo becomes a permanent, verifiable asset on Solana. You own it — transfer it, sell it, or keep it forever. No company can delete or censor it.</div>
+
+        <!-- ── 3 USE-CASE EXAMPLES ── -->
+        <div class="nft-guide-label">Choose your scenario</div>
+
+        <!-- Example 1: Fully Public -->
+        <div class="nft-guide-example">
+          <div class="nft-guide-ex-head">
+            <span class="nft-guide-ex-tag" style="background:rgba(34,197,94,0.15);color:#4ade80;">Public</span>
+            <span class="nft-guide-ex-name">Share, sell, or use as avatar</span>
+          </div>
+          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Open Edition + IPFS + Unencrypted.</span> Your photo is uploaded to IPFS — a decentralized network no one controls. Metadata lives on Solana. Anyone can view the image. Ideal for portfolios, social profiles, or selling prints.</div>
+          <div class="nft-guide-ex-row">
+            <span class="nft-guide-chip green">Image 100% preserved</span>
+            <span class="nft-guide-chip green">EXIF kept by default</span>
+            <span class="nft-guide-chip amber">Publicly visible</span>
+          </div>
+          <div class="nft-guide-detail" onclick="this.classList.toggle('open')">
+            <div class="nft-guide-detail-toggle"><span>Details</span><span class="arrow">›</span></div>
+            <div class="nft-guide-detail-body"><div class="nft-guide-detail-inner">
+              <div class="nft-guide-pro">Viewable in any Solana wallet, marketplace, or browser</div>
+              <div class="nft-guide-pro">Original quality — no compression, no re-encoding</div>
+              <div class="nft-guide-pro">Optional watermark to protect your work</div>
+              <div class="nft-guide-pro">Transferable and sellable on any Solana marketplace</div>
+              <div class="nft-guide-con">Image is publicly accessible via IPFS gateway</div>
+              <div class="nft-guide-con">EXIF (location, camera) visible unless you strip it</div>
+            </div></div>
+          </div>
         </div>
 
-        <div class="nft-guide-divider">Two Editions</div>
-
-        <div class="nft-guide-card">
-          <div class="nft-guide-title">🌐 Open Edition — Photo on Blockchain</div>
-          <div class="nft-guide-text">Your original photo is uploaded and linked to the NFT. Choose where to store it and who can see it.</div>
-          <div class="nft-guide-pros">✓ Viewable in any Solana wallet, browser, or marketplace. Use as avatar, share, or sell. Optional encryption makes it private. Optional watermark protects your work.</div>
-          <div class="nft-guide-cons">✗ Image is publicly accessible unless you enable encryption. Requires storage (IPFS, StealthCloud, or On-Chain).</div>
+        <!-- Example 2: Encrypted Private -->
+        <div class="nft-guide-example">
+          <div class="nft-guide-ex-head">
+            <span class="nft-guide-ex-tag" style="background:rgba(99,102,241,0.15);color:#818cf8;">Private</span>
+            <span class="nft-guide-ex-name">Encrypted backup — only you can view</span>
+          </div>
+          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Open Edition + IPFS + Encrypted.</span> Same as above, but the image is encrypted on your device before upload. The file on IPFS is unreadable without your wallet. Your private key never leaves the wallet — the app only asks the wallet to sign, never extracts anything. Ownership recorded on Solana, image stays private.</div>
+          <div class="nft-guide-ex-row">
+            <span class="nft-guide-chip green">Image 100% preserved</span>
+            <span class="nft-guide-chip green">Encrypted on device</span>
+            <span class="nft-guide-chip green">Only you can decrypt</span>
+          </div>
+          <div class="nft-guide-detail" onclick="this.classList.toggle('open')">
+            <div class="nft-guide-detail-toggle"><span>Details</span><span class="arrow">›</span></div>
+            <div class="nft-guide-detail-body"><div class="nft-guide-detail-inner">
+              <div class="nft-guide-pro">AES-256-GCM encryption — military-grade, done locally</div>
+              <div class="nft-guide-pro">Decryption key sealed to your wallet — the app never touches your private key, only requests a signature</div>
+              <div class="nft-guide-pro">EXIF stripped automatically for privacy</div>
+              <div class="nft-guide-pro">Stored on decentralized IPFS — no company can delete it</div>
+              <div class="nft-guide-con">Others see an encrypted blob, not the image</div>
+              <div class="nft-guide-con">Cannot be used as a public avatar or sold as-is</div>
+            </div></div>
+          </div>
         </div>
 
-        <div class="nft-guide-card">
-          <div class="nft-guide-title">🏆 Limited Edition — Copyright Certificate</div>
-          <div class="nft-guide-text">Your original photo never leaves your device. The NFT metadata stores SHA-256 hashes of your photo, EXIF data, and camera serial number — cryptographic proof you took the shot. Each certificate includes an <strong style="color:#10b981;">RFC 3161 trusted timestamp</strong> (FreeTSA.org) and a <strong style="color:#3b82f6;">C2PA provenance manifest</strong> (Adobe/Microsoft standard) — court-admissible proof of authorship.</div>
-          <div class="nft-guide-pros">✓ Original stays on your device. RFC 3161 timestamp from a trusted authority. C2PA provenance record (industry standard). Certificate of Authenticity. Ideal for copyright, legal proof, archiving.</div>
-          <div class="nft-guide-cons">✗ Original image embedded in metadata (not a separate upload). Larger metadata file than Open Edition. No StealthCloud storage option.</div>
+        <!-- Example 3: Limited On-Chain Certificate -->
+        <div class="nft-guide-example">
+          <div class="nft-guide-ex-head">
+            <span class="nft-guide-ex-tag" style="background:rgba(245,158,11,0.15);color:#fbbf24;">Certificate</span>
+            <span class="nft-guide-ex-name">Copyright proof with legal timestamps</span>
+          </div>
+          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Limited Edition + Embedded in NFT + Encrypted.</span> Your original photo and metadata are stored directly inside the NFT account on Solana (not in a separate block — think of it as a permanent file attached to your token). No external storage, no links that can break. Includes SHA-256 hashes of image + EXIF + camera serial, an <span class="nft-guide-hl">RFC 3161 trusted timestamp</span> (court-admissible), and a <span class="nft-guide-hl">C2PA provenance manifest</span> (Adobe/Microsoft standard).</div>
+          <div class="nft-guide-ex-row">
+            <span class="nft-guide-chip green">Image embedded in NFT</span>
+            <span class="nft-guide-chip green">Encrypted</span>
+            <span class="nft-guide-chip green">Legally timestamped</span>
+          </div>
+          <div class="nft-guide-detail" onclick="this.classList.toggle('open')">
+            <div class="nft-guide-detail-toggle"><span>Details</span><span class="arrow">›</span></div>
+            <div class="nft-guide-detail-body"><div class="nft-guide-detail-inner">
+              <div class="nft-guide-pro">No external dependencies — image is stored inside the NFT, not on a separate server</div>
+              <div class="nft-guide-pro">RFC 3161 timestamp from FreeTSA.org — accepted in legal proceedings</div>
+              <div class="nft-guide-pro">C2PA manifest — industry standard used by Adobe, Microsoft, BBC</div>
+              <div class="nft-guide-pro">Certificate of Authenticity — proves you took the photo, when, and with what camera</div>
+              <div class="nft-guide-pro">Permanent as long as Solana exists — no IPFS pinning, no cloud subscription</div>
+              <div class="nft-guide-con">Larger metadata — costs more than a simple IPFS upload</div>
+              <div class="nft-guide-con">Not viewable as a regular image in wallets (encrypted data)</div>
+            </div></div>
+          </div>
         </div>
 
-        <div class="nft-guide-divider">Storage (Open Edition)</div>
+        <!-- ── KEY FACTS ── -->
+        <div class="nft-guide-label">Key facts</div>
 
-        <div class="nft-guide-section">
-          <div class="nft-guide-title">📦 IPFS — Decentralized, Public</div>
-          <div class="nft-guide-text">Photo pinned on a global decentralized network. No single company controls it. Viewable via any IPFS gateway. Images are publicly accessible by default — enable encryption for privacy.</div>
-        </div>
-        <div class="nft-guide-section">
-          <div class="nft-guide-title">☁️ StealthCloud — Encrypted, Zero-Knowledge</div>
-          <div class="nft-guide-text">Stored on StealthLynk.io with zero-knowledge encryption. Proof of ownership with full privacy — only you can decrypt and view your photos. Requires an active StealthCloud plan.</div>
-        </div>
-        <div class="nft-guide-section">
-          <div class="nft-guide-title">🔗 Embedded — On-Chain, Decentralized, Permanent</div>
-          <div class="nft-guide-text">Your photo is embedded directly in the NFT metadata on Solana. No external storage needed — the image lives on the blockchain itself. Fully decentralized and permanent — exists as long as Solana runs.</div>
+        <div class="nft-guide-note">
+          <strong>Image quality:</strong> Your photo is never compressed or re-encoded. "Compressed NFT" refers to how Solana stores the <em>token record</em> (using state compression to save cost) — your image stays pixel-perfect. Compressed NFTs cost ~$0.01 vs ~$2.60 for standard, with identical ownership rights.
         </div>
 
-        <div class="nft-guide-divider">Compressed vs Standard</div>
-
-        <div class="nft-guide-section" style="background:rgba(245,158,11,0.1);border-radius:8px;padding:10px;margin-bottom:8px;">
-          <div class="nft-guide-title" style="color:#f59e0b;">⚡ Compressed NFT (Recommended)</div>
-          <div class="nft-guide-text"><strong style="color:#f59e0b;">"Compressed" = how data is stored on Solana, NOT image quality.</strong> Your photo stays exactly the same. Costs ~$0.01 instead of ~$2.60. Full ownership, transferable, verifiable.</div>
-        </div>
-        <div class="nft-guide-section">
-          <div class="nft-guide-title">⬡ Standard NFT</div>
-          <div class="nft-guide-text">Unique on-chain mint address. Costs ~0.02 SOL rent + fees. Only needed if a specific marketplace requires it.</div>
+        <div class="nft-guide-note" style="margin-top:4px;">
+          <strong>EXIF data:</strong> Date, GPS, camera model, and serial number are preserved by default. You can strip EXIF before minting for privacy. Limited Edition always hashes EXIF for proof without exposing it.
         </div>
 
-        <div class="nft-guide-divider">Image Preservation</div>
-        <div class="nft-guide-text" style="margin-bottom:10px;">Open Edition: your original photo is uploaded as-is. EXIF data (date, location, camera info) is preserved by default — or strip it for privacy. Limited Edition: original untouched on your device, cryptographic hashes stored in the NFT metadata.</div>
-
-        <div class="nft-guide-divider">Who Is This For?</div>
-        <div class="nft-guide-text" style="margin-bottom:4px;">📸 Photographers — timestamp your shots, prove authorship, protect copyright with Limited Edition.</div>
-        <div class="nft-guide-text" style="margin-bottom:4px;">🎨 Creators — share publicly, sell, use as avatar with Open Edition. Add watermark or encryption for control.</div>
-        <div class="nft-guide-text" style="margin-bottom:10px;">👤 Everyone — a permanent photo album no company can delete. Your memories, your blockchain.</div>
-
-        <div class="nft-guide-section">
-          <div class="nft-guide-title">🌅 Why Blockchain?</div>
-          <div class="nft-guide-text">Cloud albums can be deleted, hacked, or shut down. NFT albums are permanent, verifiable, and truly yours. Transfer them, sell them, or pass them down — like physical prints, but digital and forever.</div>
+        <div class="nft-guide-note" style="margin-top:4px;">
+          <strong>Encryption:</strong> Done on your device with AES-256-GCM before anything is uploaded. The decryption key is sealed to your wallet via a signature request — your private key never leaves the wallet. No server ever sees the original.
         </div>
+
+        <div class="nft-guide-note" style="margin-top:4px;">
+          <strong>What makes your image public:</strong> Only unencrypted IPFS or unencrypted StealthCloud. Everything else — encrypted IPFS, encrypted embedded, or Limited Edition — keeps your image private.
+        </div>
+
       </div>
       <div style="padding:0 16px 8px;display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="document.getElementById('nft-guide-dontshow').checked=!document.getElementById('nft-guide-dontshow').checked;">
         <input type="checkbox" id="nft-guide-dontshow" style="accent-color:#9945FF;cursor:pointer;" onclick="event.stopPropagation();">
-        <span style="font-size:12px;color:#888;">Don't show again</span>
+        <span style="font-size:12px;color:#52525b;">Don't show again</span>
       </div>
       <button class="nft-guide-close-btn" onclick="closeNFTGuide()">Got It</button>
     </div>
@@ -2118,6 +2205,19 @@ function showMainWindow() {
     </div>
   </div>
   
+  <!-- QR Pairing Modal -->
+  <div class="qr-overlay" id="qr-overlay" onclick="if(event.target===this)closePairModal()">
+    <div class="qr-modal">
+      <div class="qr-modal-close" onclick="closePairModal()">&times;</div>
+      <h3>📱 Pair Mobile</h3>
+      <p>Scan with PhotoLynk app to connect and sync credentials</p>
+      <div class="qr-container">
+        <img class="qr-code" src="${qrImage}" alt="QR Code">
+      </div>
+      <div class="ip-badge">🔗 <span>${pairingData.ip}:${pairingData.port}</span></div>
+    </div>
+  </div>
+
   <script>
     // Global error handler
     window.onerror = function(msg, url, line, col, error) {
@@ -2137,6 +2237,16 @@ function showMainWindow() {
       document.getElementById(viewName + '-view').classList.add('active');
     }
     window.showView = showView;
+    
+    // QR Pairing Modal
+    function openPairModal() {
+      document.getElementById('qr-overlay').classList.add('open');
+    }
+    function closePairModal() {
+      document.getElementById('qr-overlay').classList.remove('open');
+    }
+    window.openPairModal = openPairModal;
+    window.closePairModal = closePairModal;
     
     // Tab navigation within main view
     function switchTab(tabName) {
@@ -2194,25 +2304,19 @@ function showMainWindow() {
     function updateServerStatus(running) {
       const dot = document.getElementById('server-dot');
       const status = document.getElementById('server-status');
-      const icon = document.getElementById('status-icon');
-      const title = document.getElementById('status-title');
+      const qsDot = document.getElementById('qs-server-dot');
+      const qsServer = document.getElementById('qs-server');
       
       if (running) {
         dot.classList.remove('stopped');
         status.textContent = 'Local Server';
-        icon.classList.add('running');
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>';
-        title.textContent = 'Ready';
-        title.classList.remove('stopped');
-        title.classList.add('running');
+        if (qsDot) { qsDot.className = 'qs-dot green'; }
+        if (qsServer) qsServer.textContent = 'Running';
       } else {
         dot.classList.add('stopped');
         status.textContent = 'Server Stopped';
-        icon.classList.remove('running');
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--error);"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>';
-        title.textContent = 'Stopped';
-        title.classList.remove('running');
-        title.classList.add('stopped');
+        if (qsDot) { qsDot.className = 'qs-dot red'; }
+        if (qsServer) qsServer.textContent = 'Stopped';
       }
       serverBusy = false;
     }
@@ -2387,35 +2491,25 @@ function showMainWindow() {
     // Inline progress helper functions
     function showInlineProgress(type) {
       const hero = document.getElementById('status-hero');
-      const icon = document.getElementById('status-icon');
-      const title = document.getElementById('status-title');
-      const subtitle = document.getElementById('status-subtitle');
-      const progress = document.getElementById('inline-progress');
+      const progressTitle = document.getElementById('qs-progress-title');
       const progressFill = document.getElementById('inline-progress-fill');
       const progressText = document.getElementById('inline-progress-text');
       const statusMsg = document.getElementById('inline-status-message');
       
-      // Update classes for styling
-      hero.className = 'status-hero ' + type;
-      icon.className = 'status-icon ' + type;
-      title.className = 'status-title ' + type;
+      // Switch to active operation mode
+      hero.classList.add('active-op');
+      progressTitle.className = 'qs-progress-title ' + type;
       
-      // Update icon SVG
       if (type === 'backing-up') {
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>';
-        title.textContent = 'Backing Up...';
+        progressTitle.textContent = 'Backing Up...';
         progressFill.className = 'inline-progress-fill';
         progressText.className = 'inline-progress-text';
       } else if (type === 'syncing') {
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>';
-        title.textContent = 'Syncing...';
+        progressTitle.textContent = 'Syncing...';
         progressFill.className = 'inline-progress-fill syncing';
         progressText.className = 'inline-progress-text syncing';
       }
       
-      // Show progress elements
-      subtitle.style.display = 'none';
-      progress.classList.add('visible');
       progressFill.style.width = '0%';
       progressText.textContent = '0%';
       statusMsg.classList.add('visible');
@@ -2430,34 +2524,30 @@ function showMainWindow() {
     
     function hideInlineProgress(success, message) {
       const hero = document.getElementById('status-hero');
-      const icon = document.getElementById('status-icon');
-      const title = document.getElementById('status-title');
-      const subtitle = document.getElementById('status-subtitle');
-      const progress = document.getElementById('inline-progress');
+      const progressTitle = document.getElementById('qs-progress-title');
       const statusMsg = document.getElementById('inline-status-message');
       
       // Show completion message briefly
       if (success) {
-        title.textContent = 'Complete!';
-        title.className = 'status-title running';
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>';
+        progressTitle.textContent = '✓ Complete!';
+        progressTitle.className = 'qs-progress-title';
+        progressTitle.style.color = '#10B981';
         document.getElementById('inline-progress-fill').style.width = '100%';
+        // Update last backup stat
+        updateLastBackupStat(message);
       } else {
-        title.textContent = 'Error';
-        title.className = 'status-title stopped';
+        progressTitle.textContent = '✕ Error';
+        progressTitle.className = 'qs-progress-title';
+        progressTitle.style.color = '#EF4444';
       }
       statusMsg.textContent = message;
       
-      // Reset to idle after delay
+      // Restore quick-stats grid after delay
       setTimeout(() => {
-        hero.className = 'status-hero';
-        icon.className = 'status-icon';
-        icon.innerHTML = '<div class="status-icon-inner"><svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>';
-        title.className = 'status-title';
-        title.textContent = 'Ready';
-        subtitle.style.display = 'inline-block';
-        progress.classList.remove('visible');
+        hero.classList.remove('active-op');
+        progressTitle.style.color = '';
         statusMsg.classList.remove('visible');
+        document.getElementById('inline-progress-fill').style.width = '0%';
       }, success ? 2000 : 3000);
     }
     
@@ -2466,6 +2556,20 @@ function showMainWindow() {
         btn.style.opacity = disabled ? '0.4' : '';
         btn.style.pointerEvents = disabled ? 'none' : '';
       });
+    }
+
+    function updateLastBackupStat(message) {
+      const el = document.getElementById('qs-backup');
+      if (!el) return;
+      const now = new Date();
+      const hhmm = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+      el.textContent = hhmm;
+      el.title = message || '';
+    }
+
+    function updateQsNfts(count) {
+      const el = document.getElementById('qs-nfts');
+      if (el) el.textContent = count != null ? String(count) : '—';
     }
 
     async function startBackup() {
@@ -2499,18 +2603,19 @@ function showMainWindow() {
     ipcRenderer.on('sync-complete', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(true, d.message); });
     ipcRenderer.on('sync-error', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(false, 'Error: ' + d.message); });
     
-    // IPFS Gateways for standard NFT image loading (Pinata removed — now returns 403)
+    // IPFS Gateways — ipfs.io and gateway.pinata.cloud return 200 directly;
+    // w3s.link/nftstorage.link/dweb.link return 301/302 redirects that break in Electron data:text/html
     const IPFS_GATEWAYS = [
-      'https://w3s.link/ipfs/',
-      'https://nftstorage.link/ipfs/',
       'https://ipfs.io/ipfs/',
+      'https://gateway.pinata.cloud/ipfs/',
+      'https://w3s.link/ipfs/',
       'https://dweb.link/ipfs/',
     ];
-    // cNFT-optimized gateways
+    // cNFT-optimized gateways (same order)
     const CNFT_IPFS_GATEWAYS = [
-      'https://w3s.link/ipfs/',
-      'https://nftstorage.link/ipfs/',
       'https://ipfs.io/ipfs/',
+      'https://gateway.pinata.cloud/ipfs/',
+      'https://w3s.link/ipfs/',
       'https://dweb.link/ipfs/',
     ];
     const MAX_IPFS_RETRY_CYCLES = 1; // Single cycle through all gateways
@@ -2745,16 +2850,16 @@ function showMainWindow() {
 
     
     function closeNFTMint() {
-      document.getElementById('nft-mint-section').style.display = 'none';
+      const section = document.getElementById('nft-mint-section');
+      if (section.style.display === 'none') return; // already closed — don't reset a new form
+      section.style.display = 'none';
       if (nftPriceTimer) { clearInterval(nftPriceTimer); nftPriceTimer = null; }
       resetNFTMintForm();
-      // Reset hero status back to Ready
+      // Restore quick-stats grid
       const hero = document.getElementById('status-hero');
-      const title = document.getElementById('status-title');
-      const subtitle = document.getElementById('status-subtitle');
-      if (hero) hero.classList.remove('creating-nft');
-      if (title) title.textContent = 'Ready';
-      if (subtitle) subtitle.textContent = 'Idle';
+      if (hero) hero.classList.remove('active-op');
+      const statusMsg = document.getElementById('inline-status-message');
+      if (statusMsg) statusMsg.classList.remove('visible');
     }
     
     function resetNFTMintForm() {
@@ -2799,8 +2904,8 @@ function showMainWindow() {
           // Limited Edition: dynamic fee based on file size — show in both slots
           const limitedFeeUsd = lastNftEstimate?.fee?.usd;
           const limitedFeeLabel = limitedFeeUsd != null
-            ? '$' + limitedFeeUsd.toFixed(0) + ' (0.5% of file size)'
-            : 'Dynamic (0.5% of file size)';
+            ? '$' + limitedFeeUsd.toFixed(0) + ' (0.1% of file size)'
+            : 'Dynamic (0.1% of file size)';
           const cloudEl = document.getElementById('cloud-fee');
           const ipfsEl = document.getElementById('ipfs-fee');
           if (cloudEl) cloudEl.textContent = limitedFeeLabel;
@@ -2821,28 +2926,11 @@ function showMainWindow() {
           lastNftEstimate = selectedEstimate;
         }
 
-        if (lastNftEstimate && lastNftEstimate.total && lastNftEstimate.solPrice) {
+        if (lastNftEstimate && lastNftEstimate.total) {
           const box = document.getElementById('nft-cost-breakdown');
           if (box) box.style.display = 'block';
-          const solPrice = Number(lastNftEstimate.solPrice) || 0;
-          const feeUsd = Number(lastNftEstimate.fee?.usd) || 0;
-          const feeSol = Number(lastNftEstimate.fee?.sol) || (solPrice > 0 ? feeUsd / solPrice : 0);
-          const netSol = Number(lastNftEstimate.network?.sol) || 0;
-          const storageUsd = Number(lastNftEstimate.storage?.usd) || 0;
-          const storageSol = solPrice > 0 ? (storageUsd / solPrice) : 0;
-          const rentLamports = Number(lastNftEstimate.network?.rentLamports) || 0;
-          const priorityLamports = Number(lastNftEstimate.network?.priorityFeeLamports) || 0;
-
-          const feeEl = document.getElementById('nft-cost-fee');
-          const netEl = document.getElementById('nft-cost-network');
-          const stEl = document.getElementById('nft-cost-storage');
-          const solEl = document.getElementById('nft-cost-sol');
-          const updEl = document.getElementById('nft-cost-updated');
-          if (feeEl) feeEl.textContent = '$' + feeUsd.toFixed(2) + ' (' + feeSol.toFixed(6) + ' SOL)';
-          if (netEl) netEl.textContent = netSol.toFixed(6) + ' SOL (rent ' + rentLamports + ', priority ' + priorityLamports + ' lamports)';
-          if (stEl) stEl.textContent = (storageUsd > 0 ? ('$' + storageUsd.toFixed(2) + ' (' + storageSol.toFixed(6) + ' SOL)') : '$0.00');
-          if (solEl) solEl.textContent = '$' + solPrice.toFixed(2);
-          if (updEl) updEl.textContent = 'Updates every ~15s • ' + new Date().toLocaleTimeString();
+          const totalEl = document.getElementById('nft-cost-total');
+          if (totalEl) totalEl.textContent = '~$' + (Number(lastNftEstimate.total.usd) || 0).toFixed(2);
         }
 
         updateMintButton();
@@ -2937,7 +3025,7 @@ function showMainWindow() {
           // Auto-populate name from filename if field is empty
           const nameInput = document.getElementById('nft-name-input');
           if (nameInput && !nameInput.value.trim()) {
-            const baseName = selectedPath.split(/[\/\\]/).pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+            const baseName = selectedPath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
             if (baseName) nameInput.value = baseName;
           }
           refreshNFTPricesRealtime();
@@ -2992,18 +3080,18 @@ function showMainWindow() {
               try { await ipcRenderer.invoke('clear-nft-cache'); } catch (_) {}
             }
             loadNFTAlbum();
-            // Only clear certs UI when wallet actually changed
+            // Clear certs UI when wallet changed, and always reload if certs overlay is open
             if (walletChanged) {
-              const certsOv = document.getElementById('certs-overlay');
               const certsList = document.getElementById('certs-list');
               const certsLoading = document.getElementById('certs-loading');
               const certsEmpty = document.getElementById('certs-empty');
               if (certsList) certsList.innerHTML = '';
               if (certsLoading) certsLoading.style.display = 'block';
               if (certsEmpty) certsEmpty.style.display = 'none';
-              if (certsOv && certsOv.classList.contains('active')) {
-                loadCertificates();
-              }
+            }
+            const certsOv = document.getElementById('certs-overlay');
+            if (certsOv && certsOv.classList.contains('active')) {
+              loadCertificates();
             }
             if (data.bringToFront) {
               ipcRenderer.send('bring-to-front');
@@ -3052,13 +3140,14 @@ function showMainWindow() {
       if (isMinting || !selectedNFTPhoto || !nftWalletAddress) return;
       isMinting = true;
       
-      // Squeeze hero during NFT creation
+      // Show NFT creation progress in quick-stats
       const hero = document.getElementById('status-hero');
-      const title = document.getElementById('status-title');
-      const subtitle = document.getElementById('status-subtitle');
-      hero.classList.add('creating-nft');
-      title.textContent = 'Creating NFT';
-      subtitle.textContent = 'Uploading...';
+      const progressTitle = document.getElementById('qs-progress-title');
+      hero.classList.add('active-op');
+      progressTitle.className = 'qs-progress-title creating-nft';
+      progressTitle.textContent = 'Creating NFT...';
+      document.getElementById('inline-status-message').classList.add('visible');
+      document.getElementById('inline-status-message').textContent = 'Uploading...';
       
       const btn = document.getElementById('nft-mint-btn');
       btn.disabled = true;
@@ -3070,7 +3159,7 @@ function showMainWindow() {
         : (selectedNFTPhoto && typeof selectedNFTPhoto.path === 'string')
           ? selectedNFTPhoto.path
           : String(selectedNFTPhoto || '');
-      const name = nameInputVal || (selectedPath ? selectedPath.split(/[\/\\]/).pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() : '') || 'Photo NFT';
+      const name = nameInputVal || (selectedPath ? selectedPath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() : '') || 'Photo NFT';
       const description = document.getElementById('nft-desc-input').value || '';
       
       const license = document.getElementById('nft-license-select').value || 'arr';
@@ -3114,9 +3203,9 @@ function showMainWindow() {
             closeNFTMint();
             btn.style.background = '';
             isMinting = false;
-            // Restore hero after NFT creation
-            hero.classList.remove('creating-nft');
-            updateServerStatus(serverRunning);
+            // Restore quick-stats grid after NFT creation
+            hero.classList.remove('active-op');
+            document.getElementById('inline-status-message').classList.remove('visible');
           }, 3000);
         } else {
           throw new Error(result.error || 'Minting failed');
@@ -3129,18 +3218,18 @@ function showMainWindow() {
           btn.style.background = '';
           btn.innerHTML = '<span>⬡</span> Mint NFT';
           updateMintButton();
-          // Restore hero after NFT creation failure
-          hero.classList.remove('creating-nft');
-          updateServerStatus(serverRunning);
+          // Restore quick-stats grid after NFT creation failure
+          hero.classList.remove('active-op');
+          document.getElementById('inline-status-message').classList.remove('visible');
         }, 3000);
       }
     }
     
     ipcRenderer.on('mint-progress', (e, data) => {
       document.getElementById('nft-mint-btn').innerHTML = '<span>⏳</span> ' + data.status;
-      // Update hero subtitle with progress
-      const subtitle = document.getElementById('status-subtitle');
-      if (subtitle) subtitle.textContent = data.status;
+      // Update quick-stats progress message
+      const statusMsg = document.getElementById('inline-status-message');
+      if (statusMsg) statusMsg.textContent = data.status;
     });
     
     // Poll for mint success from browser
@@ -3227,13 +3316,17 @@ function showMainWindow() {
         const tempMintAddress = isCNFT
           ? (initialId ? ('cnft_' + initialId.replace(/^cnft_/, '')) : (data.mintTx ? ('tx_' + data.mintTx) : null))
           : (initialId || null);
+        // Match mobile: use thumbnailUrl as display imageUrl when available
+        // (mobile nftOperations.js line 3754: imageUrl: result.thumbnailUrl || result.imageUrl)
+        const savedThumbUrl = window._pendingMintThumbnailUrl || null;
+        const displayImageUrl = savedThumbUrl || data.imageUrl || null;
         try {
           await ipcRenderer.invoke('save-minted-nft', {
             mintAddress: tempMintAddress,
             assetId: isCNFT ? (initialId || null) : null,
             ownerAddress: data.wallet || nftWalletAddress,
             name: data.name || 'Photo NFT',
-            imageUrl: data.imageUrl || null,
+            imageUrl: displayImageUrl,
             metadataUrl: data.metadataUrl || null,
             txSignature: data.mintTx || data.paymentTx || null,
             storageType: data.storageOption || 'ipfs',
@@ -3244,7 +3337,7 @@ function showMainWindow() {
             watermarked: data.watermark === 'true',
             encrypted: data.encrypt === 'true',
             encryptionData: pendingEncData,
-            thumbnailUrl: window._pendingMintThumbnailUrl || null,
+            thumbnailUrl: savedThumbUrl,
             createdAt: new Date().toISOString(),
             attributes: (window._pendingMintProofData?.attributes) || [],
           });
@@ -3262,8 +3355,8 @@ function showMainWindow() {
             assetId: isCNFT ? (initialId || null) : null,
             ownerAddress: data.wallet || nftWalletAddress,
             name: data.name || 'Photo NFT',
-            imageUrl: data.imageUrl || null,
-            image: data.imageUrl || null,
+            imageUrl: displayImageUrl,
+            image: displayImageUrl,
             metadataUrl: data.metadataUrl || null,
             txSignature: data.mintTx || data.paymentTx || null,
             storageType: data.storageOption || 'ipfs',
@@ -3274,7 +3367,7 @@ function showMainWindow() {
             watermarked: data.watermark === 'true',
             encrypted: data.encrypt === 'true',
             encryptionData: pendingEncData,
-            thumbnailUrl: window._pendingMintThumbnailUrl || null,
+            thumbnailUrl: savedThumbUrl,
             createdAt: new Date().toISOString(),
           };
           appendNewNFTs([mintedNFT]);
@@ -3311,7 +3404,7 @@ function showMainWindow() {
                       assetId: realId,
                       ownerAddress: data.wallet || nftWalletAddress,
                       name: data.name || 'Photo NFT',
-                      imageUrl: data.imageUrl || null,
+                      imageUrl: displayImageUrl,
                       metadataUrl: data.metadataUrl || null,
                       txSignature: data.mintTx || data.paymentTx || null,
                       storageType: data.storageOption || 'ipfs',
@@ -3322,7 +3415,7 @@ function showMainWindow() {
                       watermarked: data.watermark === 'true',
                       encrypted: data.encrypt === 'true',
                       encryptionData: pendingEncData,
-                      thumbnailUrl: window._pendingMintThumbnailUrl || null,
+                      thumbnailUrl: savedThumbUrl,
                       createdAt: new Date().toISOString(),
                       attributes: (window._pendingMintProofData?.attributes) || [],
                     });
@@ -3430,7 +3523,7 @@ function showMainWindow() {
       try {
         const result = await ipcRenderer.invoke('get-certificates');
         let certs = (result && result.certificates) ? result.certificates : [];
-        // Filter by current wallet ownership — only if DAS returned NFTs (empty = DAS failed, not zero ownership)
+        // Filter by current wallet ownership — check DAS + local stored NFTs
         if (certs.length > 0) {
           try {
             const ownedResult = await fetchUserNFTsCached();
@@ -3440,6 +3533,14 @@ function showMainWindow() {
                   .map(n => n && (n.mintAddress || n.assetId) ? String(n.mintAddress || n.assetId).replace('cnft_', '') : null)
                   .filter(Boolean)
               );
+              // Also include local stored NFTs (has minted NFTs not yet indexed by DAS)
+              try {
+                const localNFTs = await ipcRenderer.invoke('get-stored-nfts') || [];
+                for (const n of localNFTs) {
+                  const k = n && (n.mintAddress || n.assetId) ? String(n.mintAddress || n.assetId).replace('cnft_', '') : null;
+                  if (k) ownedSet.add(k);
+                }
+              } catch (_) {}
               certs = certs.filter(c => {
                 const id = c && c.mintAddress ? String(c.mintAddress).replace('cnft_', '') : null;
                 if (id && id.startsWith('tx_')) return true;
@@ -3622,6 +3723,14 @@ function showMainWindow() {
             .map(n => (n && (n.mintAddress || n.assetId) ? String(n.mintAddress || n.assetId).replace('cnft_', '') : null))
             .filter(Boolean)
         );
+        // Also include local stored NFTs (has minted NFTs not yet indexed by DAS)
+        try {
+          const localNFTs = await ipcRenderer.invoke('get-stored-nfts') || [];
+          for (const n of localNFTs) {
+            const k = n && (n.mintAddress || n.assetId) ? String(n.mintAddress || n.assetId).replace('cnft_', '') : null;
+            if (k) ownedSet.add(k);
+          }
+        } catch (_) {}
         const beforeCount = serverCerts.length;
         serverCerts = serverCerts.filter(c => {
           const id = (c && c.mintAddress) ? String(c.mintAddress).replace('cnft_', '') : null;
@@ -3982,7 +4091,7 @@ function showMainWindow() {
           if (nft.encrypted && !existing.encrypted) existing.encrypted = nft.encrypted;
           if (nft.watermarked && !existing.watermarked) existing.watermarked = nft.watermarked;
           if (nft.license && !existing.license) existing.license = nft.license;
-          if (nft.storageType && !existing.storageType) existing.storageType = nft.storageType;
+          if (nft.storageType && (!existing.storageType || existing.storageType === 'ipfs')) existing.storageType = nft.storageType;
           if (nft.encrypted && nft.imageUrl && !existing.encryptionData?.wrappedKey) {
             // Don't overwrite imageUrl if existing already has encryption keys
           } else if (nft.encrypted && nft.imageUrl) {
@@ -4046,7 +4155,7 @@ function showMainWindow() {
                   if (stored.encrypted && !nft.encrypted) nft.encrypted = stored.encrypted;
                   if (stored.watermarked && !nft.watermarked) nft.watermarked = stored.watermarked;
                   if (stored.license && !nft.license) nft.license = stored.license;
-                  if (stored.storageType && !nft.storageType) nft.storageType = stored.storageType;
+                  if (stored.storageType && (!nft.storageType || nft.storageType === 'ipfs' || nft.storageType === 'unknown')) nft.storageType = stored.storageType;
                   if (stored.encrypted && stored.imageUrl) {
                     nft.imageUrl = stored.imageUrl;
                     if (!nft.cachedPath) nft.image = stored.imageUrl;
@@ -4102,10 +4211,14 @@ function showMainWindow() {
         const empty = document.getElementById('nft-empty');
 
         if (!nftWalletAddress) {
-          grid.innerHTML = '';
+          grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#888;">' +
+            '<div style="font-size:32px;margin-bottom:8px;">🖼️</div>' +
+            '<div style="font-weight:600;color:#fff;margin-bottom:4px;">Connect Wallet</div>' +
+            '<div style="font-size:12px;margin-bottom:16px;">Connect your Solana wallet to view your NFTs</div>' +
+            '<button onclick="connectNFTWallet()" style="padding:10px 20px;border-radius:8px;border:1px solid #9945FF;background:transparent;color:#9945FF;cursor:pointer;font-size:13px;font-weight:600;">Connect Phantom</button>' +
+            '</div>';
           loading.style.display = 'none';
-          empty.innerHTML = '<span>Connect wallet to view NFTs</span><button onclick="connectNFTWallet()" style="margin-top:8px;padding:8px 16px;border-radius:8px;border:1px solid #9945FF;background:transparent;color:#9945FF;cursor:pointer;">Connect Wallet</button>';
-          empty.style.display = 'flex';
+          empty.style.display = 'none';
           return;
         }
 
@@ -4167,7 +4280,7 @@ function showMainWindow() {
                 if (stored.encrypted && !nft.encrypted) nft.encrypted = stored.encrypted;
                 if (stored.watermarked && !nft.watermarked) nft.watermarked = stored.watermarked;
                 if (stored.license && !nft.license) nft.license = stored.license;
-                if (stored.storageType && !nft.storageType) nft.storageType = stored.storageType;
+                if (stored.storageType && (!nft.storageType || nft.storageType === 'ipfs')) nft.storageType = stored.storageType;
                 // For encrypted NFTs: DAS imageUrl is a proxied URL that can't be decrypted.
                 // Use the original upload URL from local storage (Pinata/StealthCloud) instead.
                 if (stored.encrypted && stored.imageUrl) {
@@ -4362,28 +4475,34 @@ function showMainWindow() {
         })();
         }
       } else {
-        // Use IPFS gateway rotation for IPFS URLs (Pinata returns 403)
         const detailCid = extractIPFSCid(imageUrl);
-        const detailGateways = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
         if (detailCid) {
-          let gIdx = 0;
-          const tryGateway = () => {
-            imgEl.src = detailGateways[gIdx] + detailCid;
-          };
-          imgEl.onerror = () => {
-            gIdx++;
-            if (gIdx < detailGateways.length) {
-              console.log('[NFT Detail] Gateway', gIdx + 1, 'for', detailCid.slice(0, 8));
-              tryGateway();
-            } else {
-              imgEl.style.opacity = '0.3';
-            }
-          };
-          tryGateway();
+          // Fetch IPFS image via IPC (Node.js follows redirects, no browser rate-limit)
+          imgEl.src = '';
+          imgEl.style.opacity = '0.3';
+          if (_ipfsCache[detailCid]) {
+            imgEl.src = _ipfsCache[detailCid];
+            imgEl.style.opacity = '1';
+          } else {
+            (async () => {
+              try {
+                const result = await ipcRenderer.invoke('fetch-ipfs-image', { cid: detailCid });
+                if (result && result.success && result.dataUrl) {
+                  _ipfsCache[detailCid] = result.dataUrl;
+                  imgEl.src = result.dataUrl;
+                  imgEl.style.opacity = '1';
+                } else {
+                  imgEl.style.opacity = '0.3';
+                }
+              } catch (e) {
+                imgEl.style.opacity = '0.3';
+              }
+            })();
+          }
         } else {
           imgEl.src = imageUrl;
+          imgEl.style.opacity = '1';
         }
-        imgEl.style.opacity = '1';
       }
       
       imageContainer.className = 'nft-detail-image ' + (isCompressed ? 'compressed' : 'standard');
@@ -4408,7 +4527,7 @@ function showMainWindow() {
         }
         // Storage chip
         const rawImageUrl = (nft && (nft.imageUrl || nft.image)) ? String(nft.imageUrl || nft.image) : '';
-        const _allUrls = rawImageUrl + (nft.thumbnailUrl || '') + (nft.arweaveUrl || '');
+        const _allUrls = rawImageUrl + (nft.arweaveUrl || '');
         const storageLabel = nft.storageType ? (nft.storageType === 'cloud' ? 'StealthCloud' : nft.storageType === 'arweave' ? 'Arweave' : nft.storageType === 'onchain' ? 'On-Chain' : 'IPFS') : (isStealthCloudUrl(_allUrls) ? 'StealthCloud' : _allUrls.includes('arweave.net') || _allUrls.includes('akrd.net') ? 'Arweave' : 'IPFS');
         badgeRow.innerHTML += '<div class="nft-chip storage">' + storageLabel + '</div>';
         // Encrypted badge
@@ -4436,7 +4555,7 @@ function showMainWindow() {
       }
 
       const rawImageUrl = (nft && (nft.imageUrl || nft.image)) ? String(nft.imageUrl || nft.image) : '';
-      const _allUrls2 = rawImageUrl + (nft.thumbnailUrl || '') + (nft.arweaveUrl || '');
+      const _allUrls2 = rawImageUrl + (nft.arweaveUrl || '');
       const storageLabel = nft.storageType ? (nft.storageType === 'cloud' ? 'StealthCloud' : nft.storageType === 'arweave' ? 'Arweave' : nft.storageType === 'onchain' ? 'On-Chain' : 'IPFS') : (isStealthCloudUrl(_allUrls2) ? 'StealthCloud' : _allUrls2.includes('arweave.net') || _allUrls2.includes('akrd.net') ? 'Arweave' : 'IPFS');
 
       const ownerFull = document.getElementById('nft-detail-owner-full');
@@ -4610,7 +4729,7 @@ function showMainWindow() {
       const isCompressed = currentDetailNFT.isCompressed === true;
 
       const rawImageUrl = (currentDetailNFT && (currentDetailNFT.imageUrl || currentDetailNFT.image)) ? String(currentDetailNFT.imageUrl || currentDetailNFT.image) : '';
-      const _allUrls3 = rawImageUrl + (currentDetailNFT.thumbnailUrl || '') + (currentDetailNFT.arweaveUrl || '');
+      const _allUrls3 = rawImageUrl + (currentDetailNFT.arweaveUrl || '');
       const isCloud = currentDetailNFT.storageType === 'cloud' || (!currentDetailNFT.storageType && isStealthCloudUrl(_allUrls3));
       const isArweave = currentDetailNFT.storageType === 'arweave' || rawImageUrl.includes('akrd.net') || rawImageUrl.includes('arweave.net');
       const isOnChain = currentDetailNFT.storageType === 'onchain' || rawImageUrl.startsWith('data:');
@@ -5059,11 +5178,65 @@ function showMainWindow() {
       _decryptRunning = false;
     }
 
+    // IPFS fetch queue: fetch images via IPC (Node.js main process) to avoid browser rate-limits.
+    // Concurrency of 3 to avoid flooding gateways.
+    const _ipfsCache = {};
+    const _ipfsQueue = [];
+    let _ipfsActive = 0;
+    const IPFS_CONCURRENCY = 3;
+    function enqueueIPFSFetch(cid, img, spinner) {
+      if (_ipfsCache[cid]) {
+        img.src = _ipfsCache[cid];
+        img.style.opacity = '1';
+        img.dataset.loaded = '1';
+        if (spinner) spinner.style.display = 'none';
+        return;
+      }
+      _ipfsQueue.push({ cid, img, spinner });
+      _drainIPFSQueue();
+    }
+    async function _drainIPFSQueue() {
+      while (_ipfsActive < IPFS_CONCURRENCY && _ipfsQueue.length > 0) {
+        _ipfsActive++;
+        const { cid, img, spinner } = _ipfsQueue.shift();
+        (async () => {
+          try {
+            if (_ipfsCache[cid]) {
+              img.src = _ipfsCache[cid];
+              img.style.opacity = '1';
+              img.dataset.loaded = '1';
+              if (spinner) spinner.style.display = 'none';
+              return;
+            }
+            const result = await ipcRenderer.invoke('fetch-ipfs-image', { cid });
+            if (result && result.success && result.dataUrl) {
+              _ipfsCache[cid] = result.dataUrl;
+              img.src = result.dataUrl;
+              img.style.opacity = '1';
+              img.dataset.loaded = '1';
+              if (spinner) spinner.style.display = 'none';
+            } else {
+              img.style.opacity = '0.3';
+              if (spinner) spinner.style.display = 'none';
+            }
+          } catch (e) {
+            img.style.opacity = '0.3';
+            if (spinner) spinner.style.display = 'none';
+          } finally {
+            _ipfsActive--;
+            _drainIPFSQueue();
+          }
+        })();
+      }
+    }
+
     function renderNFTPage() {
+      updateQsNfts(allNFTs.length);
       const grid = document.getElementById('nft-grid');
       grid.innerHTML = '';
-      // Clear any pending decrypt tasks from previous page
+      // Clear any pending tasks from previous page
       _decryptQueue.length = 0;
+      _ipfsQueue.length = 0;
       
       const startIdx = nftPageIndex * NFT_PAGE_SIZE;
       const batch = allNFTs.slice(startIdx, startIdx + NFT_PAGE_SIZE);
@@ -5108,6 +5281,7 @@ function showMainWindow() {
         // Use cached local file if available, otherwise use IPFS gateway
         let primaryUrl = imageUrl;
         const isDataUri = imageUrl.startsWith('data:');
+        let ipfsCidForQueue = null;
         if (isCached) {
           // Local file path - use file:// protocol
           primaryUrl = 'file://' + imageUrl;
@@ -5118,15 +5292,16 @@ function showMainWindow() {
         } else {
           const cid = extractIPFSCid(imageUrl);
           if (cid) {
-            const gateways = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
-            primaryUrl = gateways[0] + cid;
+            // Use IPC fetch queue to avoid browser rate-limits on IPFS gateways
+            ipfsCidForQueue = cid;
+            primaryUrl = TRANSPARENT_PIXEL;
           }
-          console.log('[NFT Album] Loading', nftName, (isCompressed ? '(cNFT)' : ''), ':', primaryUrl.slice(0, 50) + '...');
+          console.log('[NFT Album] Loading', nftName, (isCompressed ? '(cNFT)' : ''), ipfsCidForQueue ? '(IPC)' : '', ':', (ipfsCidForQueue || primaryUrl).slice(0, 50) + '...');
         }
         
         // Build inline badge pills for bottom overlay (matches mobile Solana style)
         const rawImg = (nft.imageUrl || nft.image || '');
-        const stType = nft.storageType || (rawImg.startsWith('data:') ? 'onchain' : rawImg.includes('stealthlynk.io') ? 'cloud' : (rawImg.includes('akrd.net') || rawImg.includes('arweave.net')) ? 'arweave' : 'ipfs');
+        const stType = nft.storageType || (rawImg.startsWith('data:') ? 'onchain' : (rawImg.includes('stealthlynk.io') || rawImg.includes('stealthcloud')) ? 'cloud' : (rawImg.includes('akrd.net') || rawImg.includes('arweave.net')) ? 'arweave' : 'ipfs');
         let badgeRow = '<div class="nft-badge-row">';
         // Edition badge
         if (nft.edition === 'limited') {
@@ -5176,9 +5351,12 @@ function showMainWindow() {
           img.onerror = () => { clearNFTImageTimeout(img); handleNFTImageError(img, false); };
           // Encrypted thumbnails are decrypted manually; don't start network timeout/fallback loop.
           // Skip timeout for cached images - they load instantly
-          if (!isCached && !hasEncKeys) scheduleNFTImageTimeout(img);
+          if (!isCached && !hasEncKeys && !ipfsCidForQueue) scheduleNFTImageTimeout(img);
 
-          if (hasEncKeys) {
+          if (ipfsCidForQueue && !hasEncKeys) {
+            // IPFS images: fetch via IPC (Node.js main process) to avoid browser rate-limits
+            enqueueIPFSFetch(ipfsCidForQueue, img, spinner);
+          } else if (hasEncKeys) {
             // Use decrypt queue to serialize — prevents 429 rate limits from concurrent downloads
             const cacheKey = nft.thumbnailUrl || originalUrl || nft.mintAddress;
             // Check decrypt cache first
@@ -6015,6 +6193,29 @@ ipcMain.handle('get-nft-by-mint', async (event, mintAddress) => {
   return await nftDesktop.getNFTByMintAddress(mintAddress);
 });
 
+ipcMain.handle('fetch-ipfs-image', async (event, { cid }) => {
+  const gateways = [
+    'https://ipfs.io/ipfs/',
+    'https://gateway.pinata.cloud/ipfs/',
+    'https://w3s.link/ipfs/',
+    'https://dweb.link/ipfs/',
+  ];
+  for (const gw of gateways) {
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 15000);
+      const resp = await fetch(gw + cid, { signal: controller.signal, redirect: 'follow' });
+      clearTimeout(t);
+      if (resp.ok) {
+        const buf = Buffer.from(await resp.arrayBuffer());
+        const ct = resp.headers.get('content-type') || 'image/jpeg';
+        return { success: true, dataUrl: `data:${ct};base64,${buf.toString('base64')}` };
+      }
+    } catch (e) { /* next gateway */ }
+  }
+  return { success: false, error: 'All gateways failed' };
+});
+
 ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encryptionData }) => {
   try {
     if (!encryptionData || !encryptionData.wrappedKey) {
@@ -6348,12 +6549,21 @@ ipcMain.handle('get-certificates', async () => {
           if (lc.id) localById[lc.id] = lc;
           if (lc.mintAddress) localByMint[lc.mintAddress] = lc;
         }
-        // Enrich server certs with fields that were stripped before sync
+        // Enrich server certs with ALL fields from local (local has enrichment data that was stripped before sync)
         for (const sc of serverCerts) {
           const lc = (sc.id ? localById[sc.id] : null) || (sc.mintAddress ? localByMint[sc.mintAddress] : null);
           if (!lc) continue;
           if (lc.rfc3161Token && !sc.rfc3161Token) sc.rfc3161Token = lc.rfc3161Token;
           if (lc.c2paManifest && !sc.c2paManifest) sc.c2paManifest = lc.c2paManifest;
+          if (lc.hasRfc3161 && !sc.hasRfc3161) sc.hasRfc3161 = true;
+          if (lc.hasC2pa && !sc.hasC2pa) sc.hasC2pa = true;
+          if (lc.encrypted && !sc.encrypted) sc.encrypted = true;
+          if (lc.watermarked && !sc.watermarked) sc.watermarked = true;
+          if (lc.license && !sc.license) sc.license = lc.license;
+          if (lc.storageType && !sc.storageType) sc.storageType = lc.storageType;
+          if (lc.contentHash && !sc.contentHash) sc.contentHash = lc.contentHash;
+          if (lc.exifHash && !sc.exifHash) sc.exifHash = lc.exifHash;
+          if (lc.cameraHash && !sc.cameraHash) sc.cameraHash = lc.cameraHash;
         }
         const serverIds = new Set(serverCerts.map(c => c.id));
         const serverMints = new Set(serverCerts.map(c => c.mintAddress).filter(Boolean));

@@ -110,11 +110,14 @@
     const imageUrl = params.get('imageUrl') || '';
     const nftType = params.get('nftType') || 'compressed';
     const reference = params.get('reference') || '';
+    const estimatedTotalUsd = parseFloat(params.get('estimatedTotalUsd')) || 0;
+    const estimatedTotalSol = parseFloat(params.get('estimatedTotalSol')) || 0;
+    const solPrice = parseFloat(params.get('solPrice')) || 200;
 
     document.getElementById('nft-name').textContent = name;
     document.getElementById('nft-type').textContent = nftType === 'compressed' ? 'Compressed NFT (cNFT)' : 'Standard NFT';
-    document.getElementById('amount-sol').textContent = amount.toFixed(6) + ' SOL';
-    document.getElementById('amount-usd').textContent = '≈ $' + (amount * 200).toFixed(2) + ' USD';
+    document.getElementById('amount-sol').textContent = (estimatedTotalSol || amount).toFixed(6) + ' SOL';
+    document.getElementById('amount-usd').textContent = '≈ $' + (estimatedTotalUsd || (amount * solPrice)).toFixed(2) + ' USD';
     document.getElementById('recipient').textContent = recipient ? recipient.slice(0,4) + '...' + recipient.slice(-4) : '...';
     if (imageUrl) document.getElementById('nft-image').src = imageUrl;
 

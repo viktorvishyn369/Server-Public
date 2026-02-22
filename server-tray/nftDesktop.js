@@ -12,7 +12,7 @@ const http = require('http');
 const os = require('os');
 
 // App version for C2PA claim_generator — read from package.json so it stays in sync
-let APP_VERSION = '1.5.8';
+let APP_VERSION = '2.0.0';
 try { APP_VERSION = require('./package.json').version || APP_VERSION; } catch (_) {}
 
 // Sharp for EXIF stripping (optional - best effort)
@@ -257,12 +257,12 @@ function getCurrentFees() {
 }
 
 /**
- * Limited Edition fee: 0.5% of file size in KB, floored, minimum $1.
- * e.g. 1500 KB → $7, 500 KB → $2, 100 KB → $1 (minimum)
+ * Limited Edition fee: 0.1% of file size in KB, floored, minimum $1.
+ * e.g. 5000 KB → $5, 1500 KB → $1, 500 KB → $1 (minimum)
  */
 function computeLimitedEditionFee(fileSizeBytes) {
   const sizeKb = (fileSizeBytes || 0) / 1024;
-  const fee = Math.floor(sizeKb * 0.005);
+  const fee = Math.floor(sizeKb * 0.001);
   return Math.max(fee, 1);
 }
 
@@ -1383,6 +1383,7 @@ function buildNFTMetadata({
       { trait_type: 'Proof Type', value: isLimited ? 'Copyright Certificate' : 'Photo Ownership' },
       ...(isLimited && tsaToken ? [{ trait_type: 'RFC 3161 Timestamp', value: 'FreeTSA.org' }] : []),
       ...(isLimited && c2paManifest ? [{ trait_type: 'C2PA Provenance', value: 'Included' }] : []),
+      { trait_type: 'Storage', value: storageOption === 'cloud' ? 'StealthCloud' : storageOption === 'arweave' ? 'Arweave' : storageOption === 'onchain' ? 'Embedded SVG' : 'IPFS' },
       { trait_type: 'Minted With', value: 'PhotoLynk' },
       { trait_type: 'Platform', value: 'PhotoLynk Desktop' },
     ],
@@ -1390,7 +1391,7 @@ function buildNFTMetadata({
       category: 'image',
       files: [{ uri: imageUrl, type: encrypted ? 'application/octet-stream' : storageOption === 'onchain' ? 'image/svg+xml' : 'image/jpeg' }],
       creators: [{ address: creatorAddress || ownerAddress, share: 100 }],
-      ...(encrypted ? { encryption: { method: 'NaCl-secretbox', encrypted: true, ...(encryptionData ? { wrappedKey: encryptionData.wrappedKey, wrapNonce: encryptionData.wrapNonce, nonce: encryptionData.nonce } : {}) } } : {}),
+      ...(encrypted ? { encryption: { method: 'NaCl-secretbox', encrypted: true, ...(encryptionData ? { wrappedKey: encryptionData.wrappedKey, wrapNonce: encryptionData.wrapNonce, nonce: encryptionData.nonce, ...(encryptionData.thumbnailNonce ? { thumbnailNonce: encryptionData.thumbnailNonce } : {}), ...(encryptionData.thumbnailUrl ? { thumbnailUrl: encryptionData.thumbnailUrl } : {}) } : {}) } } : {}),
       ...(isLimited ? {
         certificate: {
           version: 2,
@@ -1630,7 +1631,7 @@ async function mintNFT(params, onProgress) {
       return { success: false, error: 'Image upload failed: ' + imageUpload.error };
     }
     
-    const imageUrl = imageUpload.imageUrl || imageUpload.arweaveUrl || imageUpload.gatewayUrl;
+    let imageUrl = imageUpload.imageUrl || imageUpload.arweaveUrl || imageUpload.gatewayUrl;
     console.log('[NFT] Image uploaded:', imageUrl);
     
     // Generate and upload gallery thumbnail to StealthCloud
@@ -1658,6 +1659,7 @@ async function mintNFT(params, onProgress) {
             if (thumbUpload.success) {
               thumbnailUrl = thumbUpload.imageUrl;
               encryptionData.thumbnailNonce = Buffer.from(thumbNonce).toString('base64');
+              encryptionData.thumbnailUrl = thumbnailUrl;
               console.log('[NFT] Encrypted thumbnail stored:', thumbnailUrl);
             }
           }
@@ -1724,6 +1726,15 @@ async function mintNFT(params, onProgress) {
     }
     
     console.log('[NFT] Metadata uploaded:', metadataUpload.arweaveUrl || metadataUpload.gatewayUrl);
+    
+    // Free large data URI from memory — metadata is now on IPFS, transaction only needs the URL.
+    // For on-chain NFTs the data URI can be multi-MB base64; replace with thumbnailUrl for gallery display.
+    // (matches mobile nftOperations.js line 3252-3257)
+    if (storageOption === 'onchain' && imageUrl && imageUrl.startsWith('data:')) {
+      const replacement = thumbnailUrl || metadataUpload.arweaveUrl || metadataUpload.gatewayUrl;
+      console.log('[NFT] Replacing on-chain data URI imageUrl with:', replacement?.slice(0, 80));
+      imageUrl = replacement;
+    }
     
     // Step 4: Calculate fee and open wallet for payment
     onProgress?.({ status: 'Opening wallet...' });
@@ -1951,7 +1962,8 @@ async function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
                 const encrypted = encryptedFromAttr || encryptedFromProps;
                 const imgUrl = metadataJson.image || '';
                 const encProps = (metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
-                const storageType = (imgUrl.includes('stealthlynk.io') || imgUrl.includes('stealthcloud')) ? 'cloud' : imgUrl.startsWith('data:') ? 'onchain' : (imgUrl.includes('akrd.net') || imgUrl.includes('arweave.net')) ? 'arweave' : 'ipfs';
+                const storageAttr = getAttr('Storage');
+                const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imgUrl.includes('stealthlynk.io') || imgUrl.includes('stealthcloud')) ? 'cloud' : imgUrl.startsWith('data:') ? 'onchain' : (imgUrl.includes('akrd.net') || imgUrl.includes('arweave.net')) ? 'arweave' : 'ipfs';
                 return {
                   mintAddress,
                   assetId: mintAddress,
@@ -1967,7 +1979,8 @@ async function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
                   watermarked: getAttr('Watermarked') === 'true',
                   license: getAttr('License') || null,
                   storageType,
-                  encryptionData: (encProps.wrappedKey) ? encProps : null,
+                  encryptionData: (encProps.wrappedKey) ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, nonce: encProps.nonce, ...(encProps.thumbnailNonce ? { thumbnailNonce: encProps.thumbnailNonce } : {}), ...(encProps.thumbnailUrl ? { thumbnailUrl: encProps.thumbnailUrl } : {}) } : null,
+                  thumbnailUrl: encProps.thumbnailUrl || null,
                   attributes: attrs,
                   source: 'rpc',
                 };
@@ -2156,13 +2169,13 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
     let metadataJson = null;
     const dasAttrs = item.content?.metadata?.attributes || [];
     let metadataFetchFailed = false;
-    // Check if DAS attributes already hint this is encrypted (need metadata for keys)
-    const dasEncryptedHint = dasAttrs.some(a => a.trait_type === 'Encrypted' && a.value === 'true');
     if (metadataUrl) {
-      if (!cachedImagePath && !imageUrl) {
-        metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
-        if (metadataJson) {
-          imageUrl = metadataJson.image || '';
+      // Always fetch full metadata — it contains encryption keys, Storage attribute,
+      // and other critical cross-device data that DAS doesn't inline
+      metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
+      if (metadataJson) {
+        if (!imageUrl && metadataJson.image) {
+          imageUrl = metadataJson.image;
           if (imageUrl.startsWith('ipfs://')) imageUrl = 'https://ipfs.io/ipfs/' + imageUrl.slice(7);
           cid = extractCacheKey(imageUrl);
           if (metadataCid && cid) cacheMetadataMapping(metadataCid, cid);
@@ -2170,15 +2183,9 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
             cachedImagePath = getCachedImagePath(cid);
             if (cachedImagePath) console.log('[NFT Cache] Using cached image for', cid.slice(0, 8));
           }
-        } else {
-          metadataFetchFailed = true;
         }
-      } else if (!imageUrl) {
-        metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
-        if (!metadataJson) metadataFetchFailed = true;
-      } else if (dasEncryptedHint && !metadataJson) {
-        // Encrypted NFT with imageUrl from DAS — still need metadata for encryption keys
-        metadataJson = await fetchFullMetadata(metadataUrl, isCompressed);
+      } else {
+        metadataFetchFailed = true;
       }
     }
 
@@ -2220,7 +2227,9 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
         cacheImage(imageUrl, cid, cacheHeaders).catch(() => {});
       }
     }
-    const storageType = (imageUrl && (imageUrl.includes('stealthlynk.io') || imageUrl.includes('stealthcloud'))) ? 'cloud' : (imageUrl && imageUrl.startsWith('data:')) ? 'onchain' : (imageUrl && (imageUrl.includes('akrd.net') || imageUrl.includes('arweave.net'))) ? 'arweave' : 'ipfs';
+    // Read on-chain Storage attribute (authoritative for cross-device detection), fall back to URL-based detection
+    const storageAttr = getAttr('Storage');
+    const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imageUrl && (imageUrl.includes('stealthlynk.io') || imageUrl.includes('stealthcloud'))) ? 'cloud' : (imageUrl && imageUrl.startsWith('data:')) ? 'onchain' : (imageUrl && (imageUrl.includes('akrd.net') || imageUrl.includes('arweave.net'))) ? 'arweave' : 'ipfs';
     return {
       mintAddress: isCompressed ? `cnft_${item.id}` : item.id,
       assetId: item.id,
@@ -2238,8 +2247,9 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       watermarked: watermarked,
       license: license,
       storageType: storageType,
-      // Extract only needed keys (matches mobile); keys come from metadata props or local storage merge
-      encryptionData: encryptedFromKeys ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, nonce: encProps.nonce } : null,
+      // Extract encryption keys + thumbnail info from metadata props (cross-device discovery)
+      encryptionData: encryptedFromKeys ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, nonce: encProps.nonce, ...(encProps.thumbnailNonce ? { thumbnailNonce: encProps.thumbnailNonce } : {}), ...(encProps.thumbnailUrl ? { thumbnailUrl: encProps.thumbnailUrl } : {}) } : null,
+      thumbnailUrl: encProps.thumbnailUrl || null,
       attributes: attrs,
       source: 'das',
     };
@@ -3256,29 +3266,37 @@ async function syncNFTsFromServer(serverUrl, authHeaders) {
     if (serverNFTs.length === 0) return { success: true, nfts: await getStoredNFTs(), merged: 0 };
     
     const localNFTs = await getStoredNFTs();
-    const localMints = new Set(localNFTs.map(n => n.mintAddress));
     let merged = 0;
     
-    const localMap = {};
-    localNFTs.forEach((n, i) => { if (n.mintAddress) localMap[n.mintAddress] = i; });
+    // Build lookup maps by mintAddress AND metadataUrl (cNFT IDs may differ: cnft_tx_<sig> vs cnft_<assetId>)
+    const localByMint = {};
+    const localByMeta = {};
+    localNFTs.forEach((n, i) => {
+      if (n.mintAddress) localByMint[n.mintAddress] = i;
+      if (n.metadataUrl) localByMeta[n.metadataUrl] = i;
+    });
     
     for (const serverNFT of serverNFTs) {
-      if (!localMints.has(serverNFT.mintAddress)) {
+      // Match by mintAddress first, then by metadataUrl (cross-device ID mismatch)
+      let idx = serverNFT.mintAddress ? localByMint[serverNFT.mintAddress] : undefined;
+      if (idx === undefined && serverNFT.metadataUrl) idx = localByMeta[serverNFT.metadataUrl];
+      
+      if (idx === undefined) {
         localNFTs.push(serverNFT);
+        if (serverNFT.mintAddress) localByMint[serverNFT.mintAddress] = localNFTs.length - 1;
+        if (serverNFT.metadataUrl) localByMeta[serverNFT.metadataUrl] = localNFTs.length - 1;
         merged++;
       } else {
         // Merge missing fields from server into local (cross-platform encryptionData, edition, etc.)
-        const idx = localMap[serverNFT.mintAddress];
-        if (idx !== undefined) {
-          const local = localNFTs[idx];
-          if (serverNFT.encryptionData && !local.encryptionData) { local.encryptionData = serverNFT.encryptionData; merged++; }
-          if (serverNFT.thumbnailUrl && !local.thumbnailUrl) { local.thumbnailUrl = serverNFT.thumbnailUrl; merged++; }
-          if (serverNFT.edition && !local.edition) { local.edition = serverNFT.edition; merged++; }
-          if (serverNFT.encrypted && !local.encrypted) { local.encrypted = serverNFT.encrypted; merged++; }
-          if (serverNFT.watermarked && !local.watermarked) { local.watermarked = serverNFT.watermarked; merged++; }
-          if (serverNFT.license && !local.license) { local.license = serverNFT.license; merged++; }
-          if (serverNFT.storageType && !local.storageType) { local.storageType = serverNFT.storageType; merged++; }
-        }
+        const local = localNFTs[idx];
+        // Always overwrite encryptionData and thumbnailUrl — critical for cross-device encrypted NFTs
+        if (serverNFT.encryptionData && !local.encryptionData) { local.encryptionData = serverNFT.encryptionData; merged++; }
+        if (serverNFT.thumbnailUrl && !local.thumbnailUrl) { local.thumbnailUrl = serverNFT.thumbnailUrl; merged++; }
+        if (serverNFT.edition && !local.edition) { local.edition = serverNFT.edition; merged++; }
+        if (serverNFT.encrypted && !local.encrypted) { local.encrypted = serverNFT.encrypted; merged++; }
+        if (serverNFT.watermarked && !local.watermarked) { local.watermarked = serverNFT.watermarked; merged++; }
+        if (serverNFT.license && !local.license) { local.license = serverNFT.license; merged++; }
+        if (serverNFT.storageType && (!local.storageType || (local.storageType === 'ipfs' && serverNFT.storageType !== 'ipfs'))) { local.storageType = serverNFT.storageType; merged++; }
       }
     }
     
