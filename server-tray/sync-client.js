@@ -775,13 +775,25 @@ class DesktopSyncClient {
       });
       
       // Apply EXIF data from server if available (for images)
+      // ONLY if the file doesn't already have EXIF embedded — Sharp re-encodes the
+      // entire JPEG when writing EXIF, destroying the original file bytes & SHA256.
       const ext = path.extname(filename).toLowerCase();
       const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif', '.gif', '.bmp', '.raw', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.pef', '.srw', '.raf', '.psd', '.psb', '.exr', '.hdr', '.avif'].includes(ext);
       if (isImage && decryptedManifest.fileHash) {
         try {
-          const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, decryptedManifest.fileHash);
-          if (exifData) {
-            await writeExifToFile(filePath, exifData);
+          // Check if file already has EXIF before overwriting
+          let hasExif = false;
+          try {
+            const meta = await sharp(filePath).metadata();
+            if (meta.exif && meta.exif.length > 0) hasExif = true;
+          } catch (_) {}
+          if (!hasExif) {
+            const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, decryptedManifest.fileHash);
+            if (exifData) {
+              await writeExifToFile(filePath, exifData);
+            }
+          } else {
+            console.log(`[EXIF] File already has EXIF, skipping re-write: ${filename}`);
           }
         } catch (exifErr) {
           // Non-critical - don't fail download if EXIF write fails
@@ -873,13 +885,25 @@ class DesktopSyncClient {
       console.log(`[SYNC] Downloaded: ${filename}`);
       
       // Apply EXIF data from server if available (for images)
+      // ONLY if the file doesn't already have EXIF embedded — Sharp re-encodes the
+      // entire JPEG when writing EXIF, destroying the original file bytes & SHA256.
       const ext = path.extname(filename).toLowerCase();
       const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.heic', '.heif', '.gif', '.bmp', '.raw', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.pef', '.srw', '.raf', '.psd', '.psb', '.exr', '.hdr', '.avif'].includes(ext);
       if (isImage && file.fileHash) {
         try {
-          const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, file.fileHash);
-          if (exifData) {
-            await writeExifToFile(destPath, exifData);
+          // Check if file already has EXIF before overwriting
+          let hasExif = false;
+          try {
+            const meta = await sharp(destPath).metadata();
+            if (meta.exif && meta.exif.length > 0) hasExif = true;
+          } catch (_) {}
+          if (!hasExif) {
+            const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, file.fileHash);
+            if (exifData) {
+              await writeExifToFile(destPath, exifData);
+            }
+          } else {
+            console.log(`[EXIF] File already has EXIF, skipping re-write: ${filename}`);
           }
         } catch (exifErr) {
           // Non-critical - don't fail download if EXIF write fails
