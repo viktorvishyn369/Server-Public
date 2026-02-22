@@ -247,15 +247,22 @@ async function writeExifWithExiftool(filePath, exifData) {
 async function writeExifToFile(filePath, exifData) {
   if (!exifData || !filePath) return false;
   
+  // Always prefer exiftool — it writes EXIF in-place without re-encoding pixel data.
+  // Sharp re-encodes the entire JPEG with default quality (~80), halving file size.
+  // Only fall back to Sharp if exiftool is unavailable.
+  const etResult = await writeExifWithExiftool(filePath, exifData);
+  if (etResult) return true;
+  
   const ext = path.extname(filePath).toLowerCase();
-  // Sharp can fully write EXIF to JPEG and TIFF only
+  // Sharp can fully write EXIF to JPEG and TIFF only (but re-encodes!)
   const sharpWriteFormats = ['.jpg', '.jpeg', '.tiff', '.tif'];
   
   if (!sharpWriteFormats.includes(ext)) {
-    // HEIC, RAW, PNG, WebP, AVIF, etc — Sharp can't inject new EXIF, use exiftool
-    return writeExifWithExiftool(filePath, exifData);
+    return false; // exiftool failed and Sharp can't handle this format
   }
   
+  // Fallback: Sharp (re-encodes, but better than no EXIF)
+  console.log(`[EXIF] exiftool unavailable, falling back to Sharp for ${path.basename(filePath)}`);
   try {
     // Read the image
     const imageBuffer = fs.readFileSync(filePath);
