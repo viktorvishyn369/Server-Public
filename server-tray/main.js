@@ -1410,9 +1410,16 @@ function showMainWindow() {
     .nft-album-content { flex: 1; overflow: hidden; padding: 12px 16px; display: flex; flex-direction: column; }
     .nft-refresh-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 16px; }
     .nft-refresh-btn:hover { background: rgba(255,255,255,0.05); color: #9945FF; border-color: #9945FF; }
+    .nft-search-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .nft-search-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text-primary); font-size: 13px; outline: none; }
+    .nft-search-input::placeholder { color: var(--text-muted); }
+    .nft-search-input:focus { border-color: #9945FF; }
+    .nft-search-clear { width: 24px; height: 24px; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; display: none; padding: 0; }
+    .nft-search-clear:hover { color: var(--text-primary); }
+    .nft-search-results { font-size: 11px; color: var(--text-muted); padding: 4px 16px 0; display: none; }
     .nft-close-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
     .nft-close-btn:hover { background: rgba(255,255,255,0.05); color: #ff4444; border-color: #ff4444; }
-    .nft-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; flex: 1; overflow-y: auto; align-content: start; }
+    .nft-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; flex: 1; overflow-y: auto; align-content: start; }
     .nft-item { aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--bg-card); border: 1px solid var(--border); cursor: pointer; position: relative; transition: all 0.2s; }
     .nft-item.standard { box-shadow: 0 4px 12px rgba(153,69,255,0.3), 0 0 0 1px rgba(153,69,255,0.2); } /* Purple shadow for standard NFTs */
     .nft-item.compressed { box-shadow: 0 4px 12px rgba(20,241,149,0.2), 0 0 0 1px rgba(20,241,149,0.15); } /* Green shadow for compressed NFTs */
@@ -1776,6 +1783,12 @@ function showMainWindow() {
           <span class="nft-album-title">NFT Collection</span>
           <button class="nft-refresh-btn" onclick="refreshNFTAlbum()">↻</button>
         </div>
+        <div class="nft-search-bar">
+          <span style="color:var(--text-secondary);font-size:14px;">🔍</span>
+          <input id="nft-search-input" class="nft-search-input" type="text" placeholder="Search memories..." oninput="onNFTSearchInput(this.value)">
+          <button id="nft-search-clear" class="nft-search-clear" onclick="clearNFTSearch()">✕</button>
+        </div>
+        <div id="nft-search-results" class="nft-search-results"></div>
         <div class="nft-album-content">
           <div id="nft-grid" class="nft-grid"></div>
           <div id="nft-loading" class="nft-loading" style="display: none;">
@@ -3269,9 +3282,10 @@ function showMainWindow() {
       const popup = document.createElement('div');
       popup.style.cssText = 'background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border:1px solid #14F195;border-radius:20px;padding:24px;max-width:400px;width:100%;text-align:center;box-shadow:0 0 60px rgba(20,241,149,0.3);';
       
-      const solAmount = data.amount ? data.amount.toFixed(6) : '0';
-      const _solPrice = (lastNftEstimate && lastNftEstimate.solPrice) ? Number(lastNftEstimate.solPrice) : 200;
-      const usdAmount = data.amount ? (data.amount * _solPrice).toFixed(2) : '0';
+      const _totalSol = data.estimatedTotalSol || (lastNftEstimate && lastNftEstimate.total ? lastNftEstimate.total.sol : null) || data.amount || 0;
+      const _totalUsd = data.estimatedTotalUsd || (lastNftEstimate && lastNftEstimate.total ? lastNftEstimate.total.usd : null) || 0;
+      const solAmount = _totalSol ? _totalSol.toFixed(6) : '0';
+      const usdAmount = _totalUsd ? _totalUsd.toFixed(2) : '0';
       
       var nftTypeLabel = data.nftType === 'compressed' ? 'Compressed NFT (cNFT)' : 'Standard NFT';
       var imageHtml = data.imageUrl ? '<img src="' + data.imageUrl + '" onerror="this.style.display=\\\'none\\\'" style="width:120px;height:120px;border-radius:12px;object-fit:cover;margin-bottom:20px;border:2px solid #9945FF;">' : '';
@@ -3429,6 +3443,13 @@ function showMainWindow() {
                       await ipcRenderer.invoke('remove-stored-nft', tempMintAddress);
                       console.log('[NFT] Removed old temp entry:', tempMintAddress);
                     } catch (_) {}
+                    // Update certificate mintAddress from temp tx_ to real cnft_ ID
+                    if (data.edition === 'limited') {
+                      try {
+                        await ipcRenderer.invoke('update-certificate-mint', tempMintAddress, resolvedMintAddress);
+                        console.log('[NFT] Certificate updated with resolved mintAddress:', resolvedMintAddress);
+                      } catch (_) {}
+                    }
                   }
                   // Refresh album again with real ID
                   checkForNewNFTsOnce();
@@ -3448,6 +3469,7 @@ function showMainWindow() {
             window._pendingMintProofData = null;
             console.log('[NFT] Certificate: pendingProof tsaToken?', !!pendingProof?.tsaToken, 'c2pa?', !!pendingProof?.c2paManifest, 'mintTimestamp?', pendingProof?.mintTimestamp);
             await ipcRenderer.invoke('generate-certificate', {
+              forceGenerate: true, // bypass tx_ guard — this is a real post-mint call
               mintAddress: resolvedMintAddress,
               txSignature: data.mintTx || data.paymentTx || null,
               ownerAddress: data.wallet || nftWalletAddress,
@@ -3472,6 +3494,39 @@ function showMainWindow() {
           } catch (certErr) {
             console.warn('[NFT] Certificate generation failed:', certErr.message);
           }
+        }
+
+        // Step 5: Background DAS retry — if mint still has tx_ prefix, keep trying to resolve
+        if (resolvedMintAddress.startsWith('tx_') && isCNFT && nftWalletAddress && (data.metadataUrl || data.mintTx)) {
+          (async () => {
+            console.log('[NFT] Starting background DAS retry for', tempMintAddress);
+            for (let bgAttempt = 0; bgAttempt < 10; bgAttempt++) {
+              await new Promise(r => setTimeout(r, 10000)); // 10s between retries
+              try {
+                const dasRes = await ipcRenderer.invoke('fetch-user-nfts', nftWalletAddress, 1000);
+                if (dasRes && dasRes.success && Array.isArray(dasRes.nfts)) {
+                  const match = dasRes.nfts.find(n =>
+                    (data.metadataUrl && n.metadataUrl && n.metadataUrl === data.metadataUrl) ||
+                    (data.name && n.name && n.name === data.name && n.txSignature === data.mintTx)
+                  );
+                  if (match) {
+                    const realId = String(match.assetId || match.mintAddress || '').replace(/^cnft_/, '');
+                    const newMint = 'cnft_' + realId;
+                    console.log('[NFT] Background DAS resolved:', newMint);
+                    _fetchNFTsInFlight = null;
+                    try { await ipcRenderer.invoke('save-minted-nft', { mintAddress: newMint, assetId: realId, ownerAddress: data.wallet || nftWalletAddress, name: data.name || 'Photo NFT', imageUrl: displayImageUrl, metadataUrl: data.metadataUrl || null, txSignature: data.mintTx || data.paymentTx || null, storageType: data.storageOption || 'ipfs', isCompressed: true, nftType: 'compressed', edition: data.edition || 'open', license: data.license || 'arr', watermarked: data.watermark === 'true', encrypted: data.encrypt === 'true', encryptionData: pendingEncData, thumbnailUrl: savedThumbUrl, createdAt: new Date().toISOString() }); } catch (_) {}
+                    try { await ipcRenderer.invoke('remove-stored-nft', tempMintAddress); } catch (_) {}
+                    if (data.edition === 'limited') {
+                      try { await ipcRenderer.invoke('update-certificate-mint', tempMintAddress, newMint); console.log('[NFT] Background: cert updated to', newMint); } catch (_) {}
+                    }
+                    checkForNewNFTsOnce();
+                    return; // done
+                  }
+                }
+              } catch (_) {}
+            }
+            console.warn('[NFT] Background DAS retry exhausted for', tempMintAddress);
+          })();
         }
       })();
     }
@@ -4058,10 +4113,75 @@ function showMainWindow() {
     }
     
     let allNFTs = [];
+    let nftSearchQuery = '';
     let nftPageIndex = 0;
-    const NFT_PAGE_SIZE = 6; // 2x3 grid
+    const NFT_PAGE_SIZE = 12; // 3x4 grid
     let nftAutoRefreshInterval = null;
     const NFT_AUTO_REFRESH_MS = 60000; // Check for new NFTs every 60 seconds
+
+    function getNFTBadgeTags(nft) {
+      const tags = [];
+      // Edition
+      if (nft.edition === 'limited') tags.push('limited');
+      else if (nft.edition === 'open') tags.push('open');
+      // Compressed vs standard
+      const compressed = nft.isCompressed === true || (nft.mintAddress || '').startsWith('cnft_');
+      if (compressed) { tags.push('compressed', 'cnft'); } else { tags.push('standard'); }
+      // Encrypted
+      if (nft.encrypted) tags.push('encrypted');
+      // Certified — check cachedCerts
+      const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
+      const mint = normMint(nft.mintAddress);
+      if (mint && cachedCerts.some(c => normMint(c.mintAddress) === mint)) tags.push('certified');
+      // Storage type
+      const rawImg = (nft.imageUrl || nft.image || '');
+      const st = nft.storageType || (rawImg.startsWith('data:') ? 'onchain' : (rawImg.includes('stealthlynk.io') || rawImg.includes('stealthcloud')) ? 'cloud' : (rawImg.includes('akrd.net') || rawImg.includes('arweave.net')) ? 'arweave' : 'ipfs');
+      tags.push(st);
+      if (st === 'onchain') tags.push('on-chain');
+      return tags.join(' ');
+    }
+
+    function getFilteredNFTs() {
+      if (!nftSearchQuery.trim()) return allNFTs;
+      const q = nftSearchQuery.toLowerCase();
+      return allNFTs.filter(nft =>
+        (nft.name || '').toLowerCase().includes(q) ||
+        (nft.description || '').toLowerCase().includes(q) ||
+        getNFTBadgeTags(nft).includes(q)
+      );
+    }
+
+    function onNFTSearchInput(value) {
+      nftSearchQuery = value;
+      nftPageIndex = 0;
+      const clearBtn = document.getElementById('nft-search-clear');
+      const resultsEl = document.getElementById('nft-search-results');
+      if (clearBtn) clearBtn.style.display = value.length > 0 ? 'block' : 'none';
+      if (resultsEl) {
+        if (value.length > 0) {
+          const filtered = getFilteredNFTs();
+          resultsEl.textContent = filtered.length + ' result' + (filtered.length !== 1 ? 's' : '') + ' found';
+          resultsEl.style.display = 'block';
+        } else {
+          resultsEl.style.display = 'none';
+        }
+      }
+      renderNFTPage();
+    }
+    window.onNFTSearchInput = onNFTSearchInput;
+
+    function clearNFTSearch() {
+      nftSearchQuery = '';
+      nftPageIndex = 0;
+      const input = document.getElementById('nft-search-input');
+      const clearBtn = document.getElementById('nft-search-clear');
+      const resultsEl = document.getElementById('nft-search-results');
+      if (input) input.value = '';
+      if (clearBtn) clearBtn.style.display = 'none';
+      if (resultsEl) resultsEl.style.display = 'none';
+      renderNFTPage();
+    }
+    window.clearNFTSearch = clearNFTSearch;
 
     function normalizeNFTId(id) {
       if (!id) return id;
@@ -5173,7 +5293,7 @@ function showMainWindow() {
         const task = _decryptQueue.shift();
         try { await task(); } catch (_) {}
         // Small delay between decrypts to avoid rate limits
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 100));
       }
       _decryptRunning = false;
     }
@@ -5183,7 +5303,7 @@ function showMainWindow() {
     const _ipfsCache = {};
     const _ipfsQueue = [];
     let _ipfsActive = 0;
-    const IPFS_CONCURRENCY = 3;
+    const IPFS_CONCURRENCY = 6;
     function enqueueIPFSFetch(cid, img, spinner) {
       if (_ipfsCache[cid]) {
         img.src = _ipfsCache[cid];
@@ -5238,13 +5358,18 @@ function showMainWindow() {
       _decryptQueue.length = 0;
       _ipfsQueue.length = 0;
       
+      const filtered = getFilteredNFTs();
+      // Pre-build index map for O(1) lookup instead of O(n) indexOf per card
+      const _nftIndexMap = new Map();
+      for (let k = 0; k < allNFTs.length; k++) _nftIndexMap.set(allNFTs[k], k);
       const startIdx = nftPageIndex * NFT_PAGE_SIZE;
-      const batch = allNFTs.slice(startIdx, startIdx + NFT_PAGE_SIZE);
+      const batch = filtered.slice(startIdx, startIdx + NFT_PAGE_SIZE);
       
       batch.forEach((nft, i) => {
+        // Map back to allNFTs index for detail/retry
+        const globalIdx = _nftIndexMap.get(nft) ?? -1;
         const item = document.createElement('div');
         const isCompressed = nft.isCompressed === true;
-        const globalIdx = startIdx + i;
         item.className = 'nft-item ' + (isCompressed ? 'compressed' : 'standard');
         item.onclick = () => openNFTDetail(globalIdx);
         // Treat any encrypted NFT with encryptionData as having keys — master key is derived from credentials
@@ -5252,7 +5377,7 @@ function showMainWindow() {
         const isCached = !!nft.cachedPath && !hasEncKeys;
         const imageUrl = isCached ? nft.cachedPath : (nft.image || nft.imageUrl || '');
         const originalUrl = nft.imageUrl || nft.image || '';  // Keep original network URL for fallback
-        const nftName = nft.name || 'NFT #' + (startIdx + i + 1);
+        const nftName = nft.name || 'NFT #' + (globalIdx + 1);
         const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
         // Limited Edition — fall through to normal image loading (app has auth/keys for all storage types)
@@ -5261,7 +5386,7 @@ function showMainWindow() {
         if (!imageUrl) {
           // Show spinner and try to fetch image from metadata URL
           const metadataUrl = nft.metadataUrl || '';
-          const nftIndex = startIdx + i;
+          const nftIndex = globalIdx;
           // Always try to fetch if we have metadata URL (even if previous attempt failed)
           if (metadataUrl) {
             item.innerHTML = '<div class="nft-spinner" style="position:absolute;top:50%;left:50%;margin-left:-12px;margin-top:-12px;"></div><div style="position:absolute;bottom:40px;left:0;right:0;text-align:center;font-size:9px;color:var(--text-muted);">Loading...</div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
@@ -5271,7 +5396,6 @@ function showMainWindow() {
             retryNFTImageFromMetadata(nftIndex, metadataUrl, item, nftName, isCompressed);
           } else {
             // No metadata URL either - show placeholder with retry button
-            const globalIdx = startIdx + i;
             item.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.04);cursor:pointer;" onclick="retrySingleNFT(' + globalIdx + ')"><div style="padding:8px;text-align:center;font-size:10px;color:var(--text-muted);">No image</div><div style="font-size:9px;color:var(--accent);">Tap to retry</div></div><div class="nft-item-overlay"><div class="nft-item-name">' + nftName + '</div></div>';
             grid.appendChild(item);
           }
@@ -5413,14 +5537,15 @@ function showMainWindow() {
       updateNFTNavigation();
       
       // Scroll to show the grid and navigation after content renders
-      setTimeout(() => scrollToNFTGrid(), 300);
+      setTimeout(() => scrollToNFTGrid(), 50);
     }
     
     function updateNFTNavigation() {
       let navContainer = document.getElementById('nft-nav');
       if (!navContainer) return;
       
-      const totalPages = Math.ceil(allNFTs.length / NFT_PAGE_SIZE);
+      const filtered = getFilteredNFTs();
+      const totalPages = Math.ceil(filtered.length / NFT_PAGE_SIZE);
       const currentPage = nftPageIndex + 1;
       const hasPrev = nftPageIndex > 0;
       const hasNext = nftPageIndex < totalPages - 1;
@@ -5443,7 +5568,7 @@ function showMainWindow() {
     }
     
     function nftNextPage() {
-      const totalPages = Math.ceil(allNFTs.length / NFT_PAGE_SIZE);
+      const totalPages = Math.ceil(getFilteredNFTs().length / NFT_PAGE_SIZE);
       if (nftPageIndex < totalPages - 1) {
         nftPageIndex++;
         renderNFTPage();
@@ -6154,6 +6279,31 @@ ipcMain.handle('remove-certificate', async (event, mintAddress) => {
     return { success: true };
   } catch (e) {
     safeConsole('log', '[NFT] Remove cert failed:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('update-certificate-mint', async (event, oldMintAddress, newMintAddress) => {
+  try {
+    const certsPath = nftDesktop.getCertsFilePath();
+    if (!fs.existsSync(certsPath)) return { success: false, error: 'No certs file' };
+    let certs = [];
+    try { certs = JSON.parse(fs.readFileSync(certsPath, 'utf8')); } catch (_) {}
+    let updated = false;
+    for (const cert of certs) {
+      if (cert.mintAddress === oldMintAddress) {
+        cert.mintAddress = newMintAddress;
+        cert.id = `cert_${newMintAddress}`;
+        updated = true;
+      }
+    }
+    if (updated) {
+      fs.writeFileSync(certsPath, JSON.stringify(certs, null, 2));
+      safeConsole('log', '[NFT] Certificate mintAddress updated:', oldMintAddress, '->', newMintAddress);
+    }
+    return { success: true, updated };
+  } catch (e) {
+    safeConsole('log', '[NFT] Update cert mint failed:', e.message);
     return { success: false, error: e.message };
   }
 });

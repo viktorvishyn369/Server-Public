@@ -62,7 +62,8 @@
       "**/node_modules/@ffmpeg-installer/**/*",
       "**/node_modules/libheif-js/**/*",
       "**/node_modules/heic-convert/**/*",
-      "**/node_modules/heic-decode/**/*"
+      "**/node_modules/heic-decode/**/*",
+      "**/node_modules/exiftool-vendored.*/**/*"
     ],
     "directories": {
       "output": "dist"
@@ -122,6 +123,7 @@
     }
   },
   "dependencies": {
+    "@electron/remote": "^2.1.3",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@solana/spl-token": "^0.3.11",
     "@solana/web3.js": "^1.98.4",
@@ -133,6 +135,7 @@
     "exif-reader": "^2.0.3",
     "exifr": "^7.1.3",
     "exifreader": "^4.33.1",
+    "exiftool-vendored": "^35.10.1",
     "express": "^5.2.1",
     "form-data": "^4.0.0",
     "heic-convert": "^2.1.0",

@@ -123,16 +123,137 @@ function isoToExifDateTime(isoDate) {
  * @param {Object} exifData - EXIF data object from server
  * @returns {Promise<boolean>} - true if successful
  */
+/**
+ * Write EXIF to file using exiftool CLI (fallback for formats Sharp can't handle).
+ * Supports HEIC, RAW (CR2/NEF/ARW/DNG/etc), PNG, WebP, AVIF, and more.
+ * @param {string} filePath - Path to the image file
+ * @param {Object} exifData - EXIF data object from server
+ * @returns {boolean} true if successful
+ */
+// Bundled exiftool via exiftool-vendored — works on all platforms without user install
+let _exiftoolInstance = null;
+
+function getExiftool() {
+  if (_exiftoolInstance) return _exiftoolInstance;
+  try {
+    const { ExifTool } = require('exiftool-vendored');
+    _exiftoolInstance = new ExifTool({ maxProcs: 1 });
+    console.log('[EXIF] exiftool-vendored loaded (bundled)');
+    return _exiftoolInstance;
+  } catch (e) {
+    console.warn('[EXIF] exiftool-vendored not available:', e?.message);
+    return null;
+  }
+}
+
+async function writeExifWithExiftool(filePath, exifData) {
+  if (!exifData || !filePath) return false;
+  try {
+    const et = getExiftool();
+    if (!et) return false;
+    
+    // Build write tags object for exiftool-vendored
+    const tags = {};
+    
+    // Core identification
+    if (exifData.captureTime) {
+      const exifTime = isoToExifDateTime(exifData.captureTime);
+      if (exifTime) {
+        tags.DateTimeOriginal = exifTime;
+        tags.CreateDate = exifTime;
+      }
+    }
+    if (exifData.make) tags.Make = exifData.make;
+    if (exifData.model) tags.Model = exifData.model;
+    if (exifData.orientation != null) tags['Orientation#'] = exifData.orientation;
+    
+    // Camera settings
+    if (exifData.exposureTime != null) tags.ExposureTime = exifData.exposureTime;
+    if (exifData.fNumber != null) tags.FNumber = exifData.fNumber;
+    if (exifData.iso != null) tags.ISO = exifData.iso;
+    if (exifData.focalLength != null) tags.FocalLength = exifData.focalLength;
+    if (exifData.focalLengthIn35mm != null) tags.FocalLengthIn35mmFormat = exifData.focalLengthIn35mm;
+    if (exifData.flash != null) tags['Flash#'] = exifData.flash;
+    if (exifData.whiteBalance != null) tags['WhiteBalance#'] = exifData.whiteBalance;
+    if (exifData.meteringMode != null) tags['MeteringMode#'] = exifData.meteringMode;
+    if (exifData.exposureProgram != null) tags['ExposureProgram#'] = exifData.exposureProgram;
+    if (exifData.exposureBias != null) tags.ExposureCompensation = exifData.exposureBias;
+    if (exifData.colorSpace != null) tags['ColorSpace#'] = exifData.colorSpace;
+    
+    // Lens info
+    if (exifData.lensMake) tags.LensMake = exifData.lensMake;
+    if (exifData.lensModel) tags.LensModel = exifData.lensModel;
+    
+    // GPS — exiftool-vendored accepts plain decimals; minor precision loss (~7th decimal)
+    // is acceptable since exifHash uses 4-decimal truncation for round-trip stability
+    if (exifData.gpsLatitude != null && exifData.gpsLongitude != null) {
+      const lat = exifData.gpsLatitude;
+      const lon = exifData.gpsLongitude;
+      tags.GPSLatitude = Math.abs(lat);
+      tags.GPSLatitudeRef = lat >= 0 ? 'N' : 'S';
+      tags.GPSLongitude = Math.abs(lon);
+      tags.GPSLongitudeRef = lon >= 0 ? 'E' : 'W';
+    }
+    if (exifData.gpsAltitude != null) {
+      // Altitude is just meters, no DMS conversion — plain decimal is fine
+      tags.GPSAltitude = Math.abs(exifData.gpsAltitude);
+      tags.GPSAltitudeRef = exifData.gpsAltitude >= 0 ? 'Above Sea Level' : 'Below Sea Level';
+    }
+    
+    // Timezone/subsecond
+    if (exifData.offsetTimeOriginal) tags.OffsetTimeOriginal = exifData.offsetTimeOriginal;
+    if (exifData.subSecTimeOriginal) tags.SubSecTimeOriginal = exifData.subSecTimeOriginal;
+    
+    // Software
+    if (exifData.software) tags.Software = exifData.software;
+    
+    // IPTC fields (professional metadata)
+    if (exifData.iptcCaption) tags['IPTC:Caption-Abstract'] = exifData.iptcCaption;
+    if (exifData.iptcCopyright) tags['IPTC:CopyrightNotice'] = exifData.iptcCopyright;
+    if (exifData.iptcKeywords) {
+      // exiftool accepts array for keywords
+      tags['IPTC:Keywords'] = Array.isArray(exifData.iptcKeywords) ? exifData.iptcKeywords : [exifData.iptcKeywords];
+    }
+    if (exifData.iptcCreator) tags['IPTC:By-line'] = exifData.iptcCreator;
+    if (exifData.iptcTitle) tags['IPTC:ObjectName'] = exifData.iptcTitle;
+    if (exifData.iptcCity) tags['IPTC:City'] = exifData.iptcCity;
+    if (exifData.iptcCountry) tags['IPTC:Country-PrimaryLocationName'] = exifData.iptcCountry;
+    if (exifData.iptcCredit) tags['IPTC:Credit'] = exifData.iptcCredit;
+    if (exifData.iptcSource) tags['IPTC:Source'] = exifData.iptcSource;
+    
+    // XMP fields (Lightroom/editing metadata)
+    if (exifData.xmpRating != null) tags['XMP:Rating'] = exifData.xmpRating;
+    if (exifData.xmpLabel) tags['XMP:Label'] = exifData.xmpLabel;
+    if (exifData.xmpSubject) tags['XMP:Subject'] = exifData.xmpSubject;
+    if (exifData.xmpCreatorTool) tags['XMP:CreatorTool'] = exifData.xmpCreatorTool;
+    if (exifData.xmpRights) tags['XMP:Rights'] = exifData.xmpRights;
+    if (exifData.xmpDescription) tags['XMP:Description'] = exifData.xmpDescription;
+    
+    // Only write if we have actual tags
+    if (Object.keys(tags).length === 0) {
+      console.log(`[EXIF] No EXIF fields to write for ${path.basename(filePath)}`);
+      return false;
+    }
+    
+    await et.write(filePath, tags, ['-overwrite_original', '-ignoreMinorErrors']);
+    console.log(`[EXIF] Applied EXIF via exiftool-vendored to ${path.basename(filePath)}`);
+    return true;
+  } catch (e) {
+    console.warn(`[EXIF] exiftool write failed for ${path.basename(filePath)}:`, e?.message);
+    return false;
+  }
+}
+
 async function writeExifToFile(filePath, exifData) {
   if (!exifData || !filePath) return false;
   
   const ext = path.extname(filePath).toLowerCase();
-  const supportedFormats = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
+  // Sharp can fully write EXIF to JPEG and TIFF only
+  const sharpWriteFormats = ['.jpg', '.jpeg', '.tiff', '.tif'];
   
-  if (!supportedFormats.includes(ext)) {
-    // HEIC and other formats not supported for EXIF writing by Sharp
-    console.log(`[EXIF] Format ${ext} not supported for EXIF writing`);
-    return false;
+  if (!sharpWriteFormats.includes(ext)) {
+    // HEIC, RAW, PNG, WebP, AVIF, etc — Sharp can't inject new EXIF, use exiftool
+    return writeExifWithExiftool(filePath, exifData);
   }
   
   try {
@@ -159,6 +280,22 @@ async function writeExifToFile(filePath, exifData) {
     if (exifData.fNumber != null) exifMeta.FNumber = exifData.fNumber;
     if (exifData.iso != null) exifMeta.ISO = exifData.iso;
     if (exifData.focalLength != null) exifMeta.FocalLength = exifData.focalLength;
+    if (exifData.focalLengthIn35mm != null) exifMeta.FocalLengthIn35mmFilm = exifData.focalLengthIn35mm;
+    if (exifData.flash != null) exifMeta.Flash = exifData.flash;
+    if (exifData.whiteBalance != null) exifMeta.WhiteBalance = exifData.whiteBalance;
+    if (exifData.meteringMode != null) exifMeta.MeteringMode = exifData.meteringMode;
+    if (exifData.exposureProgram != null) exifMeta.ExposureProgram = exifData.exposureProgram;
+    if (exifData.exposureBias != null) exifMeta.ExposureBiasValue = exifData.exposureBias;
+    if (exifData.colorSpace != null) exifMeta.ColorSpace = exifData.colorSpace;
+    
+    // Lens info
+    if (exifData.lensMake) exifMeta.LensMake = String(exifData.lensMake);
+    if (exifData.lensModel) exifMeta.LensModel = String(exifData.lensModel);
+    
+    // GPS
+    if (exifData.gpsLatitude != null) exifMeta.GPSLatitude = exifData.gpsLatitude;
+    if (exifData.gpsLongitude != null) exifMeta.GPSLongitude = exifData.gpsLongitude;
+    if (exifData.gpsAltitude != null) exifMeta.GPSAltitude = exifData.gpsAltitude;
     
     // Timezone offset (EXIF 2.31+)
     if (exifData.offsetTimeOriginal) {
@@ -197,17 +334,46 @@ async function writeExifToFile(filePath, exifData) {
     if (exifMeta.FNumber != null) ifd2.FNumber = String(exifMeta.FNumber);
     if (exifMeta.ISO != null) ifd2.ISO = String(exifMeta.ISO);
     if (exifMeta.FocalLength != null) ifd2.FocalLength = String(exifMeta.FocalLength);
+    if (exifMeta.FocalLengthIn35mmFilm != null) ifd2.FocalLengthIn35mmFilm = String(exifMeta.FocalLengthIn35mmFilm);
+    if (exifMeta.Flash != null) ifd2.Flash = String(exifMeta.Flash);
+    if (exifMeta.WhiteBalance != null) ifd2.WhiteBalance = String(exifMeta.WhiteBalance);
+    if (exifMeta.MeteringMode != null) ifd2.MeteringMode = String(exifMeta.MeteringMode);
+    if (exifMeta.ExposureProgram != null) ifd2.ExposureProgram = String(exifMeta.ExposureProgram);
+    if (exifMeta.ExposureBiasValue != null) ifd2.ExposureBiasValue = String(exifMeta.ExposureBiasValue);
+    if (exifMeta.ColorSpace != null) ifd2.ColorSpace = String(exifMeta.ColorSpace);
+    if (exifMeta.LensMake) ifd2.LensMake = exifMeta.LensMake;
+    if (exifMeta.LensModel) ifd2.LensModel = exifMeta.LensModel;
     if (exifMeta.OffsetTimeOriginal) ifd2.OffsetTimeOriginal = exifMeta.OffsetTimeOriginal;
     if (exifMeta.OffsetTimeDigitized) ifd2.OffsetTimeDigitized = exifMeta.OffsetTimeDigitized;
     if (exifMeta.SubSecTimeOriginal) ifd2.SubSecTimeOriginal = String(exifMeta.SubSecTimeOriginal);
     if (exifMeta.SubSecTimeDigitized) ifd2.SubSecTimeDigitized = String(exifMeta.SubSecTimeDigitized);
     
+    // Build GPS IFD object
+    const gpsIfd = {};
+    if (exifMeta.GPSLatitude != null) {
+      const lat = exifMeta.GPSLatitude;
+      gpsIfd.GPSLatitudeRef = lat >= 0 ? 'N' : 'S';
+      gpsIfd.GPSLatitude = String(Math.abs(lat));
+    }
+    if (exifMeta.GPSLongitude != null) {
+      const lon = exifMeta.GPSLongitude;
+      gpsIfd.GPSLongitudeRef = lon >= 0 ? 'E' : 'W';
+      gpsIfd.GPSLongitude = String(Math.abs(lon));
+    }
+    if (exifMeta.GPSAltitude != null) {
+      const alt = exifMeta.GPSAltitude;
+      gpsIfd.GPSAltitudeRef = alt >= 0 ? '0' : '1';
+      gpsIfd.GPSAltitude = String(Math.abs(alt));
+    }
+    
     // Try to preserve and add EXIF
-    if (ext === '.jpg' || ext === '.jpeg') {
-      // For JPEG, Sharp can write EXIF data - only include non-empty objects
+    // JPEG and TIFF support full EXIF writing via Sharp
+    // PNG/WebP only preserve existing metadata
+    if (ext === '.jpg' || ext === '.jpeg' || ext === '.tiff' || ext === '.tif') {
       const exifObj = {};
       if (Object.keys(ifd0).length > 0) exifObj.IFD0 = ifd0;
       if (Object.keys(ifd2).length > 0) exifObj.IFD2 = ifd2;
+      if (Object.keys(gpsIfd).length > 0) exifObj.IFD3 = gpsIfd;
       
       if (Object.keys(exifObj).length > 0) {
         sharpInstance = sharpInstance.withMetadata({ exif: exifObj });
@@ -215,7 +381,7 @@ async function writeExifToFile(filePath, exifData) {
         sharpInstance = sharpInstance.withMetadata();
       }
     } else {
-      // For other formats, just preserve existing metadata
+      // For PNG/WebP, just preserve existing metadata
       sharpInstance = sharpInstance.withMetadata();
     }
     

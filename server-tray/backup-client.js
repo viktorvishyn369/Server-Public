@@ -470,7 +470,10 @@ class DesktopBackupClient {
       // Use Sharp + exif-reader for other formats
       let tags;
       
-      if (ext === '.heic' || ext === '.heif') {
+      // Formats that need ExifReader (Sharp can't read their EXIF):
+      // HEIC/HEIF, RAW camera formats (CR2/CR3/NEF/ARW/DNG/ORF/RW2/PEF/SRW/RAF)
+      const exifReaderFormatsDedup = ['.heic', '.heif', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.pef', '.srw', '.raf', '.raw'];
+      if (exifReaderFormatsDedup.includes(ext)) {
         const ExifReader = require('exifreader');
         tags = await ExifReader.load(filePath);
         
@@ -500,21 +503,24 @@ class DesktopBackupClient {
         if (metadata.exif) {
           const exifReader = require('exif-reader');
           const exifData = exifReader(metadata.exif);
+          // exif-reader v1 uses image/exif/gps, v2+ uses Image/Photo/GPSInfo
+          const img = exifData?.image || exifData?.Image || {};
+          const exif = exifData?.exif || exifData?.Photo || {};
           
           // Extract DateTimeOriginal from EXIF
-          const exifDate = exifData?.exif?.DateTimeOriginal || exifData?.exif?.DateTimeDigitized || exifData?.image?.ModifyDate;
+          const exifDate = exif?.DateTimeOriginal || exif?.DateTimeDigitized || img?.ModifyDate;
           if (exifDate instanceof Date && !isNaN(exifDate.getTime())) {
             result.captureTime = exifDate.toISOString().slice(0, 19);
           }
           
           // Extract Make (manufacturer) - normalize to lowercase
-          if (exifData?.image?.Make && typeof exifData.image.Make === 'string') {
-            result.make = exifData.image.Make.trim().toLowerCase();
+          if (img?.Make && typeof img.Make === 'string') {
+            result.make = img.Make.trim().toLowerCase();
           }
           
           // Extract Model - normalize to lowercase
-          if (exifData?.image?.Model && typeof exifData.image.Model === 'string') {
-            result.model = exifData.image.Model.trim().toLowerCase();
+          if (img?.Model && typeof img.Model === 'string') {
+            result.model = img.Model.trim().toLowerCase();
           }
         }
       }
@@ -546,6 +552,18 @@ class DesktopBackupClient {
       width: null, height: null, orientation: null, colorSpace: null,
       gpsLatitude: null, gpsLongitude: null, gpsAltitude: null, gpsTimestamp: null,
       software: null, lensMake: null, lensModel: null,
+      // IPTC fields (professional metadata)
+      iptcCaption: null, iptcCopyright: null, iptcKeywords: null,
+      iptcCreator: null, iptcTitle: null, iptcCity: null,
+      iptcCountry: null, iptcCredit: null, iptcSource: null,
+      // XMP fields (Lightroom/editing metadata)
+      xmpRating: null, xmpLabel: null, xmpSubject: null,
+      xmpCreatorTool: null, xmpRights: null, xmpDescription: null,
+      xmpRaw: null,
+      // MakerNote hash (proprietary camera data — too large to store raw)
+      makerNoteHash: null,
+      // ICC color profile name
+      iccProfileName: null,
       rawExif: null,
     };
     
@@ -553,13 +571,126 @@ class DesktopBackupClient {
       const ext = path.extname(filePath).toLowerCase();
       let metadata = null;
       
-      if (ext === '.heic' || ext === '.heif') {
-        const buf = fs.readFileSync(filePath);
-        const decoded = await heicDecode({ buffer: buf });
-        if (decoded && decoded.data) {
-          const rawImage = sharp(decoded.data, { raw: { width: decoded.width, height: decoded.height, channels: 4 } });
-          metadata = await rawImage.metadata();
+      // Formats that need ExifReader (Sharp can't read their EXIF):
+      // HEIC/HEIF: heicDecode strips EXIF, sharp can't read HEIC EXIF
+      // RAW camera formats: Sharp/vips doesn't support CR2/CR3/NEF/ARW/DNG/ORF/RW2/PEF/SRW/RAF
+      const exifReaderFormats = ['.heic', '.heif', '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.pef', '.srw', '.raf', '.raw'];
+      if (exifReaderFormats.includes(ext)) {
+        const ExifReader = require('exifreader');
+        const tags = await ExifReader.load(filePath);
+        
+        // Core identification
+        const dateTimeOriginal = tags['DateTimeOriginal']?.description || tags['DateTimeDigitized']?.description || tags['DateTime']?.description;
+        if (dateTimeOriginal) {
+          const normalized = dateTimeOriginal.replace(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}:\d{2}:\d{2})/, '$1-$2-$3T$4');
+          result.captureTime = normalized.slice(0, 19);
         }
+        // Strip null bytes from EXIF strings (Android cameras pad with \0)
+        const safeStr = (s) => s ? String(s).replace(/\0/g, '').trim() : null;
+        if (tags['Make']?.description) result.make = safeStr(tags['Make'].description);
+        if (tags['Model']?.description) result.model = safeStr(tags['Model'].description);
+        
+        // Camera settings
+        // ExifReader returns rational values as [numerator, denominator] arrays
+        // .description can be "1/40" or "f/1.8" which parseFloat misreads
+        // Normalize decimals to 4dp for cross-platform consistency (r4 = round to 4dp)
+        const r4 = (v) => { const n = Number(v); return (n != null && !isNaN(n)) ? (Number.isInteger(n) ? n : Math.round(n * 1e4) / 1e4) : null; };
+        const ratVal = (tag) => {
+          const v = tag?.value;
+          if (v == null) return null;
+          const n = Array.isArray(v) ? v[0] / v[1] : Number(v);
+          return isNaN(n) ? null : r4(n);
+        };
+        result.exposureTime = ratVal(tags['ExposureTime']);
+        result.fNumber = ratVal(tags['FNumber']);
+        const isoTag = tags['ISOSpeedRatings']?.value ?? tags['PhotographicSensitivity']?.value;
+        if (isoTag != null) result.iso = Array.isArray(isoTag) ? isoTag[0] : Number(isoTag);
+        result.focalLength = ratVal(tags['FocalLength']);
+        const fl35Tag = tags['FocalLengthIn35mmFilm']?.value ?? tags['FocalLengthIn35mmFormat']?.value;
+        if (fl35Tag != null) result.focalLengthIn35mm = r4(Number(fl35Tag));
+        if (tags['Flash']?.value != null) {
+          const flv = tags['Flash'].value;
+          // ExifReader may return Flash as structured object {Fired, Function, Mode...} or as number
+          result.flash = typeof flv === 'number' ? flv : (typeof flv === 'object' && flv.Fired ? (flv.Fired.value === 'True' || flv.Fired.description === 'True' ? 1 : 0) : (Number(flv) || null));
+        }
+        if (tags['WhiteBalance']?.value != null) result.whiteBalance = Number(tags['WhiteBalance'].value);
+        if (tags['MeteringMode']?.value != null) result.meteringMode = Number(tags['MeteringMode'].value);
+        if (tags['ExposureProgram']?.value != null) result.exposureProgram = Number(tags['ExposureProgram'].value);
+        result.exposureBias = ratVal(tags['ExposureBiasValue']);
+        
+        // Image properties
+        if (tags['PixelXDimension']?.value != null) result.width = Number(tags['PixelXDimension'].value);
+        else if (tags['ImageWidth']?.value != null) result.width = Number(tags['ImageWidth'].value);
+        if (tags['PixelYDimension']?.value != null) result.height = Number(tags['PixelYDimension'].value);
+        else if (tags['ImageLength']?.value != null) result.height = Number(tags['ImageLength'].value);
+        if (tags['Orientation']?.value != null) result.orientation = Number(tags['Orientation'].value);
+        if (tags['ColorSpace']?.value != null) result.colorSpace = Number(tags['ColorSpace'].value);
+        
+        // GPS — truncate to 4dp (~11m accuracy) for cross-platform stability
+        const t4 = (v) => { const n = Number(v); return (n != null && !isNaN(n)) ? Math.trunc(n * 1e4) / 1e4 : null; };
+        if (tags['GPSLatitude']?.description != null) result.gpsLatitude = t4(parseFloat(tags['GPSLatitude'].description));
+        if (tags['GPSLongitude']?.description != null) result.gpsLongitude = t4(parseFloat(tags['GPSLongitude'].description));
+        if (tags['GPSAltitude']?.description != null) result.gpsAltitude = t4(parseFloat(tags['GPSAltitude'].description));
+        
+        // Software/lens
+        if (tags['Software']?.description) result.software = safeStr(tags['Software'].description);
+        if (tags['LensMake']?.description) result.lensMake = safeStr(tags['LensMake'].description);
+        if (tags['LensModel']?.description) result.lensModel = safeStr(tags['LensModel'].description);
+        
+        // IPTC/XMP/ICC/MakerNote — use expanded mode
+        try {
+          const expanded = await ExifReader.load(filePath, { expanded: true });
+          // IPTC
+          if (expanded.iptc) {
+            const iptc = expanded.iptc;
+            if (iptc['Caption/Abstract']?.description) result.iptcCaption = String(iptc['Caption/Abstract'].description).trim();
+            if (iptc['Copyright Notice']?.description) result.iptcCopyright = String(iptc['Copyright Notice'].description).trim();
+            if (iptc['Keywords']) {
+              const kw = iptc['Keywords'];
+              result.iptcKeywords = Array.isArray(kw) ? kw.map(k => k.description || k.value).filter(Boolean) : (kw.description ? [kw.description] : null);
+            }
+            if (iptc['By-line']?.description) result.iptcCreator = String(iptc['By-line'].description).trim();
+            if (iptc['Object Name']?.description) result.iptcTitle = String(iptc['Object Name'].description).trim();
+            if (iptc['City']?.description) result.iptcCity = String(iptc['City'].description).trim();
+            if (iptc['Country/Primary Location Name']?.description) result.iptcCountry = String(iptc['Country/Primary Location Name'].description).trim();
+            if (iptc['Credit']?.description) result.iptcCredit = String(iptc['Credit'].description).trim();
+            if (iptc['Source']?.description) result.iptcSource = String(iptc['Source'].description).trim();
+          }
+          // XMP
+          if (expanded.xmp) {
+            const xmp = expanded.xmp;
+            if (xmp.Rating?.value != null) result.xmpRating = Number(xmp.Rating.value);
+            if (xmp.Label?.description) result.xmpLabel = String(xmp.Label.description).trim();
+            if (xmp.subject?.description) result.xmpSubject = String(xmp.subject.description).trim();
+            else if (xmp.Subject?.description) result.xmpSubject = String(xmp.Subject.description).trim();
+            if (xmp.CreatorTool?.description) result.xmpCreatorTool = String(xmp.CreatorTool.description).trim();
+            if (xmp.rights?.description) result.xmpRights = String(xmp.rights.description).trim();
+            else if (xmp.Rights?.description) result.xmpRights = String(xmp.Rights.description).trim();
+            if (xmp.description?.description) result.xmpDescription = String(xmp.description.description).trim();
+            else if (xmp.Description?.description) result.xmpDescription = String(xmp.Description.description).trim();
+            // Store raw XMP XML for full preservation
+            if (xmp._raw && typeof xmp._raw === 'string' && xmp._raw.length < 50000) {
+              result.xmpRaw = xmp._raw;
+            }
+          }
+          // ICC profile name
+          if (expanded.icc && expanded.icc['ICC Description']?.description) {
+            result.iccProfileName = String(expanded.icc['ICC Description'].description).trim();
+          }
+          // MakerNote hash (too large to store raw, hash for fingerprinting)
+          if (expanded.exif && expanded.exif.MakerNote?.value) {
+            const mn = expanded.exif.MakerNote.value;
+            if (mn && mn.length > 0) {
+              const crypto = require('crypto');
+              const mnBuf = Buffer.isBuffer(mn) ? mn : (ArrayBuffer.isView(mn) ? Buffer.from(mn.buffer, mn.byteOffset, mn.byteLength) : Buffer.from(mn));
+              result.makerNoteHash = crypto.createHash('sha256').update(mnBuf).digest('hex');
+            }
+          }
+        } catch (expandedErr) {
+          // Non-critical — IPTC/XMP/ICC extraction failed
+        }
+        
+        // Return early for HEIC — skip the sharp path below
       } else {
         metadata = await sharp(filePath).metadata();
       }
@@ -567,42 +698,110 @@ class DesktopBackupClient {
       if (metadata && metadata.exif) {
         const exifReader = require('exif-reader');
         const exifData = exifReader(metadata.exif);
+        // exif-reader v1 uses image/exif/gps, v2+ uses Image/Photo/GPSInfo
+        const img = exifData?.image || exifData?.Image || {};
+        const exif = exifData?.exif || exifData?.Photo || {};
+        const gps = exifData?.gps || exifData?.GPSInfo || exifData?.GPS || {};
         
         // Core identification
-        const exifDate = exifData?.exif?.DateTimeOriginal || exifData?.exif?.DateTimeDigitized;
+        const exifDate = exif?.DateTimeOriginal || exif?.DateTimeDigitized;
         if (exifDate instanceof Date && !isNaN(exifDate.getTime())) {
           result.captureTime = exifDate.toISOString().slice(0, 19);
         }
-        if (exifData?.image?.Make) result.make = String(exifData.image.Make).trim();
-        if (exifData?.image?.Model) result.model = String(exifData.image.Model).trim();
+        const safeStr2 = (s) => s ? String(s).replace(/\0/g, '').trim() : null;
+        if (img?.Make) result.make = safeStr2(img.Make);
+        if (img?.Model) result.model = safeStr2(img.Model);
         
-        // Camera settings
-        if (exifData?.exif?.ExposureTime != null) result.exposureTime = exifData.exif.ExposureTime;
-        if (exifData?.exif?.FNumber != null) result.fNumber = exifData.exif.FNumber;
-        if (exifData?.exif?.ISO != null) result.iso = exifData.exif.ISO;
-        if (exifData?.exif?.FocalLength != null) result.focalLength = exifData.exif.FocalLength;
-        if (exifData?.exif?.FocalLengthIn35mmFormat != null) result.focalLengthIn35mm = exifData.exif.FocalLengthIn35mmFormat;
-        if (exifData?.exif?.Flash != null) result.flash = exifData.exif.Flash;
-        if (exifData?.exif?.WhiteBalance != null) result.whiteBalance = exifData.exif.WhiteBalance;
-        if (exifData?.exif?.MeteringMode != null) result.meteringMode = exifData.exif.MeteringMode;
-        if (exifData?.exif?.ExposureProgram != null) result.exposureProgram = exifData.exif.ExposureProgram;
-        if (exifData?.exif?.ExposureBiasValue != null) result.exposureBias = exifData.exif.ExposureBiasValue;
+        // Camera settings — normalize decimals to 4dp for cross-platform consistency
+        const r4s = (v) => { const n = Number(v); return (n != null && !isNaN(n)) ? (Number.isInteger(n) ? n : Math.round(n * 1e4) / 1e4) : null; };
+        if (exif?.ExposureTime != null) result.exposureTime = r4s(exif.ExposureTime);
+        if (exif?.FNumber != null) result.fNumber = r4s(exif.FNumber);
+        const iso = exif?.ISO ?? exif?.ISOSpeedRatings ?? exif?.PhotographicSensitivity;
+        if (iso != null) result.iso = iso;
+        if (exif?.FocalLength != null) result.focalLength = r4s(exif.FocalLength);
+        const fl35 = exif?.FocalLengthIn35mmFormat ?? exif?.FocalLengthIn35mmFilm;
+        if (fl35 != null) result.focalLengthIn35mm = r4s(fl35);
+        if (exif?.Flash != null) result.flash = exif.Flash;
+        if (exif?.WhiteBalance != null) result.whiteBalance = exif.WhiteBalance;
+        if (exif?.MeteringMode != null) result.meteringMode = exif.MeteringMode;
+        if (exif?.ExposureProgram != null) result.exposureProgram = exif.ExposureProgram;
+        if (exif?.ExposureBiasValue != null) result.exposureBias = r4s(exif.ExposureBiasValue);
         
         // Image properties
         if (metadata.width) result.width = metadata.width;
         if (metadata.height) result.height = metadata.height;
         if (metadata.orientation) result.orientation = metadata.orientation;
-        if (exifData?.exif?.ColorSpace != null) result.colorSpace = exifData.exif.ColorSpace;
+        if (exif?.ColorSpace != null) result.colorSpace = exif.ColorSpace;
         
-        // GPS
-        if (exifData?.gps?.GPSLatitude != null) result.gpsLatitude = exifData.gps.GPSLatitude;
-        if (exifData?.gps?.GPSLongitude != null) result.gpsLongitude = exifData.gps.GPSLongitude;
-        if (exifData?.gps?.GPSAltitude != null) result.gpsAltitude = exifData.gps.GPSAltitude;
+        // Pixel dimensions from EXIF (v2 uses PixelXDimension, v1 uses ExifImageWidth)
+        const pxW = exif?.PixelXDimension ?? exif?.ExifImageWidth;
+        const pxH = exif?.PixelYDimension ?? exif?.ExifImageHeight;
+        if (pxW != null && !result.width) result.width = pxW;
+        if (pxH != null && !result.height) result.height = pxH;
+        
+        // GPS — truncate to 4dp (~11m accuracy) for cross-platform stability
+        const t4s = (v) => { const n = Number(v); return (n != null && !isNaN(n)) ? Math.trunc(n * 1e4) / 1e4 : null; };
+        if (gps?.GPSLatitude != null) result.gpsLatitude = t4s(gps.GPSLatitude);
+        if (gps?.GPSLongitude != null) result.gpsLongitude = t4s(gps.GPSLongitude);
+        if (gps?.GPSAltitude != null) result.gpsAltitude = t4s(gps.GPSAltitude);
         
         // Software/lens
-        if (exifData?.image?.Software) result.software = String(exifData.image.Software).trim();
-        if (exifData?.exif?.LensMake) result.lensMake = String(exifData.exif.LensMake).trim();
-        if (exifData?.exif?.LensModel) result.lensModel = String(exifData.exif.LensModel).trim();
+        if (img?.Software) result.software = safeStr2(img.Software);
+        if (exif?.LensMake) result.lensMake = safeStr2(exif.LensMake);
+        if (exif?.LensModel) result.lensModel = safeStr2(exif.LensModel);
+        
+        // IPTC from exif-reader (v2 may include iptc group)
+        const iptc = exifData?.iptc || exifData?.IPTC || {};
+        if (iptc['Caption/Abstract']) result.iptcCaption = String(iptc['Caption/Abstract']).trim();
+        if (iptc['Copyright Notice'] || iptc.CopyrightNotice) result.iptcCopyright = String(iptc['Copyright Notice'] || iptc.CopyrightNotice).trim();
+        if (iptc.Keywords) result.iptcKeywords = Array.isArray(iptc.Keywords) ? iptc.Keywords : [iptc.Keywords];
+        if (iptc['By-line'] || iptc.Byline) result.iptcCreator = String(iptc['By-line'] || iptc.Byline).trim();
+        if (iptc['Object Name'] || iptc.ObjectName) result.iptcTitle = String(iptc['Object Name'] || iptc.ObjectName).trim();
+        if (iptc.City) result.iptcCity = String(iptc.City).trim();
+        if (iptc['Country/Primary Location Name'] || iptc.Country) result.iptcCountry = String(iptc['Country/Primary Location Name'] || iptc.Country).trim();
+        if (iptc.Credit) result.iptcCredit = String(iptc.Credit).trim();
+        if (iptc.Source) result.iptcSource = String(iptc.Source).trim();
+        
+        // MakerNote hash
+        const makerNote = exif?.MakerNote;
+        if (makerNote && (Buffer.isBuffer(makerNote) || ArrayBuffer.isView(makerNote))) {
+          const crypto = require('crypto');
+          const mnBuf = Buffer.isBuffer(makerNote) ? makerNote : Buffer.from(makerNote.buffer, makerNote.byteOffset, makerNote.byteLength);
+          result.makerNoteHash = crypto.createHash('sha256').update(mnBuf).digest('hex');
+        }
+        
+        // ICC profile name from sharp metadata
+        if (metadata.icc && metadata.icc.length > 0) {
+          try {
+            // ICC profile description is at a known offset, but simplest: use sharp's parsed data
+            result.iccProfileName = metadata.space || null; // e.g. 'srgb', 'p3', 'cmyk'
+          } catch (_) {}
+        }
+        
+        // XMP — use ExifReader expanded mode for JPEG/TIFF too
+        try {
+          const ExifReaderLib = require('exifreader');
+          const expanded = await ExifReaderLib.load(filePath, { expanded: true });
+          if (expanded.xmp) {
+            const xmp = expanded.xmp;
+            if (xmp.Rating?.value != null) result.xmpRating = Number(xmp.Rating.value);
+            if (xmp.Label?.description) result.xmpLabel = String(xmp.Label.description).trim();
+            if (xmp.subject?.description) result.xmpSubject = String(xmp.subject.description).trim();
+            else if (xmp.Subject?.description) result.xmpSubject = String(xmp.Subject.description).trim();
+            if (xmp.CreatorTool?.description) result.xmpCreatorTool = String(xmp.CreatorTool.description).trim();
+            if (xmp.rights?.description) result.xmpRights = String(xmp.rights.description).trim();
+            else if (xmp.Rights?.description) result.xmpRights = String(xmp.Rights.description).trim();
+            if (xmp.description?.description) result.xmpDescription = String(xmp.description.description).trim();
+            else if (xmp.Description?.description) result.xmpDescription = String(xmp.Description.description).trim();
+            if (xmp._raw && typeof xmp._raw === 'string' && xmp._raw.length < 50000) {
+              result.xmpRaw = xmp._raw;
+            }
+          }
+          // ICC profile name from ExifReader (more descriptive than sharp's .space)
+          if (expanded.icc && expanded.icc['ICC Description']?.description) {
+            result.iccProfileName = String(expanded.icc['ICC Description'].description).trim();
+          }
+        } catch (_) {}
       }
     } catch (e) {
       // Non-critical

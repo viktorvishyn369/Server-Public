@@ -950,17 +950,278 @@ async function uploadToStealthCloud(filePath, credentials) {
 }
 
 /**
- * Compute deterministic SHA256 hash of EXIF metadata (matches mobile)
+ * Compute deterministic cross-platform SHA256 hash of EXIF metadata.
+ * 
+ * IMPORTANT: iOS and Android re-encode JPEG files differently — raw EXIF binary,
+ * thumbnails, IFD structure, and even pixel data differ for the same photo.
+ * Hashing raw EXIF binary will NEVER match cross-platform.
+ * 
+ * Instead, we parse EXIF into structured fields, keep only stable camera-related
+ * fields (stripping thumbnails, MakerNote, Software, UUIDs, padding), sort
+ * deterministically, and hash the normalized JSON. This produces identical hashes
+ * on desktop (sharp + exif-reader) and mobile (raw TIFF parsing).
+ * 
+ * Returns null if no meaningful EXIF fields are found (e.g. EXIF-stripped files).
+ * 
+ * @param {Buffer} exifBuffer - Raw EXIF buffer from sharp.metadata().exif
+ * @returns {string|null} SHA256 hex hash or null
  */
-function computeExifHash(exifData) {
-  if (!exifData) return null;
+/**
+ * Compute EXIF hash from a file path using ExifReader.
+ * Works for ALL formats: HEIC, RAW (CR2/NEF/ARW/DNG/etc), JPEG, TIFF, PNG, WebP.
+ * Extracts raw numeric values (not description strings) to match exif-reader output
+ * for cross-platform hash consistency with mobile computeExifHash.
+ * @param {string} filePath - Path to the image file
+ * @returns {Promise<string|null>} SHA256 hex hash or null
+ */
+async function computeExifHashFromFile(filePath) {
+  if (!filePath) return null;
   try {
+    const ExifReader = require('exifreader');
+    const tags = await ExifReader.load(filePath);
+    if (!tags) return null;
+
+    // Helper: extract raw numeric from ExifReader tag
+    // ExifReader returns: integers as value=N, rationals as value=[num,den],
+    // strings as value=["str"], DMS GPS as value=[[d,1],[m,1],[s,100]]
+    // Round ALL decimal results to 4dp for cross-platform stability.
+    // Different EXIF libraries (ExifReader, exif-reader, iOS CGImageSource, exiftool)
+    // return slightly different float representations of the same TIFF rational.
+    // e.g. FNumber 178/100=1.78 vs 1244236/699009=1.7799999713... both round to 1.78.
+    // Max float drift from rational re-encoding is ~1e-7; round4 boundary gap is 5e-5 (500x margin).
+    // GPS uses trunc (not round) to avoid grid boundary crossing (49.99999→50 crosses a degree).
+    const r4 = (v) => Math.round(v * 1e4) / 1e4;
+    const t4 = (v) => Math.trunc(v * 1e4) / 1e4;
+    const getNum = (key) => {
+      const t = tags[key];
+      if (!t) return null;
+      const v = t.value;
+      if (v == null) return null;
+      // Integer/float — round decimals to 4dp
+      if (typeof v === 'number') return Number.isInteger(v) ? v : r4(v);
+      // Rational [numerator, denominator] — round to 4dp for stability
+      if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'number' && typeof v[1] === 'number') {
+        if (v[1] === 0) return 0;
+        const r = v[0] / v[1];
+        return Number.isInteger(r) ? r : r4(r);
+      }
+      // Single-element array with number
+      if (Array.isArray(v) && v.length === 1 && typeof v[0] === 'number') {
+        return Number.isInteger(v[0]) ? v[0] : r4(v[0]);
+      }
+      // Flash: exiftool may expand integer into {Fired,Function,Mode,RedEyeMode,Return} object
+      // Reconstruct EXIF Flash bitmask: bit0=Fired, bit1-2=Return, bit3-4=Mode, bit5=Function, bit6=RedEye
+      if (key === 'Flash' && v && typeof v === 'object' && !Array.isArray(v) && v.Fired != null) {
+        let bits = 0;
+        if (String(v.Fired?.value || v.Fired) === 'True') bits |= 0x01;
+        const ret = parseInt(String(v.Return?.value ?? v.Return ?? 0)); if (!isNaN(ret)) bits |= ((ret & 0x03) << 1);
+        const mode = parseInt(String(v.Mode?.value ?? v.Mode ?? 0)); if (!isNaN(mode)) bits |= ((mode & 0x03) << 3);
+        if (String(v.Function?.value || v.Function) === 'True') bits |= 0x20;
+        if (String(v.RedEyeMode?.value || v.RedEyeMode) === 'True') bits |= 0x40;
+        return bits;
+      }
+      // Try description as number
+      const d = t.description;
+      if (d != null) { const n = parseFloat(String(d)); if (!isNaN(n)) return Number.isInteger(n) ? n : r4(n); }
+      return null;
+    };
+    const getStr = (key) => {
+      const t = tags[key];
+      if (!t) return null;
+      // Strip null bytes (Android cameras pad with \0) and trim
+      const clean = (s) => s ? String(s).replace(/\0/g, '').trim() : null;
+      if (t.description && typeof t.description === 'string') {
+        return clean(t.description) || null;
+      }
+      const v = t.value;
+      if (typeof v === 'string') return clean(v) || null;
+      if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'string') return clean(v[0]) || null;
+      return null;
+    };
+    const getGpsDecimal = (key) => {
+      const t = tags[key];
+      if (!t) return null;
+      // ExifReader GPS: description is already decimal degrees
+      if (t.description != null) {
+        const n = parseFloat(String(t.description));
+        if (!isNaN(n)) return n;
+      }
+      // Fallback: DMS array [[d,1],[m,1],[s,100]]
+      const v = t.value;
+      if (Array.isArray(v) && v.length === 3 && Array.isArray(v[0])) {
+        const d = v[0][1] !== 0 ? v[0][0] / v[0][1] : 0;
+        const m = v[1][1] !== 0 ? v[1][0] / v[1][1] : 0;
+        const s = v[2][1] !== 0 ? v[2][0] / v[2][1] : 0;
+        return d + m / 60 + s / 3600;
+      }
+      if (typeof v === 'number') return v;
+      return null;
+    };
+
+    const normalized = {};
+
+    // IFD0
+    const make = getStr('Make');
+    if (make) normalized.Make = make;
+    const model = getStr('Model');
+    if (model) normalized.Model = model;
+    const orient = getNum('Orientation');
+    if (orient != null) normalized.Orientation = orient;
+
+    // ExifIFD
+    const dto = getStr('DateTimeOriginal');
+    if (dto) normalized.DateTimeOriginal = dto.slice(0, 19);
+    const et = getNum('ExposureTime');
+    if (et != null) normalized.ExposureTime = et;
+    const fn = getNum('FNumber');
+    if (fn != null) normalized.FNumber = fn;
+    const iso = getNum('ISOSpeedRatings') ?? getNum('ISO');
+    if (iso != null) normalized.ISO = iso;
+    const fl = getNum('FocalLength');
+    if (fl != null) normalized.FocalLength = fl;
+    const fl35 = getNum('FocalLengthIn35mmFilm') ?? getNum('FocalLengthIn35mmFormat');
+    if (fl35 != null) normalized.FocalLengthIn35mm = fl35;
+    const em = getNum('ExposureMode');
+    if (em != null) normalized.ExposureMode = em;
+    const wb = getNum('WhiteBalance');
+    if (wb != null) normalized.WhiteBalance = wb;
+    const mm = getNum('MeteringMode');
+    if (mm != null) normalized.MeteringMode = mm;
+    const flash = getNum('Flash');
+    if (flash != null) normalized.Flash = flash;
+    const cs = getNum('ColorSpace');
+    if (cs != null) normalized.ColorSpace = cs;
+    const pxW = getNum('PixelXDimension') ?? getNum('ExifImageWidth');
+    if (pxW != null) normalized.PixelXDimension = pxW;
+    const pxH = getNum('PixelYDimension') ?? getNum('ExifImageHeight');
+    if (pxH != null) normalized.PixelYDimension = pxH;
+    const sct = getNum('SceneCaptureType');
+    if (sct != null) normalized.SceneCaptureType = sct;
+    const lm = getStr('LensMake');
+    if (lm) normalized.LensMake = lm;
+    const lmod = getStr('LensModel');
+    if (lmod) normalized.LensModel = lmod;
+    const bsn = getStr('BodySerialNumber');
+    if (bsn) normalized.BodySerialNumber = bsn;
+
+    // GPS
+    // Truncate GPS to 4 decimal places (~11m) for round-trip stability across exiftool write-back
+    const lat = getGpsDecimal('GPSLatitude');
+    if (lat != null) normalized.GPSLatitude = Math.trunc(lat * 1e4) / 1e4;
+    const lon = getGpsDecimal('GPSLongitude');
+    if (lon != null) normalized.GPSLongitude = Math.trunc(lon * 1e4) / 1e4;
+    const alt = getGpsDecimal('GPSAltitude');
+    if (alt != null) normalized.GPSAltitude = Math.trunc(alt * 1e4) / 1e4;
+
+    if (Object.keys(normalized).length === 0) {
+      console.log('[NFT] EXIF hash (ExifReader): no meaningful fields found');
+      return null;
+    }
+
+    // Universal decimal safety net: round non-GPS numerics to 4dp, trunc GPS to 4dp.
+    // This catches any numeric field (current or future) that may have cross-platform float drift.
+    const GPS_KEYS = new Set(['GPSLatitude', 'GPSLongitude', 'GPSAltitude']);
     const sorted = {};
-    for (const key of Object.keys(exifData).sort()) {
-      if (exifData[key] != null) sorted[key] = exifData[key];
+    for (const key of Object.keys(normalized).sort()) {
+      let v = normalized[key];
+      if (typeof v === 'number' && !Number.isInteger(v)) {
+        v = GPS_KEYS.has(key) ? t4(v) : r4(v);
+      }
+      sorted[key] = v;
     }
     const json = JSON.stringify(sorted);
-    return crypto.createHash('sha256').update(json).digest('hex');
+    const hash = crypto.createHash('sha256').update(json).digest('hex');
+    console.log('[NFT] Normalized EXIF hash via ExifReader (' + Object.keys(sorted).length + ' fields):', hash.substring(0, 16) + '...');
+    return hash;
+  } catch (e) {
+    console.warn('[NFT] EXIF hash (ExifReader) failed:', e?.message);
+    return null;
+  }
+}
+
+function computeExifHash(exifBuffer) {
+  if (!exifBuffer || exifBuffer.length === 0) return null;
+  try {
+    const exifReader = require('exif-reader');
+    const parsed = exifReader(exifBuffer);
+    if (!parsed) return null;
+
+    // exif-reader v1 uses image/exif/gps, v2+ uses Image/Photo/GPSInfo
+    const img = parsed.image || parsed.Image || {};
+    const exif = parsed.exif || parsed.Photo || {};
+    const gps = parsed.gps || parsed.GPSInfo || parsed.GPS || {};
+
+    // Collect only stable, camera-related fields that survive cross-platform transfer.
+    // Excluded: thumbnail, MakerNote, Software, UserComment, ImageUniqueID,
+    // SubSecTime*, OffsetTime*, padding, and any binary/undefined fields.
+    // Round non-GPS decimals to 4dp for cross-platform stability.
+    // GPS uses trunc to avoid grid boundary crossing (49.99999→50 crosses a degree).
+    const r4 = (v) => Math.round(v * 1e4) / 1e4;
+    const t4 = (v) => Math.trunc(v * 1e4) / 1e4;
+    const num4 = (v) => { const n = Number(v); return Number.isInteger(n) ? n : r4(n); };
+    const normalized = {};
+
+    // IFD0 (image)
+    const cleanStr = (s) => s ? String(s).replace(/\0/g, '').trim() : null;
+    if (img.Make) normalized.Make = cleanStr(img.Make);
+    if (img.Model) normalized.Model = cleanStr(img.Model);
+    if (img.Orientation != null) normalized.Orientation = Number(img.Orientation);
+
+    // ExifIFD (camera settings) — support both v1 and v2 field names
+    const dto = exif.DateTimeOriginal || exif.DateTimeOriginal;
+    if (dto) {
+      normalized.DateTimeOriginal = (dto instanceof Date)
+        ? dto.toISOString().slice(0, 19)
+        : String(dto).slice(0, 19);
+    }
+    if (exif.ExposureTime != null) normalized.ExposureTime = num4(exif.ExposureTime);
+    if (exif.FNumber != null) normalized.FNumber = num4(exif.FNumber);
+    const iso = exif.ISO ?? exif.ISOSpeedRatings ?? exif.PhotographicSensitivity;
+    if (iso != null) normalized.ISO = num4(iso);
+    if (exif.FocalLength != null) normalized.FocalLength = num4(exif.FocalLength);
+    const fl35 = exif.FocalLengthIn35mmFormat ?? exif.FocalLengthIn35mmFilm;
+    if (fl35 != null) normalized.FocalLengthIn35mm = num4(fl35);
+    if (exif.ExposureMode != null) normalized.ExposureMode = num4(exif.ExposureMode);
+    if (exif.WhiteBalance != null) normalized.WhiteBalance = num4(exif.WhiteBalance);
+    if (exif.MeteringMode != null) normalized.MeteringMode = num4(exif.MeteringMode);
+    if (exif.Flash != null) normalized.Flash = num4(exif.Flash);
+    if (exif.ColorSpace != null) normalized.ColorSpace = num4(exif.ColorSpace);
+    // Pixel dimensions: v1 uses ExifImageWidth/Height, v2 uses PixelXDimension/PixelYDimension
+    const pxW = exif.PixelXDimension ?? exif.ExifImageWidth;
+    const pxH = exif.PixelYDimension ?? exif.ExifImageHeight;
+    if (pxW != null) normalized.PixelXDimension = num4(pxW);
+    if (pxH != null) normalized.PixelYDimension = num4(pxH);
+    if (exif.SceneCaptureType != null) normalized.SceneCaptureType = num4(exif.SceneCaptureType);
+    if (exif.LensMake) normalized.LensMake = cleanStr(exif.LensMake);
+    if (exif.LensModel) normalized.LensModel = cleanStr(exif.LensModel);
+    if (exif.BodySerialNumber) normalized.BodySerialNumber = cleanStr(exif.BodySerialNumber);
+
+    // GPS — trunc to 4dp (not round) to avoid grid boundary crossing
+    if (gps.GPSLatitude != null) normalized.GPSLatitude = t4(Number(gps.GPSLatitude));
+    if (gps.GPSLongitude != null) normalized.GPSLongitude = t4(Number(gps.GPSLongitude));
+    if (gps.GPSAltitude != null) normalized.GPSAltitude = t4(Number(gps.GPSAltitude));
+
+    // If no meaningful fields were found, return null instead of hashing empty object
+    if (Object.keys(normalized).length === 0) {
+      console.log('[NFT] EXIF hash: no meaningful fields found, returning null');
+      return null;
+    }
+
+    // Universal decimal safety net: round non-GPS numerics to 4dp, trunc GPS to 4dp.
+    // This catches any numeric field (current or future) that may have cross-platform float drift.
+    const GPS_KEYS = new Set(['GPSLatitude', 'GPSLongitude', 'GPSAltitude']);
+    const sorted = {};
+    for (const key of Object.keys(normalized).sort()) {
+      let v = normalized[key];
+      if (typeof v === 'number' && !Number.isInteger(v)) {
+        v = GPS_KEYS.has(key) ? t4(v) : r4(v);
+      }
+      sorted[key] = v;
+    }
+    const json = JSON.stringify(sorted);
+    const hash = crypto.createHash('sha256').update(json).digest('hex');
+    console.log('[NFT] Normalized EXIF hash (' + Object.keys(sorted).length + ' fields):', hash.substring(0, 16) + '...');
+    return hash;
   } catch (e) {
     console.warn('[NFT] EXIF hash failed:', e?.message);
     return null;
@@ -1492,16 +1753,19 @@ async function mintNFT(params, onProgress) {
     
     const fileSize = fs.statSync(uploadFilePath).size;
     
-    // Extract raw EXIF binary from image and hash it directly.
-    // This produces a hash that matches: exiftool -b file.jpg | sha256sum
+    // Extract EXIF and compute normalized cross-platform hash.
+    // Uses parsed fields (not raw binary) so iOS/Android/desktop produce identical hashes.
     let exifHash = null;
     try {
       if (sharp) {
         const imgMeta = await sharp(filePath).metadata();
         if (imgMeta.exif && imgMeta.exif.length > 0) {
-          exifHash = crypto.createHash('sha256').update(imgMeta.exif).digest('hex');
-          console.log('[NFT] EXIF hash from raw binary (' + imgMeta.exif.length + ' bytes):', exifHash.substring(0, 16) + '...');
+          exifHash = computeExifHash(imgMeta.exif);
         }
+      }
+      // Fallback: use ExifReader for formats Sharp can't extract EXIF from (HEIC, RAW, etc.)
+      if (!exifHash) {
+        exifHash = await computeExifHashFromFile(filePath);
       }
     } catch (exifErr) {
       console.warn('[NFT] EXIF extraction failed:', exifErr?.message);
@@ -2015,11 +2279,12 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
 
   const buildDasUrls = () => {
     const urls = [];
-    // Helius first — api.mainnet-beta.solana.com no longer supports DAS reliably
+    // Helius primary
     urls.push({ name: 'helius', url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***' });
     if (process.env.HELIUS_API_KEY) {
       urls.push({ name: 'helius-env', url: `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}` });
     }
+    // Note: only Helius supports DAS getAssetsByOwner — no public fallback available
     return urls;
   };
 
@@ -2095,11 +2360,20 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
   for (const endpoint of endpoints) {
     let dasPage = 1;
     let found = false;
+    let rateLimitRetries = 0;
     while (dasPage <= MAX_PAGES) {
       console.log(`[DAS] page ${dasPage} (limit=${pageSize})...`);
       const result = await requestPage(endpoint, dasPage, pageSize);
 
       if (!result.ok) {
+        // Rate limited (429) — wait and retry with exponential backoff
+        if ((result.errorCode === 429 || result.errorCode === -32429) && rateLimitRetries < 4) {
+          const backoff = Math.pow(2, rateLimitRetries) * 5000; // 5s, 10s, 20s, 40s
+          rateLimitRetries++;
+          console.log(`[DAS] Rate limited, retrying in ${backoff / 1000}s (attempt ${rateLimitRetries}/4)`);
+          await new Promise(r => setTimeout(r, backoff));
+          continue;
+        }
         // "Response is too big" (-32702) — halve page size and retry same page
         if (result.errorCode === -32702 && pageSize > MIN_PAGE_SIZE) {
           pageSize = Math.max(MIN_PAGE_SIZE, Math.floor(pageSize / 2));
@@ -2117,6 +2391,7 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
         // Other error on later page — stop pagination
         break;
       }
+      rateLimitRetries = 0; // Reset on success
 
       found = true;
       if (result.items.length === 0) break;
@@ -3770,7 +4045,8 @@ async function estimateTransferFee(isCompressed, recipientAddress, fromAddress) 
 function generateCertificate(nftData) {
   if (!nftData) return null;
   // Never generate certs for temporary tx_ entries — wait for real cnft_ ID
-  if (nftData.mintAddress && String(nftData.mintAddress).startsWith('tx_')) return null;
+  // (unless forceGenerate is set, which is used by the post-mint path where we know it's a real mint)
+  if (!nftData.forceGenerate && nftData.mintAddress && String(nftData.mintAddress).startsWith('tx_')) return null;
   const cert = {
     id: `cert_${nftData.mintAddress || Date.now()}`,
     version: 1,
@@ -3793,8 +4069,10 @@ function generateCertificate(nftData) {
     issuedAt: new Date().toISOString(),
   };
   // Try direct fields first (desktop post-mint), then metadata attributes (mobile)
-  if (nftData.contentHash) cert.contentHash = nftData.contentHash;
-  if (nftData.exifHash) cert.exifHash = nftData.exifHash;
+  // Normalize: always include SHA256: prefix for consistency across platforms
+  const ensureHashPrefix = (h) => h && !h.startsWith('SHA256:') ? `SHA256:${h}` : h;
+  if (nftData.contentHash) cert.contentHash = ensureHashPrefix(nftData.contentHash);
+  if (nftData.exifHash) cert.exifHash = ensureHashPrefix(nftData.exifHash);
   if (nftData.metadata?.attributes) {
     for (const attr of nftData.metadata.attributes) {
       if (attr.trait_type === 'Content Hash' && !cert.contentHash) cert.contentHash = attr.value;
