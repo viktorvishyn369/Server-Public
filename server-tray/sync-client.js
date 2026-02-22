@@ -789,10 +789,13 @@ class DesktopSyncClient {
       if (isImage && decryptedManifest.fileHash) {
         try {
           // Check if file already has EXIF before overwriting
+          // Use ExifReader instead of Sharp — Sharp returns exif:null for DNG/RAW/HEIC
           let hasExif = false;
           try {
-            const meta = await sharp(filePath).metadata();
-            if (meta.exif && meta.exif.length > 0) hasExif = true;
+            const ExifReader = require('exifreader');
+            const checkBuf = fs.readFileSync(filePath);
+            const checkTags = ExifReader.load(checkBuf);
+            if (checkTags?.DateTimeOriginal || checkTags?.Make) hasExif = true;
           } catch (_) {}
           if (!hasExif) {
             const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, decryptedManifest.fileHash);
@@ -899,10 +902,13 @@ class DesktopSyncClient {
       if (isImage && file.fileHash) {
         try {
           // Check if file already has EXIF before overwriting
+          // Use ExifReader instead of Sharp — Sharp returns exif:null for DNG/RAW/HEIC
           let hasExif = false;
           try {
-            const meta = await sharp(destPath).metadata();
-            if (meta.exif && meta.exif.length > 0) hasExif = true;
+            const ExifReader = require('exifreader');
+            const checkBuf = fs.readFileSync(destPath);
+            const checkTags = ExifReader.load(checkBuf);
+            if (checkTags?.DateTimeOriginal || checkTags?.Make) hasExif = true;
           } catch (_) {}
           if (!hasExif) {
             const exifData = await fetchExifFromServer(baseUrl, this.token, this.deviceUuid, file.fileHash);
