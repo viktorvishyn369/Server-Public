@@ -1006,6 +1006,9 @@ function startPairingServer() {
                   }
                 }
                 
+                // Close QR pairing modal first
+                if (typeof closePairModal === 'function') closePairModal();
+                
                 // Create success popup overlay
                 var overlay = document.createElement('div');
                 overlay.id = 'pairing-success-overlay';
