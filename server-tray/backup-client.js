@@ -8,12 +8,22 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { execSync } = require('child_process');
+const { execSync, execFile } = require('child_process');
 const axios = require('axios');
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
 const sharp = require('sharp');
 const heicDecode = require('heic-decode');
+
+// ffmpeg path for video thumbnail generation (best-effort)
+let _ffmpegPath = null;
+try {
+  const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+  _ffmpegPath = ffmpegInstaller.path || null;
+} catch (e) {
+  // Try system ffmpeg as fallback
+  try { execSync('ffmpeg -version', { stdio: 'ignore', timeout: 3000 }); _ffmpegPath = 'ffmpeg'; } catch (_) {}
+}
 
 // Get desktop device info for EXIF fallback when make/model is missing
 function getDesktopDeviceInfo() {
@@ -1147,6 +1157,12 @@ class DesktopBackupClient {
       exifMake: meta.exifMake,
       exifModel: meta.exifModel,
       mediaType: meta.mediaType,
+      thumbChunkId: meta.thumbChunkId || null,
+      thumbNonce: meta.thumbNonce || null,
+      thumbSize: typeof meta.thumbSize === 'number' ? meta.thumbSize : null,
+      thumbW: typeof meta.thumbW === 'number' ? meta.thumbW : null,
+      thumbH: typeof meta.thumbH === 'number' ? meta.thumbH : null,
+      thumbMime: meta.thumbMime || null,
     }, {
       headers: {
         'Authorization': `Bearer ${this.token}`,
@@ -1552,6 +1568,108 @@ class DesktopBackupClient {
       console.log(`[EXIF] ${fileName}: no EXIF metadata found (file may have been stripped during transfer)`);
     }
 
+    // Generate and upload encrypted thumbnail for Sync Select previews (best-effort)
+    // Matches mobile flow: 220px JPEG, encrypted with masterKey, uploaded as chunk
+    let thumbChunkId = null;
+    let thumbNonceB64 = null;
+    let thumbSize = null;
+    let thumbW = null;
+    let thumbH = null;
+    const thumbMime = 'image/jpeg';
+    try {
+      const THUMB_WIDTH = 220;
+      const THUMB_COMPRESS = 60; // sharp uses 1-100 quality scale
+      const mediaType = this.getMediaType(fileName);
+      let thumbBuf = null;
+
+      if (mediaType === 'video') {
+        // Video: extract frame with ffmpeg
+        if (_ffmpegPath) {
+          const tmpFramePath = path.join(os.tmpdir(), `photolynk_thumb_${crypto.randomBytes(8).toString('hex')}.jpg`);
+          try {
+            await new Promise((resolve, reject) => {
+              execFile(_ffmpegPath, [
+                '-i', filePath,
+                '-ss', '00:00:00',
+                '-vframes', '1',
+                '-vf', `scale=${THUMB_WIDTH}:-1`,
+                '-q:v', '4',
+                '-y', tmpFramePath
+              ], { timeout: 15000 }, (err) => {
+                if (err) reject(err); else resolve();
+              });
+            });
+            if (fs.existsSync(tmpFramePath)) {
+              const frameBuf = fs.readFileSync(tmpFramePath);
+              // Re-process through sharp to ensure consistent JPEG output
+              const result = await sharp(frameBuf)
+                .resize(THUMB_WIDTH, null, { withoutEnlargement: true })
+                .jpeg({ quality: THUMB_COMPRESS })
+                .toBuffer({ resolveWithObject: true });
+              thumbBuf = result.data;
+              thumbW = result.info.width;
+              thumbH = result.info.height;
+            }
+          } catch (e) {
+            console.log(`[Backup] Video thumbnail ffmpeg failed for ${fileName}:`, e?.message);
+          } finally {
+            try { if (fs.existsSync(tmpFramePath)) fs.unlinkSync(tmpFramePath); } catch (_) {}
+          }
+        }
+      } else {
+        // Photo: generate thumbnail with sharp (handles JPEG, PNG, WebP, TIFF, AVIF, GIF natively)
+        // HEIC/HEIF: decode with heic-decode first, then resize with sharp
+        const heicExts = ['.heic', '.heif'];
+        if (heicExts.includes(ext)) {
+          try {
+            const heicBuf = fs.readFileSync(filePath);
+            const decoded = await heicDecode({ buffer: heicBuf });
+            if (decoded && decoded.data && decoded.width && decoded.height) {
+              const result = await sharp(Buffer.from(decoded.data), {
+                raw: { width: decoded.width, height: decoded.height, channels: 4 }
+              })
+                .resize(THUMB_WIDTH, null, { withoutEnlargement: true })
+                .jpeg({ quality: THUMB_COMPRESS })
+                .toBuffer({ resolveWithObject: true });
+              thumbBuf = result.data;
+              thumbW = result.info.width;
+              thumbH = result.info.height;
+            }
+          } catch (e) {
+            console.log(`[Backup] HEIC thumbnail failed for ${fileName}:`, e?.message);
+          }
+        } else {
+          try {
+            const result = await sharp(filePath, { failOn: 'none' })
+              .resize(THUMB_WIDTH, null, { withoutEnlargement: true })
+              .jpeg({ quality: THUMB_COMPRESS })
+              .toBuffer({ resolveWithObject: true });
+            thumbBuf = result.data;
+            thumbW = result.info.width;
+            thumbH = result.info.height;
+          } catch (e) {
+            console.log(`[Backup] Photo thumbnail failed for ${fileName}:`, e?.message);
+          }
+        }
+      }
+
+      if (thumbBuf && thumbBuf.length > 0) {
+        thumbSize = thumbBuf.length;
+        const thumbNonce = new Uint8Array(24);
+        crypto.randomFillSync(thumbNonce);
+        const boxed = nacl.secretbox(new Uint8Array(thumbBuf), thumbNonce, this.masterKey);
+        thumbChunkId = crypto.createHash('sha256').update(Buffer.from(boxed)).digest('hex');
+        thumbNonceB64 = naclUtil.encodeBase64(thumbNonce);
+        await this.uploadChunk(thumbChunkId, boxed);
+        console.log(`[Backup] Thumbnail uploaded for ${fileName}: ${thumbW}x${thumbH}, ${thumbSize} bytes`);
+      } else {
+        console.log(`[Backup] No thumbnail generated for ${fileName}`);
+      }
+    } catch (e) {
+      // Best-effort: thumbnail failures must not fail backup
+      console.log(`[Backup] Thumbnail generation failed for ${fileName}:`, e?.message || e);
+    }
+
     // Build manifest with fileHash and perceptualHash for cross-device deduplication
     const manifest = {
       v: 1,
@@ -1571,6 +1689,12 @@ class DesktopBackupClient {
       chunkSizes,
       fileHash: exactFileHash,
       perceptualHash: perceptualHash,
+      thumbChunkId,
+      thumbNonce: thumbNonceB64,
+      thumbSize,
+      thumbW,
+      thumbH,
+      thumbMime,
     };
 
     // Encrypt manifest with masterKey
@@ -1595,6 +1719,12 @@ class DesktopBackupClient {
       exifMake: exifData.make || null,
       exifModel: exifData.model || null,
       mediaType: this.getMediaType(fileName),
+      thumbChunkId,
+      thumbNonce: thumbNonceB64,
+      thumbSize,
+      thumbW,
+      thumbH,
+      thumbMime,
     });
 
     // Check if server rejected as duplicate (server-side deduplication)

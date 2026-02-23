@@ -160,9 +160,6 @@
             background: rgba(34, 197, 94, 0.08);
         }
 
-        .badge.suspended {
-            color: #888;
-        }
 
         .principles {
             display: grid;
@@ -341,24 +338,13 @@
                     PhotoLynk is designed as a consumer-facing product while maintaining engineering principles suitable for professional and long-term use.
                 </p>
             </div>
-
-            <div class="card">
-                <span class="badge suspended">Suspended</span>
-                <h3>Network & VPN Technologies</h3>
-                <p>
-                    StealthLynk previously developed a full-stack VPN marketplace and node-based networking system. This system is currently suspended while undergoing regulatory and compliance reassessment.
-                </p>
-                <p>
-                    Work continues toward a next-generation network solution aligned with evolving regulatory requirements and modern security expectations.
-                </p>
-            </div>
         </section>
 
         <section>
             <h2>In Development</h2>
             <div class="card">
                 <p>
-                    A compliant VPN and secure networking architecture. A cross-platform SDK for secure identity verification and authentication. Infrastructure components intended for integration into third-party applications.
+                    A cross-platform SDK for secure identity verification and authentication. Infrastructure components intended for integration into third-party applications.
                 </p>
                 <p>
                     These efforts focus on enabling secure registrations, logins, and verifications without exposing unnecessary user data.
@@ -389,7 +375,7 @@
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
                 </svg>
-                github.com/stealthlynk — Full-stack VPN marketplace
+                github.com/stealthlynk
             </a>
             <a href="https://github.com/viktorvishyn369" target="_blank" rel="noopener noreferrer" class="github-link">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -412,7 +398,7 @@
                     <div class="stat-card">
                         <div class="stat-label">Uptime (last 24h)</div>
                         <div class="stat-value" id="uptime-pct">--%</div>
-                        <div class="stat-sub">Percent of time available</div>
+                        <div class="stat-sub" id="uptime-pct-sub">Real measured availability</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Current Run</div>
@@ -420,9 +406,9 @@
                         <div class="stat-sub" id="uptime-days">-- days</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">Started</div>
-                        <div class="stat-value" id="uptime-start">--</div>
-                        <div class="stat-sub">Server boot time</div>
+                        <div class="stat-label">Active Server</div>
+                        <div class="stat-value" id="uptime-role">--</div>
+                        <div class="stat-sub" id="uptime-tracking">Tracking since --</div>
                     </div>
                 </div>
                 <p class="stat-sub" id="uptime-note" style="margin-top: 12px;">Live status from stealthlynk.io</p>
@@ -441,12 +427,13 @@
 
     <script>
         async function loadUptime() {
-            const pill = document.getElementById('uptime-pill');
             const pillText = document.getElementById('uptime-pill-text');
             const pctEl = document.getElementById('uptime-pct');
+            const pctSubEl = document.getElementById('uptime-pct-sub');
             const hrsEl = document.getElementById('uptime-hours');
             const daysEl = document.getElementById('uptime-days');
-            const startEl = document.getElementById('uptime-start');
+            const roleEl = document.getElementById('uptime-role');
+            const trackingEl = document.getElementById('uptime-tracking');
             const noteEl = document.getElementById('uptime-note');
 
             try {
@@ -455,23 +442,35 @@
                 const data = await res.json();
                 if (!data || !data.ok) throw new Error('Invalid');
 
-                const pct = (data.uptimePct24h ?? 0).toFixed(2);
-                const hours = data.uptimeHours ?? 0;
-                const days = data.uptimeDays ?? 0;
-                const started = data.startedAt ? new Date(data.startedAt) : null;
+                const hours = data.currentRunHours ?? 0;
+                const days = data.currentRunDays ?? 0;
+                const role = (data.serverRole || 'unknown').charAt(0).toUpperCase() + (data.serverRole || 'unknown').slice(1);
+                const firstSeen = data.firstSeen ? new Date(data.firstSeen) : null;
 
-                pctEl.textContent = pct + '%';
-                hrsEl.textContent = `${hours.toFixed(2)} h`;
-                daysEl.textContent = `${days.toFixed(2)} days`;
-                startEl.textContent = started ? started.toLocaleString() : 'Unknown';
-                pillText.textContent = `Online • ${pct}% last 24h`;
-                noteEl.textContent = `Live status from stealthlynk.io — updated ${new Date(data.now).toLocaleTimeString()}`;
+                hrsEl.textContent = hours.toFixed(2) + ' h';
+                daysEl.textContent = days.toFixed(2) + ' days';
+                roleEl.textContent = role;
+                trackingEl.textContent = firstSeen ? 'Tracking since ' + firstSeen.toLocaleDateString() : 'Tracking since --';
+
+                if (data.uptimePct24h !== null && data.uptimePct24h !== undefined) {
+                    const pct = data.uptimePct24h.toFixed(2);
+                    pctEl.textContent = pct + '%';
+                    pillText.textContent = 'Online \u2022 ' + pct + '% last 24h';
+                    pctSubEl.textContent = 'Real measured availability';
+                } else {
+                    pctEl.textContent = 'Collecting...';
+                    pillText.textContent = 'Online \u2022 Collecting data';
+                    pctSubEl.textContent = 'Uptime data will appear after first hour';
+                }
+
+                noteEl.textContent = 'Live from stealthlynk.io \u2014 ' + new Date(data.now).toLocaleTimeString();
             } catch (e) {
                 pillText.textContent = 'Status unavailable';
                 pctEl.textContent = '--%';
                 hrsEl.textContent = '-- h';
                 daysEl.textContent = '-- days';
-                startEl.textContent = '--';
+                roleEl.textContent = '--';
+                trackingEl.textContent = 'Tracking since --';
                 noteEl.textContent = 'Could not load uptime right now.';
             }
         }
