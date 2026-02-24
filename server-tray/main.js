@@ -6840,11 +6840,16 @@ ipcMain.handle('backup-certificates', async () => {
     if (!credentials.baseUrl || !credentials.token) return { success: false, error: 'No credentials' };
     const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
     const axios = require('axios');
-    // Strip large fields to avoid 413 — keep boolean flags only
+    // Whitelist only slim fields to avoid 413 and prevent server-side bloat
+    const SLIM_KEYS = ['id','name','mintAddress','txSignature','creatorWallet','ownerAddress',
+      'issuedAt','createdAt','edition','license','contentHash','exifHash','cameraHash',
+      'hasRfc3161','hasC2pa','encrypted','watermarked','storageType','nftType','isCompressed',
+      'rfc3161Tsa','metadataUrl','description','version','type','imageUrl','certificationMode'];
     const lightCerts = allCerts.map(c => {
-      const lc = { ...c };
-      if (lc.rfc3161Token) { lc.hasRfc3161 = true; delete lc.rfc3161Token; }
-      if (lc.c2paManifest) { lc.hasC2pa = true; delete lc.c2paManifest; }
+      const lc = {};
+      for (const k of SLIM_KEYS) { if (c[k] !== undefined) lc[k] = c[k]; }
+      if (c.rfc3161Token) lc.hasRfc3161 = true;
+      if (c.c2paManifest) lc.hasC2pa = true;
       return lc;
     });
     await axios.post(`${credentials.baseUrl}/api/nft/certificates`, {
