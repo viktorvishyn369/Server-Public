@@ -79,7 +79,7 @@ if (!file) { console.error('Usage: node verify-exif-hash.js <image_file>'); proc
   const make = getStr('Make'); if (make) n.Make = make;
   const model = getStr('Model'); if (model) n.Model = model;
   const orient = getNum('Orientation'); if (orient != null) n.Orientation = orient;
-  const dto = getStr('DateTimeOriginal'); if (dto) n.DateTimeOriginal = dto.slice(0, 19);
+  const dto = getStr('DateTimeOriginal') || getStr('DateTimeDigitized'); if (dto) n.DateTimeOriginal = dto.slice(0, 19);
   const et = getNum('ExposureTime'); if (et != null) n.ExposureTime = et;
   const fn = getNum('FNumber'); if (fn != null) n.FNumber = fn;
   const iso = getNum('ISOSpeedRatings') ?? getNum('ISO'); if (iso != null) n.ISO = iso;
@@ -96,8 +96,10 @@ if (!file) { console.error('Usage: node verify-exif-hash.js <image_file>'); proc
   const lm = getStr('LensMake'); if (lm) n.LensMake = lm;
   const lmod = getStr('LensModel'); if (lmod) n.LensModel = lmod;
   const bsn = getStr('BodySerialNumber'); if (bsn) n.BodySerialNumber = bsn;
-  const lat = getGps('GPSLatitude'); if (lat != null) n.GPSLatitude = t4(lat);
-  const lon = getGps('GPSLongitude'); if (lon != null) n.GPSLongitude = t4(lon);
+  const lat = getGps('GPSLatitude');
+  if (lat != null) { const latRef = getStr('GPSLatitudeRef'); n.GPSLatitude = t4(latRef && latRef.startsWith('S') ? -Math.abs(lat) : lat); }
+  const lon = getGps('GPSLongitude');
+  if (lon != null) { const lonRef = getStr('GPSLongitudeRef'); n.GPSLongitude = t4(lonRef && lonRef.startsWith('W') ? -Math.abs(lon) : lon); }
   const alt = getGps('GPSAltitude'); if (alt != null) n.GPSAltitude = t4(alt);
 
   if (Object.keys(n).length === 0) { console.error('No meaningful EXIF fields found'); process.exit(1); }

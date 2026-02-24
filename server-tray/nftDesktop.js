@@ -15,6 +15,21 @@ const os = require('os');
 let APP_VERSION = '2.0.0';
 try { APP_VERSION = require('./package.json').version || APP_VERSION; } catch (_) {}
 
+// Format-agnostic MIME type detection from file extension
+// Supports all professional camera formats for byte-exact archival upload
+const MIME_TYPES = {
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.heic': 'image/heic', '.heif': 'image/heif', '.webp': 'image/webp',
+  '.gif': 'image/gif', '.avif': 'image/avif', '.tiff': 'image/tiff', '.tif': 'image/tiff',
+  '.dng': 'image/x-adobe-dng', '.cr2': 'image/x-canon-cr2', '.cr3': 'image/x-canon-cr3',
+  '.nef': 'image/x-nikon-nef', '.arw': 'image/x-sony-arw', '.raf': 'image/x-fuji-raf',
+  '.orf': 'image/x-olympus-orf', '.rw2': 'image/x-panasonic-rw2',
+};
+function detectMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return MIME_TYPES[ext] || 'application/octet-stream';
+}
+
 // Sharp for EXIF stripping (optional - best effort)
 let sharp = null;
 try {
@@ -42,9 +57,10 @@ async function stripExifFromImage(filePath) {
       return null;
     }
     
-    // Create temp file path
+    // Create temp file path — use OUTPUT format extension so detectMimeType works correctly
     const ext = path.extname(filePath).toLowerCase();
-    const tempPath = path.join(os.tmpdir(), `nft_stripped_${Date.now()}${ext}`);
+    const outExt = ext === '.png' ? '.png' : ext === '.webp' ? '.webp' : '.jpg';
+    const tempPath = path.join(os.tmpdir(), `nft_stripped_${Date.now()}${outExt}`);
     
     console.log('[NFT] Stripping EXIF from:', filePath);
     
@@ -966,6 +982,150 @@ async function uploadToStealthCloud(filePath, credentials) {
  * @param {Buffer} exifBuffer - Raw EXIF buffer from sharp.metadata().exif
  * @returns {string|null} SHA256 hex hash or null
  */
+
+// ============================================================================
+// RAW EXIF BINARY HASH (Hash1 — exact camera EXIF bytes, no parsing)
+// ============================================================================
+
+/**
+ * Extract raw EXIF binary bytes from any image file and return as Buffer.
+ * No parsing, no library interpretation — exact bytes as the camera wrote them.
+ * Supports: JPEG (APP1), HEIC/HEIF (sharp raw buffer), TIFF/DNG/CR2/NEF/ARW (ExifReader raw),
+ *           PNG (eXIf chunk), WebP (EXIF chunk).
+ *
+ * For JPEG: extracts the entire APP1 Exif segment (Exif\0\0 + TIFF IFDs).
+ * For HEIC/RAW/TIFF: uses sharp.metadata().exif which returns the raw EXIF buffer.
+ * For PNG/WebP: binary chunk scan for eXIf/EXIF.
+ *
+ * @param {string} filePath - Path to the image file
+ * @returns {Promise<Buffer|null>} Raw EXIF binary bytes or null
+ */
+async function extractRawExifBytes(filePath) {
+  if (!filePath) return null;
+  try {
+    const headerBuf = Buffer.alloc(64);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, headerBuf, 0, 64, 0);
+
+    // === JPEG: Find APP1 marker (FF E1) containing "Exif\0\0" ===
+    if (headerBuf[0] === 0xFF && headerBuf[1] === 0xD8) {
+      const stat = fs.fstatSync(fd);
+      const scanLen = Math.min(stat.size, 256 * 1024);
+      const scanBuf = Buffer.alloc(scanLen);
+      fs.readSync(fd, scanBuf, 0, scanLen, 0);
+      fs.closeSync(fd);
+
+      let pos = 2; // skip SOI
+      while (pos + 4 < scanLen) {
+        if (scanBuf[pos] !== 0xFF) break;
+        const marker = scanBuf[pos + 1];
+        const segLen = (scanBuf[pos + 2] << 8) | scanBuf[pos + 3];
+        if (marker === 0xE1 && segLen > 8) {
+          if (scanBuf[pos + 4] === 0x45 && scanBuf[pos + 5] === 0x78 &&
+              scanBuf[pos + 6] === 0x69 && scanBuf[pos + 7] === 0x66 &&
+              scanBuf[pos + 8] === 0x00 && scanBuf[pos + 9] === 0x00) {
+            // Return entire APP1 Exif segment: "Exif\0\0" + TIFF header + all IFDs
+            return scanBuf.slice(pos + 4, pos + 2 + segLen);
+          }
+        }
+        if (marker === 0xDA) break; // SOS — stop scanning
+        pos += 2 + segLen;
+      }
+      return null;
+    }
+
+    // === PNG: Find eXIf chunk ===
+    if (headerBuf[0] === 0x89 && headerBuf[1] === 0x50 &&
+        headerBuf[2] === 0x4E && headerBuf[3] === 0x47) {
+      const stat = fs.fstatSync(fd);
+      const scanLen = Math.min(stat.size, 512 * 1024);
+      const scanBuf = Buffer.alloc(scanLen);
+      fs.readSync(fd, scanBuf, 0, scanLen, 0);
+      fs.closeSync(fd);
+
+      let pos = 8; // skip PNG signature
+      while (pos + 12 < scanLen) {
+        const chunkLen = (scanBuf[pos] << 24 | scanBuf[pos + 1] << 16 | scanBuf[pos + 2] << 8 | scanBuf[pos + 3]) >>> 0;
+        const chunkType = scanBuf.slice(pos + 4, pos + 8).toString('ascii');
+        if (chunkType === 'eXIf' && chunkLen > 0) {
+          return scanBuf.slice(pos + 8, pos + 8 + chunkLen);
+        }
+        if (chunkType === 'IEND') break;
+        pos += 12 + chunkLen; // 4 len + 4 type + data + 4 CRC
+      }
+      return null;
+    }
+
+    // === WebP: Find EXIF chunk in RIFF container ===
+    if (headerBuf.slice(0, 4).toString('ascii') === 'RIFF' &&
+        headerBuf.slice(8, 12).toString('ascii') === 'WEBP') {
+      const stat = fs.fstatSync(fd);
+      const scanLen = Math.min(stat.size, 512 * 1024);
+      const scanBuf = Buffer.alloc(scanLen);
+      fs.readSync(fd, scanBuf, 0, scanLen, 0);
+      fs.closeSync(fd);
+
+      let pos = 12; // skip RIFF header
+      while (pos + 8 < scanLen) {
+        const chunkId = scanBuf.slice(pos, pos + 4).toString('ascii');
+        const chunkSize = (scanBuf[pos + 4] | (scanBuf[pos + 5] << 8) | (scanBuf[pos + 6] << 16) | ((scanBuf[pos + 7] << 24) >>> 0));
+        if (chunkId === 'EXIF' && chunkSize > 0) {
+          return scanBuf.slice(pos + 8, pos + 8 + chunkSize);
+        }
+        pos += 8 + chunkSize + (chunkSize % 2); // RIFF chunks are word-aligned
+      }
+      return null;
+    }
+
+    fs.closeSync(fd);
+
+    // === HEIC/HEIF, TIFF/DNG, RAW (CR2/CR3/NEF/ARW/ORF/RW2/PEF/SRW/RAF) ===
+    // Use sharp to extract the raw EXIF buffer. Sharp returns the exact TIFF IFD
+    // bytes embedded in the file — no re-encoding, no interpretation.
+    // This handles ISOBMFF (HEIC), TIFF-based (DNG/CR2/NEF/ARW), etc.
+    try {
+      const sharpMod = require('sharp');
+      const meta = await sharpMod(filePath).metadata();
+      if (meta.exif && meta.exif.length > 0) {
+        return meta.exif;
+      }
+    } catch (_) {}
+
+    return null;
+  } catch (e) {
+    console.warn('[NFT] extractRawExifBytes failed:', e?.message);
+    return null;
+  }
+}
+
+/**
+ * Compute Hash1: SHA-256 of raw EXIF binary bytes from the original file.
+ * No parsing, no rounding — exact bytes as the camera wrote them.
+ * Identical on any platform because the file is byte-exact across the ecosystem.
+ * @param {string} filePath - Path to the image file
+ * @returns {Promise<string|null>} SHA-256 hex hash or null
+ */
+async function computeExifRawHash(filePath) {
+  const rawBytes = await extractRawExifBytes(filePath);
+  if (!rawBytes || rawBytes.length === 0) return null;
+  const hash = crypto.createHash('sha256').update(rawBytes).digest('hex');
+  console.log(`[NFT] EXIF Raw Hash (${rawBytes.length} bytes): ${hash.substring(0, 16)}...`);
+  return hash;
+}
+
+/**
+ * Compute Hash3: Binding proof — SHA-256(Hash1 + "|" + Hash2).
+ * Cryptographically binds the exact raw hash and the normalized dedup hash.
+ * @param {string} rawHash - Hash1 (exact raw EXIF binary)
+ * @param {string} normalizedHash - Hash2 (normalized/rounded for dedup)
+ * @returns {string|null} SHA-256 hex binding hash or null
+ */
+function computeExifBindingHash(rawHash, normalizedHash) {
+  if (!rawHash && !normalizedHash) return null;
+  const input = `${rawHash || 'none'}|${normalizedHash || 'none'}`;
+  return crypto.createHash('sha256').update(input).digest('hex');
+}
+
 /**
  * Compute EXIF hash from a file path using ExifReader.
  * Works for ALL formats: HEIC, RAW (CR2/NEF/ARW/DNG/etc), JPEG, TIFF, PNG, WebP.
@@ -1069,7 +1229,7 @@ async function computeExifHashFromFile(filePath) {
     if (orient != null) normalized.Orientation = orient;
 
     // ExifIFD
-    const dto = getStr('DateTimeOriginal');
+    const dto = getStr('DateTimeOriginal') || getStr('DateTimeDigitized');
     if (dto) normalized.DateTimeOriginal = dto.slice(0, 19);
     const et = getNum('ExposureTime');
     if (et != null) normalized.ExposureTime = et;
@@ -1104,12 +1264,18 @@ async function computeExifHashFromFile(filePath) {
     const bsn = getStr('BodySerialNumber');
     if (bsn) normalized.BodySerialNumber = bsn;
 
-    // GPS
-    // Truncate GPS to 4 decimal places (~11m) for round-trip stability across exiftool write-back
+    // GPS — ExifReader returns UNSIGNED decimal (no N/S/E/W sign applied).
+    // Must check GPSLatitudeRef/GPSLongitudeRef and negate for S/W to match mobile.
     const lat = getGpsDecimal('GPSLatitude');
-    if (lat != null) normalized.GPSLatitude = Math.trunc(lat * 1e4) / 1e4;
+    if (lat != null) {
+      const latRef = getStr('GPSLatitudeRef');
+      normalized.GPSLatitude = Math.trunc((latRef && latRef.startsWith('S') ? -Math.abs(lat) : lat) * 1e4) / 1e4;
+    }
     const lon = getGpsDecimal('GPSLongitude');
-    if (lon != null) normalized.GPSLongitude = Math.trunc(lon * 1e4) / 1e4;
+    if (lon != null) {
+      const lonRef = getStr('GPSLongitudeRef');
+      normalized.GPSLongitude = Math.trunc((lonRef && lonRef.startsWith('W') ? -Math.abs(lon) : lon) * 1e4) / 1e4;
+    }
     const alt = getGpsDecimal('GPSAltitude');
     if (alt != null) normalized.GPSAltitude = Math.trunc(alt * 1e4) / 1e4;
 
@@ -1168,11 +1334,19 @@ function computeExifHash(exifBuffer) {
     if (img.Orientation != null) normalized.Orientation = Number(img.Orientation);
 
     // ExifIFD (camera settings) — support both v1 and v2 field names
-    const dto = exif.DateTimeOriginal || exif.DateTimeOriginal;
+    const dto = exif.DateTimeOriginal || exif.DateTimeDigitized;
     if (dto) {
-      normalized.DateTimeOriginal = (dto instanceof Date)
-        ? dto.toISOString().slice(0, 19)
-        : String(dto).slice(0, 19);
+      // Format as EXIF string "YYYY:MM:DD HH:MM:SS" to match mobile TIFF parser output.
+      // exif-reader returns a Date object; toISOString() produces "2024-01-15T14:30:00"
+      // which would NOT match mobile's "2024:01:15 14:30:00" — breaking cross-platform hash.
+      if (dto instanceof Date) {
+        // exif-reader parses "YYYY:MM:DD HH:MM:SS" via Date.UTC() — the original
+        // hour/minute/second are stored as UTC values. Use getUTC*() to recover them.
+        const pad = (n) => String(n).padStart(2, '0');
+        normalized.DateTimeOriginal = `${dto.getUTCFullYear()}:${pad(dto.getUTCMonth() + 1)}:${pad(dto.getUTCDate())} ${pad(dto.getUTCHours())}:${pad(dto.getUTCMinutes())}:${pad(dto.getUTCSeconds())}`;
+      } else {
+        normalized.DateTimeOriginal = String(dto).slice(0, 19);
+      }
     }
     if (exif.ExposureTime != null) normalized.ExposureTime = num4(exif.ExposureTime);
     if (exif.FNumber != null) normalized.FNumber = num4(exif.FNumber);
@@ -1196,9 +1370,27 @@ function computeExifHash(exifBuffer) {
     if (exif.LensModel) normalized.LensModel = cleanStr(exif.LensModel);
     if (exif.BodySerialNumber) normalized.BodySerialNumber = cleanStr(exif.BodySerialNumber);
 
-    // GPS — trunc to 4dp (not round) to avoid grid boundary crossing
-    if (gps.GPSLatitude != null) normalized.GPSLatitude = t4(Number(gps.GPSLatitude));
-    if (gps.GPSLongitude != null) normalized.GPSLongitude = t4(Number(gps.GPSLongitude));
+    // GPS — exif-reader v2 returns GPSLatitude/GPSLongitude as [deg, min, sec] arrays
+    // (3 RATIONAL values), NOT as a single decimal. Convert DMS→decimal and apply N/S/E/W ref.
+    const dmsToDecimal = (arr) => {
+      if (Array.isArray(arr) && arr.length === 3) return arr[0] + arr[1] / 60 + arr[2] / 3600;
+      if (typeof arr === 'number') return arr;
+      return NaN;
+    };
+    if (gps.GPSLatitude != null) {
+      let lat = dmsToDecimal(gps.GPSLatitude);
+      if (!isNaN(lat)) {
+        if (gps.GPSLatitudeRef === 'S') lat = -Math.abs(lat);
+        normalized.GPSLatitude = t4(lat);
+      }
+    }
+    if (gps.GPSLongitude != null) {
+      let lon = dmsToDecimal(gps.GPSLongitude);
+      if (!isNaN(lon)) {
+        if (gps.GPSLongitudeRef === 'W') lon = -Math.abs(lon);
+        normalized.GPSLongitude = t4(lon);
+      }
+    }
     if (gps.GPSAltitude != null) normalized.GPSAltitude = t4(Number(gps.GPSAltitude));
 
     // If no meaningful fields were found, return null instead of hashing empty object
@@ -1335,11 +1527,11 @@ function buildC2PAManifest({ contentHash, exifHash, cameraSerialHash, creatorWal
   return {
     '@context': 'https://c2pa.org/statements/v1',
     'claim_generator': `PhotoLynk/${APP_VERSION}`,
-    'title': fileName || 'PhotoLynk Limited Edition',
+    'title': fileName || 'PhotoLynk Certified Original',
     'format': originalFormat || 'image/jpeg',
     'instance_id': `urn:photolynk:${contentHash}`,
     'claim': {
-      'dc:title': fileName || 'PhotoLynk Limited Edition',
+      'dc:title': fileName || 'PhotoLynk Certified Original',
       'dc:format': originalFormat || 'image/jpeg',
       'created': mintTimestamp || new Date().toISOString(),
       'claim_generator': `PhotoLynk/${APP_VERSION} (Desktop)`,
@@ -1609,22 +1801,22 @@ async function decryptNFTImage(encryptedPath, wrappedKeyB64, wrapNonceB64, nonce
 function buildNFTMetadata({
   name, description, imageUrl, ownerAddress, contentHash, fileSize,
   edition = NFT_EDITION.OPEN, license = 'arr', watermarked = false, encrypted = false,
-  exifHash = null, cameraSerialHash = null, originalFormat = null, originalResolution = null,
-  creatorAddress = null, encryptionData = null, storageOption = null,
+  exifRawHash = null, exifHash = null, exifBindingHash = null,
+  cameraSerialHash = null, originalFormat = null, originalResolution = null,
+  creatorAddress = null, encryptionData = null, uploadMimeType = null, storageOption = null,
   tsaToken = null, tsaUrl = null, tsaPolicy = null,
   c2paManifest = null, mintTimestamp = null,
+  certificationMode = null,
 }) {
   const isLimited = edition === NFT_EDITION.LIMITED;
   const editionLabel = isLimited ? 'Limited' : 'Open';
   const bps = EDITION_ROYALTY_BPS[edition] || 500;
   const licenseEntry = NFT_LICENSE_OPTIONS.find(l => l.id === license);
   const licenseLabel = licenseEntry ? licenseEntry.label : 'All Rights Reserved';
-  const defaultDesc = isLimited
-    ? 'Limited Edition — copyright certificate with RFC 3161 trusted timestamp and C2PA provenance'
-    : 'Open Edition — photo NFT with on-chain integrity proof';
+  const defaultDesc = 'Certified Original — certificate of authenticity with RFC 3161 trusted timestamp and C2PA provenance';
 
   const metadata = {
-    name: name || 'PhotoLynk Photo NFT',
+    name: name || ('Certified Original — ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })),
     symbol: 'PLNK',
     description: description || defaultDesc,
     image: imageUrl,
@@ -1632,7 +1824,9 @@ function buildNFTMetadata({
     attributes: [
       { trait_type: 'Edition', value: editionLabel },
       ...(contentHash ? [{ trait_type: 'Content Hash', value: `SHA256:${contentHash}` }] : []),
+      ...(exifRawHash ? [{ trait_type: 'EXIF Raw Hash', value: `SHA256:${exifRawHash}` }] : []),
       ...(exifHash ? [{ trait_type: 'EXIF Hash', value: `SHA256:${exifHash}` }] : []),
+      ...(exifBindingHash ? [{ trait_type: 'EXIF Binding Hash', value: `SHA256:${exifBindingHash}` }] : []),
       ...(cameraSerialHash ? [{ trait_type: 'Camera Hash', value: `SHA256:${cameraSerialHash}` }] : []),
       ...(fileSize ? [{ trait_type: 'Original Size', value: `${fileSize} bytes` }] : []),
       ...(originalFormat ? [{ trait_type: 'Original Format', value: originalFormat }] : []),
@@ -1640,27 +1834,29 @@ function buildNFTMetadata({
       { trait_type: 'License', value: licenseLabel },
       { trait_type: 'Watermarked', value: watermarked ? 'true' : 'false' },
       { trait_type: 'Encrypted', value: encrypted ? 'true' : 'false' },
-      ...(isLimited ? [{ trait_type: 'Original Storage', value: 'Creator Device Only' }] : []),
-      { trait_type: 'Proof Type', value: isLimited ? 'Copyright Certificate' : 'Photo Ownership' },
-      ...(isLimited && tsaToken ? [{ trait_type: 'RFC 3161 Timestamp', value: 'FreeTSA.org' }] : []),
-      ...(isLimited && c2paManifest ? [{ trait_type: 'C2PA Provenance', value: 'Included' }] : []),
+      { trait_type: 'Proof Type', value: 'Certificate of Authenticity' },
+      ...(tsaToken ? [{ trait_type: 'RFC 3161 Timestamp', value: 'FreeTSA.org' }] : []),
+      ...(c2paManifest ? [{ trait_type: 'C2PA Provenance', value: 'Included' }] : []),
       { trait_type: 'Storage', value: storageOption === 'cloud' ? 'StealthCloud' : storageOption === 'arweave' ? 'Arweave' : storageOption === 'onchain' ? 'Embedded SVG' : 'IPFS' },
       { trait_type: 'Minted With', value: 'PhotoLynk' },
       { trait_type: 'Platform', value: 'PhotoLynk Desktop' },
+      ...(certificationMode ? [{ trait_type: 'Certification Mode', value: certificationMode === 'public' ? 'Public' : 'Private' }] : []),
     ],
     properties: {
       category: 'image',
-      files: [{ uri: imageUrl, type: encrypted ? 'application/octet-stream' : storageOption === 'onchain' ? 'image/svg+xml' : 'image/jpeg' }],
+      files: [{ uri: imageUrl, type: uploadMimeType || 'image/jpeg' }],
       creators: [{ address: creatorAddress || ownerAddress, share: 100 }],
       ...(encrypted ? { encryption: { method: 'NaCl-secretbox', encrypted: true, ...(encryptionData ? { wrappedKey: encryptionData.wrappedKey, wrapNonce: encryptionData.wrapNonce, nonce: encryptionData.nonce, ...(encryptionData.thumbnailNonce ? { thumbnailNonce: encryptionData.thumbnailNonce } : {}), ...(encryptionData.thumbnailUrl ? { thumbnailUrl: encryptionData.thumbnailUrl } : {}) } : {}) } } : {}),
-      ...(isLimited ? {
+      ...((true) ? {
         certificate: {
           version: 2,
           type: 'PhotoLynk Certificate of Authenticity',
-          edition: 'Limited',
+          edition: editionLabel,
           mintedAt: mintTimestamp || new Date().toISOString(),
           originalHash: contentHash ? `SHA256:${contentHash}` : null,
+          exifRawHash: exifRawHash ? `SHA256:${exifRawHash}` : null,
           exifHash: exifHash ? `SHA256:${exifHash}` : null,
+          exifBindingHash: exifBindingHash ? `SHA256:${exifBindingHash}` : null,
           cameraSerialHash: cameraSerialHash ? `SHA256:${cameraSerialHash}` : null,
           originalFormat: originalFormat || null,
           originalResolution: originalResolution || null,
@@ -1716,6 +1912,7 @@ async function mintNFT(params, onProgress) {
     watermark = false,
     encrypt = false,
     masterKey = null,
+    certificationMode = null,
   } = params;
   
   const isLimited = edition === NFT_EDITION.LIMITED;
@@ -1751,12 +1948,21 @@ async function mintNFT(params, onProgress) {
       }
     }
     
-    const fileSize = fs.statSync(uploadFilePath).size;
+    const fileSize = fs.statSync(filePath).size;
     
     // Extract EXIF and compute normalized cross-platform hash.
     // Uses parsed fields (not raw binary) so iOS/Android/desktop produce identical hashes.
+    // Hash1: Raw EXIF binary hash (exact camera bytes, no parsing/rounding)
+    let exifRawHash = null;
+    // Hash2: Normalized EXIF hash (parsed + rounded for cross-platform dedup)
     let exifHash = null;
+    // Hash3: Binding hash (cryptographically binds Hash1 + Hash2)
+    let exifBindingHash = null;
     try {
+      // Hash1 — exact raw binary
+      exifRawHash = await computeExifRawHash(filePath);
+      
+      // Hash2 — normalized/rounded for cross-platform dedup
       if (sharp) {
         const imgMeta = await sharp(filePath).metadata();
         if (imgMeta.exif && imgMeta.exif.length > 0) {
@@ -1767,6 +1973,10 @@ async function mintNFT(params, onProgress) {
       if (!exifHash) {
         exifHash = await computeExifHashFromFile(filePath);
       }
+      
+      // Hash3 — binding proof
+      exifBindingHash = computeExifBindingHash(exifRawHash, exifHash);
+      console.log(`[NFT] EXIF 3-hash proof: raw=${exifRawHash?.substring(0, 12)}... norm=${exifHash?.substring(0, 12)}... bind=${exifBindingHash?.substring(0, 12)}...`);
     } catch (exifErr) {
       console.warn('[NFT] EXIF extraction failed:', exifErr?.message);
     }
@@ -1776,10 +1986,10 @@ async function mintNFT(params, onProgress) {
     const contentHash = computeContentHash(filePath);
     const mintTimestamp = new Date().toISOString();
 
-    // Step 1b: RFC 3161 trusted timestamp + C2PA manifest (Limited Edition only)
+    // Step 1b: RFC 3161 trusted timestamp + C2PA manifest (all editions)
     let tsaResult = null;
     let c2paManifest = null;
-    if (isLimited && contentHash) {
+    if (contentHash) {
       onProgress?.({ status: 'Requesting trusted timestamp (RFC 3161)...' });
       tsaResult = await requestRFC3161Timestamp(contentHash);
       if (tsaResult.success) {
@@ -1852,7 +2062,9 @@ async function mintNFT(params, onProgress) {
     
     // Step 2: Upload image
     onProgress?.({ status: 'Uploading image...' });
-    const uploadContentType = (encrypt && encryptionData) ? 'application/octet-stream' : 'image/jpeg';
+    // Detect MIME from the actual file being uploaded (may be a stripped .jpg, not the original .heic/.nef)
+    const detectedMime = detectMimeType(imageToUploadPath);
+    const uploadContentType = (encrypt && encryptionData) ? 'application/octet-stream' : detectedMime;
     console.log('[NFT] Storage option:', storageOption, 'ContentType:', uploadContentType);
     let imageUpload;
     let onChainDataUri = null;
@@ -1865,7 +2077,7 @@ async function mintNFT(params, onProgress) {
       try {
         const imgBuf = fs.readFileSync(imageToUploadPath);
         const ext = path.extname(imageToUploadPath).toLowerCase();
-        const mimeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.heic': 'image/heic', '.heif': 'image/heif' };
+        const mimeMap = MIME_TYPES;
         const mime = mimeMap[ext] || uploadContentType || 'image/jpeg';
         onChainDataUri = `data:${mime};base64,${imgBuf.toString('base64')}`;
         imageUpload = { success: true, arweaveUrl: onChainDataUri, imageUrl: onChainDataUri, size: imgBuf.length };
@@ -1957,7 +2169,7 @@ async function mintNFT(params, onProgress) {
     // Step 3: Build and upload metadata with edition support
     onProgress?.({ status: 'Uploading metadata...' });
     const metadata = buildNFTMetadata({
-      name: name || 'NFT Memories',
+      name: name || 'Certified Original',
       description,
       imageUrl,
       ownerAddress: walletAddress,
@@ -1968,14 +2180,19 @@ async function mintNFT(params, onProgress) {
       license,
       watermarked: watermark,
       encrypted: !!(encrypt && encryptionData),
+      exifRawHash,
       exifHash,
+      exifBindingHash,
       encryptionData: encryptionData || null,
+      originalFormat: path.extname(filePath).replace('.', '').toUpperCase() || 'JPEG',
+      uploadMimeType: uploadContentType,
       storageOption,
       tsaToken: tsaResult?.tsaToken || null,
       tsaUrl: tsaResult?.tsaUrl || null,
       tsaPolicy: tsaResult?.tsaPolicy || null,
       c2paManifest: c2paManifest || null,
       mintTimestamp,
+      certificationMode,
     });
     
     const metadataUpload = (storageOption === 'arweave')
@@ -2061,7 +2278,7 @@ async function mintNFT(params, onProgress) {
       amount: feeSol.toFixed(9),
       feeUsd: feeUsd.toFixed(2),
       reference: reference,
-      name: name || 'NFT Memories',
+      name: name || 'Certified Original',
       imageUrl: imageUrlForParam,
       ...(imageTokenForParam ? { imageToken: imageTokenForParam } : {}),
       metadataUrl: metadataUpload.arweaveUrl || metadataUpload.gatewayUrl,
@@ -2079,6 +2296,7 @@ async function mintNFT(params, onProgress) {
       encrypt: (encrypt && encryptionData) ? 'true' : 'false',
       contentHash: contentHash || '',
       exifHash: exifHash || '',
+      certificationMode: certificationMode || '',
     }).toString();
     
     // Use local server to serve payment page (Phantom extension needs HTTP, not file://)
@@ -2105,8 +2323,14 @@ async function mintNFT(params, onProgress) {
       tsaPolicy: tsaResult?.tsaPolicy || null,
       c2paManifest: c2paManifest || null,
       mintTimestamp: mintTimestamp || null,
+      // EXIF 3-hash proof (direct fields for certificate generation)
+      contentHash: contentHash || null,
+      exifRawHash: exifRawHash || null,
+      exifHash: exifHash || null,
+      exifBindingHash: exifBindingHash || null,
       // Attributes + metadata for save-minted-nft so badges render from local storage
       attributes: metadata?.attributes || [],
+      certificationMode: certificationMode || null,
       message: 'Complete payment in browser with Phantom',
     };
   } catch (e) {
@@ -2803,7 +3027,7 @@ function openNFTMintWindow(appDataPath, credentials) {
   mintWindow = new BrowserWindow({
     width: 480,
     height: 700,
-    title: 'NFT Memories',
+    title: 'Certify Original',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -2858,7 +3082,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>NFT Memories</title>
+  <title>Certify Original</title>
   <style>
     :root {
       --bg: #0a0a0a;
@@ -2927,31 +3151,31 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
 </head>
 <body>
   <div class="header">
-    <h1><span>⬡</span> NFT Memories</h1>
+    <h1><span>🛡️</span> Certify Original</h1>
     <button class="close-btn" onclick="window.close()">✕</button>
   </div>
   
   ${promo ? `<div class="promo-banner">
     <h3>🎉 Launch Special - ${promoDays} Days Left!</h3>
-    <p>Up to 90% off NFT minting fees!</p>
+    <p>Up to 90% off certification fees!</p>
   </div>` : ''}
   
   <div class="section">
-    <div class="section-title">NFT TYPE</div>
+    <div class="section-title">PROOF TYPE</div>
     <div class="card">
       <div class="option selected" onclick="selectType('compressed', this)" data-type="compressed">
         <div class="option-radio"></div>
         <div class="option-text">
-          <div class="option-title">Compressed NFT (cNFT)</div>
-          <div class="option-subtitle">99.99% cheaper • Same ownership • Recommended</div>
+          <div class="option-title">Compressed Proof (cNFT)</div>
+          <div class="option-subtitle">99.99% cheaper · Same cryptographic anchor · Recommended</div>
         </div>
         <div class="option-price" id="compressed-price">$${cnftCloudTotal.toFixed(2)}</div>
       </div>
       <div class="option" onclick="selectType('standard', this)" data-type="standard">
         <div class="option-radio"></div>
         <div class="option-text">
-          <div class="option-title">Standard NFT</div>
-          <div class="option-subtitle">Traditional • Higher on-chain cost</div>
+          <div class="option-title">Standard Proof</div>
+          <div class="option-subtitle">Full on-chain anchor · Higher permanence cost</div>
         </div>
         <div class="option-price" id="standard-price">$${nftCloudTotal.toFixed(2)}</div>
       </div>
@@ -2993,15 +3217,15 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   </div>
   
   <div class="section">
-    <div class="section-title">NFT DETAILS</div>
+    <div class="section-title">PROOF DETAILS</div>
     <div class="card">
       <div class="input-group">
         <label>Name</label>
-        <input type="text" id="nft-name" placeholder="My Memory">
+        <input type="text" id="nft-name" placeholder="Certified Original">
       </div>
       <div class="input-group">
         <label>Description (optional)</label>
-        <textarea id="nft-description" placeholder="A special moment..."></textarea>
+        <textarea id="nft-description" placeholder="Description of the certified original..."></textarea>
       </div>
       <div class="privacy-toggle" onclick="toggleStripExif()" style="display: flex; align-items: center; padding: 12px 0; cursor: pointer; border-top: 1px solid var(--border); margin-top: 12px;">
         <div style="flex: 1;">
@@ -3024,7 +3248,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   </div>
   
   <button class="mint-btn" id="mint-btn" disabled onclick="mintNFT()">
-    <span>⬡</span> Mint NFT
+    <span>🛡️</span> Certify Original
   </button>
   
   <script>
@@ -3184,7 +3408,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       
       if (selectedPhoto && walletAddress && !isMinting) {
         const price = getCurrentPrice();
-        btn.innerHTML = '<span>⬡</span> Mint NFT ($' + parseFloat(price).toFixed(2) + ')';
+        btn.innerHTML = '<span>🛡️</span> Certify Original ($' + parseFloat(price).toFixed(2) + ')';
       }
     }
     
@@ -3194,9 +3418,9 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       
       const btn = document.getElementById('mint-btn');
       btn.disabled = true;
-      btn.innerHTML = '<span>⏳</span> Minting...';
+      btn.innerHTML = '<span>⏳</span> Certifying...';
       
-      const name = document.getElementById('nft-name').value || 'NFT Memories';
+      const name = document.getElementById('nft-name').value || 'Certified Original';
       const description = document.getElementById('nft-description').value || '';
       
       try {
@@ -3211,7 +3435,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
         });
         
         if (result.success) {
-          btn.innerHTML = '<span>✓</span> Minted!';
+          btn.innerHTML = '<span>✓</span> Certified!';
           btn.style.background = 'linear-gradient(135deg, #14F195 0%, #10B981 100%)';
           setTimeout(() => window.close(), 2000);
         } else {
@@ -3253,7 +3477,7 @@ function openNFTAlbumWindow(appDataPath, walletAddress) {
   albumWindow = new BrowserWindow({
     width: 480,
     height: 600,
-    title: 'NFT Album',
+    title: 'Proof Vault',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -3273,7 +3497,7 @@ function generateNFTAlbumHTML(walletAddress) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>NFT Album</title>
+  <title>Proof Vault</title>
   <style>
     :root {
       --bg: #0a0a0a;
@@ -3314,7 +3538,7 @@ function generateNFTAlbumHTML(walletAddress) {
 </head>
 <body>
   <div class="header">
-    <h1>🖼️ NFT Album</h1>
+    <h1>🛡️ Proof Vault</h1>
     <div class="header-actions">
       <button class="header-btn" onclick="refreshAlbum()" title="Refresh">↻</button>
       <button class="header-btn" onclick="window.close()" title="Close">✕</button>
@@ -3324,7 +3548,7 @@ function generateNFTAlbumHTML(walletAddress) {
   <div id="content">
     <div class="loading" id="loading">
       <div class="spinner"></div>
-      <span>Loading NFTs...</span>
+      <span>Loading proofs...</span>
     </div>
   </div>
   
@@ -3339,7 +3563,7 @@ function generateNFTAlbumHTML(walletAddress) {
         return;
       }
       
-      document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading NFTs...</span></div>';
+      document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading proofs...</span></div>';
       
       const result = await ipcRenderer.invoke('fetch-user-nfts', walletAddress, 9);
       
@@ -3349,7 +3573,7 @@ function generateNFTAlbumHTML(walletAddress) {
       } else if (result.nfts.length === 0) {
         showEmpty();
       } else {
-        document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Failed to load NFTs</div><div class="empty-hint">' + (result.error || 'Try again later') + '</div></div>';
+        document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Failed to load proofs</div><div class="empty-hint">' + (result.error || 'Try again later') + '</div></div>';
       }
     }
     
@@ -3357,7 +3581,7 @@ function generateNFTAlbumHTML(walletAddress) {
       let html = '<div class="grid">';
       nfts.forEach((nft, i) => {
         const imgUrl = nft.image || nft.imageUrl || '';
-        const name = nft.name || 'NFT #' + (i + 1);
+        const name = nft.name || 'Proof #' + (i + 1);
         html += '<div class="nft-item" onclick="openNFT(' + i + ')">';
         html += '<img src="' + imgUrl + '" onerror="this.src=\\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%231a1a1a%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%2230%22>⬡</text></svg>\\'">';
         html += '<div class="nft-item-overlay"><div class="nft-item-name">' + name + '</div></div>';
@@ -3368,11 +3592,11 @@ function generateNFTAlbumHTML(walletAddress) {
     }
     
     function showEmpty() {
-      document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">⬡</div><div class="empty-text">No NFTs yet</div><div class="empty-hint">Mint your first memory!</div></div>';
+      document.getElementById('content').innerHTML = '<div class="empty"><div class="empty-icon">🛡️</div><div class="empty-text">No proofs yet</div><div class="empty-hint">Certify your first original!</div></div>';
     }
     
     function showConnectPrompt() {
-      document.getElementById('content').innerHTML = '<div class="connect-prompt"><div class="empty-icon" style="font-size: 48px; margin-bottom: 16px;">🔗</div><p style="color: var(--text-muted); margin-bottom: 20px;">Connect your wallet to view NFTs</p><button class="connect-btn" onclick="connectWallet()">Connect Wallet</button></div>';
+      document.getElementById('content').innerHTML = '<div class="connect-prompt"><div class="empty-icon" style="font-size: 48px; margin-bottom: 16px;">🔗</div><p style="color: var(--text-muted); margin-bottom: 20px;">Connect your wallet to view proofs</p><button class="connect-btn" onclick="connectWallet()">Connect Wallet</button></div>';
     }
     
     function connectWallet() {
@@ -4040,7 +4264,7 @@ async function estimateTransferFee(isCompressed, recipientAddress, fromAddress) 
 // ============================================================================
 
 /**
- * Generate a Certificate of Authenticity JSON for a Limited Edition NFT
+ * Generate a Certificate of Authenticity JSON for a certified NFT (all editions)
  */
 function generateCertificate(nftData) {
   if (!nftData) return null;
@@ -4052,13 +4276,16 @@ function generateCertificate(nftData) {
     version: 1,
     type: 'PhotoLynk Certificate of Authenticity',
     edition: nftData.edition || 'limited',
+    certificationMode: nftData.certificationMode || (nftData.edition === 'limited' ? 'private' : nftData.edition === 'open' ? 'public' : null),
     mintAddress: nftData.mintAddress,
     txSignature: nftData.txSignature,
     creatorWallet: nftData.ownerAddress,
     name: nftData.name,
     description: nftData.description,
     contentHash: null,
+    exifRawHash: null,
     exifHash: null,
+    exifBindingHash: null,
     license: nftData.license || 'arr',
     watermarked: !!nftData.watermarked,
     encrypted: !!nftData.encrypted,
@@ -4072,11 +4299,15 @@ function generateCertificate(nftData) {
   // Normalize: always include SHA256: prefix for consistency across platforms
   const ensureHashPrefix = (h) => h && !h.startsWith('SHA256:') ? `SHA256:${h}` : h;
   if (nftData.contentHash) cert.contentHash = ensureHashPrefix(nftData.contentHash);
+  if (nftData.exifRawHash) cert.exifRawHash = ensureHashPrefix(nftData.exifRawHash);
   if (nftData.exifHash) cert.exifHash = ensureHashPrefix(nftData.exifHash);
+  if (nftData.exifBindingHash) cert.exifBindingHash = ensureHashPrefix(nftData.exifBindingHash);
   if (nftData.metadata?.attributes) {
     for (const attr of nftData.metadata.attributes) {
       if (attr.trait_type === 'Content Hash' && !cert.contentHash) cert.contentHash = attr.value;
+      if (attr.trait_type === 'EXIF Raw Hash' && !cert.exifRawHash) cert.exifRawHash = attr.value;
       if (attr.trait_type === 'EXIF Hash' && !cert.exifHash) cert.exifHash = attr.value;
+      if (attr.trait_type === 'EXIF Binding Hash' && !cert.exifBindingHash) cert.exifBindingHash = attr.value;
     }
   }
   // RFC 3161 + C2PA — from direct fields (desktop) or metadata properties (mobile)
@@ -4194,7 +4425,7 @@ function formatCertificateForExport(cert) {
     '┌─────────────────────────────────────────────────────┐',
     '│                                                     │',
     '│          CERTIFICATE OF AUTHENTICITY                │',
-    '│          Digital Asset — Limited Edition             │',
+    `│          Digital Asset — ${cert.certificationMode === 'public' ? 'Public Certified' : 'Private Certified'}          │`,
     '│                                                     │',
     '│          Issued by PhotoLynk                        │',
     '│          https://stealthlynk.io                     │',
@@ -4209,7 +4440,7 @@ function formatCertificateForExport(cert) {
     'SECTION 1 — WORK IDENTIFICATION',
     '',
     `  Title:          ${cert.name || 'Untitled'}`,
-    `  Edition:        ${cert.edition === 'limited' ? 'Limited Edition (1 of 1)' : 'Open Edition'}`,
+    `  Certification:  ${cert.certificationMode === 'public' ? 'Public Certified' : cert.certificationMode === 'private' ? 'Private Certified' : cert.edition === 'limited' ? 'Private Certified' : cert.edition === 'open' ? 'Public Certified' : 'Certified Original'}`,
     `  License:        ${licenseLabel}`,
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
@@ -4224,8 +4455,15 @@ function formatCertificateForExport(cert) {
     '',
     'SECTION 3 — INTEGRITY VERIFICATION',
     '',
-    `  Content Hash:   ${contentHash}`,
-    `  EXIF Hash:      ${exifHash}`,
+    `  Content Hash:        ${contentHash}`,
+    `  EXIF Raw Hash:       ${cert.exifRawHash || 'N/A'}`,
+    `  EXIF Normalized Hash:${cert.exifHash ? ' ' + cert.exifHash : ' N/A'}`,
+    `  EXIF Binding Hash:   ${cert.exifBindingHash || 'N/A'}`,
+    '',
+    '  Hash Legend:',
+    '    EXIF Raw Hash      — SHA-256 of exact EXIF binary bytes from camera',
+    '    EXIF Normalized    — SHA-256 of parsed+rounded EXIF (cross-platform dedup)',
+    '    EXIF Binding Hash  — SHA-256(RawHash | NormalizedHash) binding proof',
     '',
     '  The above cryptographic hashes were computed at the',
     '  time of minting and can be used to verify that the',
@@ -4234,13 +4472,9 @@ function formatCertificateForExport(cert) {
     '  HOW TO VERIFY CONTENT HASH:',
     '    sha256sum <original_file>',
     '',
-    '  HOW TO VERIFY EXIF HASH:',
-    '    The EXIF Hash is SHA-256 of normalized EXIF fields',
-    '    (non-GPS decimals rounded to 4dp, GPS truncated to 4dp,',
-    '    keys sorted alphabetically, then JSON.stringify + SHA-256).',
-    '',
-    '    npm install exifreader',
+    '  HOW TO VERIFY EXIF HASHES:',
     '    node verify-exif-hash.js <original_file>',
+    '    Verifies all 3 EXIF hashes (raw, normalized, binding).',
     '',
     '    Script: https://github.com/viktorvishyn369/PhotoLynk/blob/main/server-tray/verify-exif-hash.js',
     '',
