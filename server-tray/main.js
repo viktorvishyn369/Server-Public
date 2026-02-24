@@ -6843,6 +6843,7 @@ ipcMain.handle('backup-certificates', async () => {
     // Whitelist only slim fields to avoid 413 and prevent server-side bloat
     const SLIM_KEYS = ['id','name','mintAddress','txSignature','creatorWallet','ownerAddress',
       'issuedAt','createdAt','edition','license','contentHash','exifHash','cameraHash',
+      'exifRawHash','exifBindingHash','rfc3161Policy','mintedAt',
       'hasRfc3161','hasC2pa','encrypted','watermarked','storageType','nftType','isCompressed',
       'rfc3161Tsa','metadataUrl','description','version','type','imageUrl','certificationMode'];
     const lightCerts = allCerts.map(c => {
