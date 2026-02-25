@@ -462,7 +462,7 @@ function fetchJson(url) {
   return new Promise((resolve, reject) => {
     try {
       https.get(url, {
-        timeout: 10000,
+        timeout: 4000,
         headers: { 'Accept': 'application/json' }
       }, (res) => {
         let data = '';
@@ -481,11 +481,19 @@ function fetchJson(url) {
   });
 }
 
+let _solPriceInflight = null;
 async function getSolPrice() {
   const now = Date.now();
   if (cachedSolPrice && (now - solPriceLastFetch) < SOL_PRICE_CACHE_MS) {
     return cachedSolPrice;
   }
+  // Dedup: if a fetch is already in flight, piggyback on it
+  if (_solPriceInflight) return _solPriceInflight;
+  _solPriceInflight = _fetchSolPrice();
+  try { return await _solPriceInflight; } finally { _solPriceInflight = null; }
+}
+async function _fetchSolPrice() {
+  const now = Date.now();
 
   const apis = [
     { url: 'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', extract: (d) => d?.solana?.usd },
@@ -514,6 +522,7 @@ async function getSolPrice() {
   return cachedSolPrice;
 }
 
+
 function usdToSol(usdAmount, solPrice) {
   return usdAmount / solPrice;
 }
@@ -531,7 +540,7 @@ async function rpcRequest(method, params) {
           path: url.pathname + (url.search || ''),
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
-          timeout: 10000,
+          timeout: 4000,
         }, (res) => {
           let data = '';
           res.on('data', (c) => { data += c; });
@@ -563,20 +572,36 @@ async function getRentExemptLamports(accountSize) {
   return typeof res === 'number' ? res : 0;
 }
 
+let _cachedPriorityFee = 0;
+let _priorityFeeTs = 0;
+const _PRIORITY_FEE_CACHE_MS = 15000;
 async function getRecentPriorityMicroLamports() {
-  const res = await rpcRequest('getRecentPrioritizationFees', []);
-  if (!Array.isArray(res) || res.length === 0) return 0;
-  const vals = res
-    .map((r) => Number(r?.prioritizationFee))
-    .filter((n) => Number.isFinite(n) && n >= 0)
-    .sort((a, b) => a - b);
-  if (vals.length === 0) return 0;
-  return vals[Math.floor(vals.length / 2)];
+  const now = Date.now();
+  if (_priorityFeeTs && (now - _priorityFeeTs) < _PRIORITY_FEE_CACHE_MS) return _cachedPriorityFee;
+  try {
+    const res = await rpcRequest('getRecentPrioritizationFees', []);
+    if (!Array.isArray(res) || res.length === 0) return _cachedPriorityFee;
+    const vals = res
+      .map((r) => Number(r?.prioritizationFee))
+      .filter((n) => Number.isFinite(n) && n >= 0)
+      .sort((a, b) => a - b);
+    if (vals.length === 0) return _cachedPriorityFee;
+    _cachedPriorityFee = vals[Math.floor(vals.length / 2)];
+    _priorityFeeTs = now;
+    return _cachedPriorityFee;
+  } catch (e) {
+    return _cachedPriorityFee;
+  }
 }
 
-async function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes, edition }) {
+async function prewarmPriorityFee() {
+  try { await getRecentPriorityMicroLamports(); } catch (_) {}
+}
+
+function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes, edition }) {
   const fees = getCurrentFees();
-  const solPrice = await getSolPrice();
+  // 100% synchronous — uses cached values only, never triggers network I/O
+  const solPrice = (cachedSolPrice && cachedSolPrice > 0) ? cachedSolPrice : 150;
   const isCompressed = nftType === 'compressed';
   const useCloud = storageOption === 'cloud';
   const isLimited = edition === 'limited';
@@ -597,13 +622,9 @@ async function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes,
     rentLamports = 20_000_000;
   }
 
-  try {
-    const microLamportsPerCu = await getRecentPriorityMicroLamports();
-    const cuEstimate = isCompressed ? 80000 : 250000;
-    priorityFeeLamports = Math.ceil((microLamportsPerCu * cuEstimate) / 1_000_000);
-  } catch (e) {
-    priorityFeeLamports = 0;
-  }
+  const microLamportsPerCu = _cachedPriorityFee;
+  const cuEstimate = isCompressed ? 80000 : 250000;
+  priorityFeeLamports = Math.ceil((microLamportsPerCu * cuEstimate) / 1_000_000);
 
   // Storage estimate (mobile-style): base + per-KB, for image + metadata
   // Matches solana-seeker/nftOperations.js NFT_FEES.ARWEAVE_UPLOAD_BASE / ARWEAVE_PER_KB
@@ -1099,17 +1120,118 @@ async function extractRawExifBytes(filePath) {
 }
 
 /**
+ * Strip IFD1 thumbnail data from raw TIFF/EXIF bytes for cross-platform stability.
+ * iOS regenerates the embedded JPEG thumbnail with different compression artifacts
+ * each time getAssetInfoAsync exports the photo, causing the raw EXIF binary to differ
+ * even though all actual camera fields (IFD0, ExifIFD, GPSIFD) are identical.
+ *
+ * This function zeroes out:
+ *   - The IFD1 thumbnail JPEG blob (JpegIFOffset/JpegIFByteCount region)
+ *   - The IFD1 offset/count tag values themselves
+ *   - The IFD1-next-IFD pointer (set to 0)
+ *
+ * The result is deterministic across iOS/Android/Desktop for the same photo.
+ * Operates on a COPY — does not mutate the input.
+ *
+ * @param {Buffer} raw - Raw EXIF bytes (starts with "Exif\0\0" for JPEG APP1,
+ *                       or raw TIFF header for PNG eXIf / WebP EXIF / sharp buffer)
+ * @returns {Buffer} Copy with thumbnail data zeroed out
+ */
+function stripThumbnailFromTiff(raw) {
+  if (!raw || raw.length < 16) return raw;
+
+  const buf = Buffer.from(raw); // work on a copy
+
+  // Determine TIFF start offset: "Exif\0\0" prefix means TIFF starts at byte 6
+  let tiffOff = 0;
+  if (buf[0] === 0x45 && buf[1] === 0x78 && buf[2] === 0x69 && buf[3] === 0x66 &&
+      buf[4] === 0x00 && buf[5] === 0x00) {
+    tiffOff = 6;
+  }
+
+  if (tiffOff + 8 > buf.length) return buf;
+
+  // Byte order
+  const le = (buf[tiffOff] === 0x49 && buf[tiffOff + 1] === 0x49); // 'II' = little-endian
+  const be = (buf[tiffOff] === 0x4D && buf[tiffOff + 1] === 0x4D); // 'MM' = big-endian
+  if (!le && !be) return buf;
+
+  const u16 = (off) => le ? buf.readUInt16LE(off) : buf.readUInt16BE(off);
+  const u32 = (off) => le ? buf.readUInt32LE(off) : buf.readUInt32BE(off);
+  const w32 = (off, v) => { if (le) buf.writeUInt32LE(v, off); else buf.writeUInt32BE(v, off); };
+
+  // IFD0 offset (relative to TIFF start)
+  const ifd0Rel = u32(tiffOff + 4);
+  const ifd0Abs = tiffOff + ifd0Rel;
+  if (ifd0Abs + 2 > buf.length) return buf;
+
+  const ifd0Count = u16(ifd0Abs);
+  const ifd0End = ifd0Abs + 2 + ifd0Count * 12;
+  if (ifd0End + 4 > buf.length) return buf;
+
+  // Next-IFD pointer after IFD0 → this is IFD1
+  const ifd1Rel = u32(ifd0End);
+  if (ifd1Rel === 0) return buf; // no IFD1 — no thumbnail
+
+  const ifd1Abs = tiffOff + ifd1Rel;
+  if (ifd1Abs + 2 > buf.length) return buf;
+
+  const ifd1Count = u16(ifd1Abs);
+  if (ifd1Abs + 2 + ifd1Count * 12 + 4 > buf.length) return buf;
+
+  // Zero out the IFD1 pointer from IFD0
+  w32(ifd0End, 0);
+
+  // Scan IFD1 entries for thumbnail offset/length tags
+  let thumbOffset = 0, thumbLength = 0;
+  let thumbOffsetTagAbs = 0, thumbLengthTagAbs = 0;
+
+  for (let i = 0; i < ifd1Count; i++) {
+    const entryAbs = ifd1Abs + 2 + i * 12;
+    const tag = u16(entryAbs);
+    if (tag === 0x0201) { // JpegIFOffset (thumbnail data offset, relative to TIFF start)
+      thumbOffset = u32(entryAbs + 8);
+      thumbOffsetTagAbs = entryAbs + 8;
+    } else if (tag === 0x0202) { // JpegIFByteCount
+      thumbLength = u32(entryAbs + 8);
+      thumbLengthTagAbs = entryAbs + 8;
+    }
+  }
+
+  // Zero out the thumbnail JPEG blob
+  if (thumbOffset > 0 && thumbLength > 0) {
+    const absStart = tiffOff + thumbOffset;
+    const absEnd = Math.min(absStart + thumbLength, buf.length);
+    if (absStart < buf.length) {
+      buf.fill(0, absStart, absEnd);
+    }
+  }
+
+  // Zero out the tag values themselves (offset + length)
+  if (thumbOffsetTagAbs) w32(thumbOffsetTagAbs, 0);
+  if (thumbLengthTagAbs) w32(thumbLengthTagAbs, 0);
+
+  // Zero out the entire IFD1 entry block (all tags + next-IFD pointer)
+  const ifd1BlockEnd = Math.min(ifd1Abs + 2 + ifd1Count * 12 + 4, buf.length);
+  buf.fill(0, ifd1Abs, ifd1BlockEnd);
+
+  return buf;
+}
+
+/**
  * Compute Hash1: SHA-256 of raw EXIF binary bytes from the original file.
- * No parsing, no rounding — exact bytes as the camera wrote them.
- * Identical on any platform because the file is byte-exact across the ecosystem.
+ * Strips IFD1 thumbnail before hashing for cross-platform stability.
+ * Identical on any platform because the file is byte-exact across the ecosystem
+ * and the thumbnail (which iOS re-renders) is zeroed out deterministically.
  * @param {string} filePath - Path to the image file
  * @returns {Promise<string|null>} SHA-256 hex hash or null
  */
 async function computeExifRawHash(filePath) {
   const rawBytes = await extractRawExifBytes(filePath);
   if (!rawBytes || rawBytes.length === 0) return null;
-  const hash = crypto.createHash('sha256').update(rawBytes).digest('hex');
-  console.log(`[NFT] EXIF Raw Hash (${rawBytes.length} bytes): ${hash.substring(0, 16)}...`);
+  const stable = stripThumbnailFromTiff(rawBytes);
+  const hash = crypto.createHash('sha256').update(stable).digest('hex');
+  console.log(`[NFT] EXIF Raw Hash (${stable.length} bytes, thumb-stripped): ${hash.substring(0, 16)}...`);
   return hash;
 }
 
@@ -2017,6 +2139,30 @@ async function mintNFT(params, onProgress) {
     let imageToUploadPath = uploadFilePath;
     let encryptionData = null;
     
+    // Bake EXIF orientation into pixels so web viewers (Tensor, explorers) display
+    // the image upright. sharp.rotate() with no args reads the EXIF Orientation tag,
+    // rotates/flips the pixel data accordingly, and strips the tag from the output.
+    // This MUST run after EXIF/content hashing (which need the untouched original).
+    if (sharp) {
+      try {
+        const meta = await sharp(imageToUploadPath).metadata();
+        if (meta.orientation && meta.orientation > 1) {
+          const rotatedPath = path.join(os.tmpdir(), `nft_rotated_${Date.now()}.jpg`);
+          await sharp(imageToUploadPath)
+            .rotate()  // auto-rotate based on EXIF orientation
+            .jpeg({ quality: 95, mozjpeg: false })
+            .toFile(rotatedPath);
+          cleanupTempFiles.push(rotatedPath);
+          console.log(`[NFT] Auto-rotated image (EXIF orientation ${meta.orientation}) → ${rotatedPath}`);
+          imageToUploadPath = rotatedPath;
+        } else {
+          console.log('[NFT] Image orientation OK (1 or absent), no rotation needed');
+        }
+      } catch (rotErr) {
+        console.warn('[NFT] EXIF auto-rotation failed (non-blocking, using original):', rotErr?.message);
+      }
+    }
+    
     // All editions: upload original image as-is (no resize/recompress)
     // onchain handles its own size budget in generateOnChainImage
     if (isLimited) {
@@ -2296,6 +2442,8 @@ async function mintNFT(params, onProgress) {
       encrypt: (encrypt && encryptionData) ? 'true' : 'false',
       contentHash: contentHash || '',
       exifHash: exifHash || '',
+      exifRawHash: exifRawHash || '',
+      exifBindingHash: exifBindingHash || '',
       certificationMode: certificationMode || '',
     }).toString();
     
@@ -2750,6 +2898,9 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       encryptionData: encryptedFromKeys ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, nonce: encProps.nonce, ...(encProps.thumbnailNonce ? { thumbnailNonce: encProps.thumbnailNonce } : {}), ...(encProps.thumbnailUrl ? { thumbnailUrl: encProps.thumbnailUrl } : {}) } : null,
       thumbnailUrl: encProps.thumbnailUrl || null,
       attributes: attrs,
+      metadata: metadataJson ? { uri: metadataUrl, attributes: attrs, properties: metadataJson.properties || {} } : null,
+      hasRfc3161: !!(metadataJson?.properties?.certificate?.rfc3161?.tsaTokenBase64),
+      hasC2pa: !!(metadataJson?.properties?.c2pa),
       source: 'das',
     };
   };
@@ -3723,23 +3874,49 @@ async function removeNFTFromStorage(mintAddress, serverUrl = null, authHeaders =
 async function bulkSaveNFTs(nfts) {
   if (!nftStorageFile || !Array.isArray(nfts) || nfts.length === 0) return;
   try {
-    // Dedup by mintAddress AND metadataUrl, strip base64 to keep file small
+    // First pass: build metadataUrl → index map so we can merge cnft_tx_ with real entries
+    const byMeta = {};  // metadataUrl → array index in result
+    const result = [];
+    
+    for (const n of nfts) {
+      const id = n && (n.mintAddress || n.assetId);
+      if (!id) continue;
+      
+      const isTxOnly = id.startsWith('cnft_tx_') || id.startsWith('tx_');
+      const hasRealId = !isTxOnly && id.length > 20;
+      
+      if (n.metadataUrl && byMeta[n.metadataUrl] !== undefined) {
+        const existingIdx = byMeta[n.metadataUrl];
+        const existing = result[existingIdx];
+        const existingId = existing && (existing.mintAddress || existing.assetId);
+        const existingIsTx = existingId && (existingId.startsWith('cnft_tx_') || existingId.startsWith('tx_'));
+        
+        if (existingIsTx && hasRealId) {
+          // Replace cnft_tx_ entry with real asset ID entry, preserving local fields
+          result[existingIdx] = { ...existing, ...n, mintAddress: n.mintAddress, assetId: n.assetId };
+          console.log('[NFT Storage] Replaced cnft_tx_ with real asset ID:', n.assetId || n.mintAddress);
+          continue;
+        } else if (isTxOnly && !existingIsTx) {
+          // Skip tx_ entry if real entry already exists
+          continue;
+        }
+        // Same-type duplicate — skip
+        continue;
+      }
+      
+      if (n.metadataUrl) byMeta[n.metadataUrl] = result.length;
+      result.push(n);
+    }
+    
+    // Dedup by mintAddress (safety net)
     const seenIds = new Set();
-    const seenMeta = new Set();
-    const clean = nfts.filter(n => {
+    const clean = result.filter(n => {
       const id = n && (n.mintAddress || n.assetId);
       if (!id || seenIds.has(id)) return false;
-      // Also dedup by metadataUrl to prevent tx_ + cnft_ duplicates
-      if (n.metadataUrl && seenMeta.has(n.metadataUrl)) {
-        // Skip temp tx_ entries if a real entry already exists for same metadataUrl
-        if (id.startsWith('tx_')) return false;
-      }
       seenIds.add(id);
-      if (n.metadataUrl) seenMeta.add(n.metadataUrl);
       return true;
     }).map(n => {
       const copy = { ...n };
-      // Strip large base64 fields to prevent file bloat
       if (copy.imageBase64) delete copy.imageBase64;
       if (copy.thumbnailBase64) delete copy.thumbnailBase64;
       return copy;
@@ -3788,6 +3965,14 @@ async function syncNFTsFromServer(serverUrl, authHeaders) {
       } else {
         // Merge missing fields from server into local (cross-platform encryptionData, edition, etc.)
         const local = localNFTs[idx];
+        // If local has cnft_tx_ (only tx sig) and server has real asset ID, update it
+        if (local.mintAddress && local.mintAddress.startsWith('cnft_tx_') && serverNFT.assetId && !serverNFT.assetId.startsWith('tx_')) {
+          local.mintAddress = serverNFT.mintAddress || ('cnft_' + serverNFT.assetId);
+          local.assetId = serverNFT.assetId;
+          console.log('[NFT Storage] Updated cnft_tx_ entry with real asset ID:', serverNFT.assetId);
+          merged++;
+        }
+        if (serverNFT.assetId && !local.assetId) { local.assetId = serverNFT.assetId; merged++; }
         // Always overwrite encryptionData and thumbnailUrl — critical for cross-device encrypted NFTs
         if (serverNFT.encryptionData && !local.encryptionData) { local.encryptionData = serverNFT.encryptionData; merged++; }
         if (serverNFT.thumbnailUrl && !local.thumbnailUrl) { local.thumbnailUrl = serverNFT.thumbnailUrl; merged++; }
@@ -4558,6 +4743,7 @@ module.exports = {
   getSolPrice,
   usdToSol,
   estimateNftCostsRealtime,
+  prewarmPriorityFee,
   
   // Upload functions (same as mobile)
   uploadToPinata,

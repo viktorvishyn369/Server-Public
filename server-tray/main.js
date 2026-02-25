@@ -1012,7 +1012,7 @@ function startPairingServer() {
                 // Create success popup overlay
                 var overlay = document.createElement('div');
                 overlay.id = 'pairing-success-overlay';
-                overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
+                overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
                 
                 var popup = document.createElement('div');
                 popup.style.cssText = 'background:#1a1a2e;border:1px solid #03E1FF;border-radius:16px;padding:32px;text-align:center;max-width:300px;box-shadow:0 0 40px rgba(3,225,255,0.3);';
@@ -1123,8 +1123,8 @@ function showMainWindow() {
   const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim();
   
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 800,
+    width: 472,
+    height: 802,
     minWidth: 360,
     minHeight: 600,
     resizable: true,
@@ -1172,7 +1172,7 @@ function showMainWindow() {
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overflow: hidden; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; flex-direction: column; height: 100vh; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; flex-direction: column; height: 100vh; position: relative; }
     
     /* Views */
     .view { display: none; flex-direction: column; height: 100%; }
@@ -1327,7 +1327,7 @@ function showMainWindow() {
     .pair-btn-arrow { font-size: 18px; color: var(--text-muted); margin-left: auto; }
 
     /* QR Pairing Modal Overlay */
-    .qr-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 9000; align-items: center; justify-content: center; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+    .qr-overlay { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 9000; align-items: center; justify-content: center; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
     .qr-overlay.open { display: flex; }
     .qr-modal { background: linear-gradient(135deg, #111114 0%, #0a0a0d 100%); border: 1px solid var(--border); border-radius: 20px; padding: 28px; max-width: 340px; width: 90%; text-align: center; position: relative; box-shadow: 0 0 60px rgba(3,225,255,0.1); }
     .qr-modal-close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
@@ -1362,7 +1362,7 @@ function showMainWindow() {
     .section-title.centered { text-align: center; margin-left: 0; margin-right: 0; }
     
     /* Progress overlay */
-    .progress-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; pointer-events: none; }
+    .progress-overlay { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; align-items: center; justify-content: center; pointer-events: none; }
     .progress-overlay.visible { display: flex; pointer-events: auto; }
     .progress-box { background: var(--bg-card); border-radius: 20px; padding: 32px; width: 320px; text-align: center; }
     .progress-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
@@ -1406,7 +1406,7 @@ function showMainWindow() {
     .feature-card.certs .feature-card-sub { color: rgba(245,158,11,0.5); }
     
     /* NFT Album Overlay */
-    .nft-album-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-primary); z-index: 1000; display: none; flex-direction: column; overflow: hidden; }
+    .nft-album-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg-primary); z-index: 1000; display: none; flex-direction: column; overflow: hidden; }
     .nft-album-overlay.active { display: flex; }
     .nft-album-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .nft-album-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
@@ -1444,7 +1444,7 @@ function showMainWindow() {
     .nft-badge-standard .badge-hex { color: #9945FF; font-size: 16px; line-height: 1; } /* Light purple hexagon outline */
     
     /* NFT Detail View Overlay */
-    .nft-detail-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 1100; display: none; flex-direction: column; overflow: hidden; }
+    .nft-detail-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 1100; display: none; flex-direction: column; overflow: hidden; }
     .nft-detail-overlay.active { display: flex; }
     .nft-detail-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; background: rgba(20, 20, 30, 0.98); }
     .nft-detail-header-left { flex: 1; min-width: 0; padding-right: 10px; }
@@ -1519,7 +1519,7 @@ function showMainWindow() {
     .nft-transfer-main svg { width: 18px; height: 18px; }
      
     /* NFT Transfer Modal */
-    .nft-transfer-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1200; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .nft-transfer-modal { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1200; display: none; align-items: center; justify-content: center; padding: 20px; }
     .nft-transfer-modal.active { display: flex; }
     .nft-transfer-content { background: var(--bg-primary); border-radius: 16px; width: 100%; max-width: 360px; border: 1px solid var(--border); overflow: hidden; }
     .nft-transfer-header { padding: 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
@@ -1547,14 +1547,17 @@ function showMainWindow() {
     .nft-transfer-actions .nft-action-btn.primary:disabled { background: rgba(153, 69, 255, 0.3); color: rgba(255,255,255,0.4); cursor: not-allowed; }
     
     /* NFT Mint Panel (full-screen overlay) */
-    .nft-mint-section { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; background: var(--bg-primary); padding: 16px; overflow-y: auto; }
-    .nft-mint-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .nft-mint-title { font-size: 14px; font-weight: 600; color: #9945FF; display: flex; align-items: center; gap: 6px; }
-    .nft-mint-close { width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; }
-    .nft-mint-close:hover { background: rgba(255,255,255,0.05); }
-    .nft-promo-banner { background: linear-gradient(135deg, #9945FF 0%, #14F195 100%); padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; font-size: 11px; }
-    .nft-option-group { margin-bottom: 12px; }
-    .nft-option-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
+    .nft-mint-section { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; background: var(--bg-primary); padding: 20px 16px 16px; overflow-y: auto; }
+    .nft-mint-section::-webkit-scrollbar { width: 4px; }
+    .nft-mint-section::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+    .nft-mint-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .nft-mint-title { font-size: 15px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; letter-spacing: -0.2px; }
+    .nft-mint-title::before { content: ''; display: inline-block; width: 3px; height: 16px; border-radius: 2px; background: linear-gradient(180deg, #9945FF, #6366f1); }
+    .nft-mint-close { width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: var(--text-muted); cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+    .nft-mint-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .nft-promo-banner { background: linear-gradient(135deg, #9945FF 0%, #14F195 100%); padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: 0.2px; }
+    .nft-option-group { margin-bottom: 14px; }
+    .nft-option-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; font-weight: 600; }
     .nft-options { display: flex; gap: 6px; }
     .nft-option { flex: 1; padding: 10px 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; text-align: center; transition: all 0.2s; }
     .nft-option:hover { border-color: #9945FF; }
@@ -1562,28 +1565,65 @@ function showMainWindow() {
     .nft-option-title { font-size: 11px; font-weight: 500; color: var(--text-primary); }
     .nft-option-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
     .nft-option-price { font-size: 11px; font-weight: 600; color: #14F195; margin-top: 4px; }
+    .nft-cert-options { display: flex; flex-direction: column; gap: 10px; }
+    .nft-cert-card { display:flex; flex-direction:column; align-items:flex-start; padding:14px 16px !important; border-radius:12px !important; border:1.5px solid rgba(255,255,255,0.07) !important; background:rgba(255,255,255,0.02) !important; position:relative; cursor:pointer; transition: all 0.2s ease; }
+    .nft-cert-card:hover { border-color:rgba(153,69,255,0.4) !important; background:rgba(153,69,255,0.04) !important; }
+    .nft-cert-card.selected { border-color:#7c3aed !important; background:rgba(124,58,237,0.08) !important; box-shadow:0 0 0 1px rgba(124,58,237,0.2), 0 2px 8px rgba(124,58,237,0.1); }
+    .nft-cert-card-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; width:100%; }
+    .nft-cert-card-header svg { flex-shrink:0; opacity:0.6; }
+    .nft-cert-card.selected .nft-cert-card-header svg { opacity:1; color:#a78bfa; }
+    .nft-cert-card-name { font-size:13px; font-weight:600; color:#e4e4e7; }
+    .nft-cert-card.selected .nft-cert-card-name { color:#fff; }
+    .nft-cert-card-chips { display:flex; flex-wrap:wrap; gap:5px; }
+    .cert-chip { font-size:9px; font-weight:600; padding:3px 7px; border-radius:4px; letter-spacing:0.2px; }
+    .cert-chip.green { background:rgba(34,197,94,0.1); color:#4ade80; }
+    .cert-chip.amber { background:rgba(245,158,11,0.1); color:#fbbf24; }
+    .cert-info-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; border:1px solid rgba(255,255,255,0.1); color:#666; font-size:9px; font-weight:700; cursor:default; position:absolute; top:12px; right:12px; transition: all 0.15s; }
+    .cert-info-icon:hover { border-color:rgba(255,255,255,0.25); color:#999; }
+    .cert-info-icon:hover .cert-tooltip { opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); }
+    .cert-tooltip { position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%) translateY(4px); background:#1a1a2e; color:#d4d4d8; font-size:11px; font-weight:400; line-height:1.5; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); white-space:normal; width:230px; text-align:left; opacity:0; visibility:hidden; transition:all 0.2s ease; pointer-events:none; z-index:10; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
+    .cert-tooltip::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#1a1a2e; }
     .nft-cost-breakdown { margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); }
     .nft-cost-row { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--text-muted); margin-top: 6px; }
     .nft-cost-row:first-child { margin-top: 0; }
     .nft-cost-row strong { color: var(--text-primary); font-weight: 600; }
     .nft-cost-meta { margin-top: 8px; font-size: 9px; color: rgba(255,255,255,0.45); }
-    .nft-photo-select { border: 2px dashed var(--border); border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; }
-    .nft-photo-select:hover { border-color: #9945FF; background: rgba(153,69,255,0.05); }
-    .nft-photo-icon { font-size: 28px; margin-bottom: 4px; }
-    .nft-photo-text { font-size: 11px; color: var(--text-muted); }
-    .nft-photo-preview { display: none; position: relative; border-radius: 10px; overflow: hidden; }
-    .nft-photo-preview img { width: 100%; max-height: 120px; object-fit: cover; border-radius: 10px; }
-    .nft-photo-remove { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,0.7); border: none; color: #fff; cursor: pointer; font-size: 11px; }
-    .nft-input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(0,0,0,0.3); color: var(--text-primary); font-size: 12px; margin-bottom: 8px; }
-    .nft-input:focus { outline: none; border-color: #9945FF; }
+    .nft-photo-select { border: 2px dashed rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.015); }
+    .nft-photo-select:hover { border-color: rgba(153,69,255,0.5); background: rgba(153,69,255,0.04); }
+    .nft-photo-icon { margin-bottom: 6px; display: flex; justify-content: center; }
+    .nft-photo-text { font-size: 12px; color: var(--text-muted); }
+    .nft-photo-preview { display: none; position: relative; border-radius: 12px; overflow: hidden; }
+    .nft-photo-preview img { width: 100%; max-height: 140px; object-fit: cover; border-radius: 12px; }
+    .nft-photo-remove { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+    .nft-photo-remove:hover { background: rgba(239,68,68,0.7); }
+    .nft-input { width: 100%; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; background: rgba(255,255,255,0.03); color: var(--text-primary); font-size: 12px; margin-bottom: 0; transition: border-color 0.15s; }
+    .nft-input:focus { outline: none; border-color: rgba(153,69,255,0.5); background: rgba(153,69,255,0.04); }
     .nft-input::placeholder { color: var(--text-muted); }
-    .nft-wallet-row { display: flex; align-items: center; gap: 8px; padding: 10px; background: rgba(153,69,255,0.1); border-radius: 8px; margin-bottom: 10px; font-size: 11px; }
-    .nft-wallet-dot { width: 6px; height: 6px; border-radius: 50%; background: #14F195; }
-    .nft-wallet-dot.disconnected { background: #f87171; }
-    .nft-wallet-connect { margin-left: auto; padding: 4px 10px; border-radius: 5px; border: 1px solid #9945FF; background: transparent; color: #9945FF; cursor: pointer; font-size: 10px; }
+    /* Toggle row (watermark, strip exif, license) */
+    .nft-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; cursor: pointer; transition: all 0.15s; }
+    .nft-toggle-row:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+    .nft-toggle-left { display: flex; align-items: center; gap: 10px; }
+    .nft-toggle-left svg { flex-shrink: 0; opacity: 0.5; }
+    .nft-toggle-title { font-size: 12px; font-weight: 500; color: #e4e4e7; }
+    .nft-toggle-desc { font-size: 10px; color: #71717a; margin-top: 1px; line-height: 1.3; }
+    /* Custom toggle switch */
+    .nft-toggle-check { -webkit-appearance: none; appearance: none; width: 36px; height: 20px; border-radius: 10px; background: rgba(255,255,255,0.1); position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+    .nft-toggle-check::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #71717a; transition: all 0.2s; }
+    .nft-toggle-check:checked { background: rgba(124,58,237,0.5); }
+    .nft-toggle-check:checked::after { left: 18px; background: #a78bfa; }
+    /* Cost display */
+    .nft-cost-display { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; margin-bottom: 10px; }
+    .nft-cost-label { font-size: 11px; color: #71717a; font-weight: 500; }
+    .nft-cost-value { font-size: 13px; font-weight: 700; color: #14F195; }
+    /* Wallet row */
+    .nft-wallet-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; margin-bottom: 12px; font-size: 11px; }
+    .nft-wallet-dot { width: 7px; height: 7px; border-radius: 50%; background: #14F195; box-shadow: 0 0 6px rgba(20,241,149,0.4); }
+    .nft-wallet-dot.disconnected { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.3); }
+    .nft-wallet-connect { margin-left: auto; padding: 5px 12px; border-radius: 6px; border: 1px solid rgba(153,69,255,0.4); background: rgba(153,69,255,0.1); color: #a78bfa; cursor: pointer; font-size: 10px; font-weight: 600; transition: all 0.15s; }
+    .nft-wallet-connect:hover { background: rgba(153,69,255,0.2); border-color: rgba(153,69,255,0.6); color: #c4b5fd; }
     .nft-guide-btn { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #9945FF; background: transparent; color: #9945FF; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 6px; padding: 0; line-height: 16px; }
     .nft-guide-btn:hover { background: rgba(153,69,255,0.2); }
-    .nft-guide-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .nft-guide-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
     .nft-guide-modal { background: #111; border-radius: 14px; padding: 16px; width: 100%; max-width: 440px; max-height: 82vh; display: flex; flex-direction: column; border: 1px solid rgba(255,255,255,0.08); }
     .nft-guide-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     .nft-guide-scroll { overflow-y: auto; flex: 1; padding-right: 4px; }
@@ -1895,68 +1935,95 @@ function showMainWindow() {
       <!-- NFT Mint Panel (full-screen overlay) -->
       <div id="nft-mint-section" class="nft-mint-section" style="display: none;">
         <div class="nft-mint-header">
-          <div class="nft-mint-title"><span style="font-size:20px;">🛡</span> Certify Original</div>
+          <div class="nft-mint-title">Certify Original</div>
           <button class="nft-mint-close" onclick="closeNFTMint()">✕</button>
         </div>
         
-        <div class="nft-mint-subtitle" style="padding:0 20px 20px;font-size:13px;color:#888;line-height:1.6;text-align:center;max-width:600px;margin:0 auto;">
-          Create a tamper-proof certification for your photo with decentralized archival. Choose your privacy level.
-        </div>
-        
         <div id="nft-promo-banner" class="nft-promo-banner" style="display: none;">
-          🎉 Launch Special - <span id="promo-days">30</span> Days Left! Up to 90% off!
+          Launch Special - <span id="promo-days">30</span> Days Left! Up to 90% off!
         </div>
         
-        <!-- Certification Mode: Private vs Public -->
+        <!-- 1. Select Photo (moved to top for immediate engagement) -->
         <div class="nft-option-group">
-          <div class="nft-option-label" style="font-size:14px;font-weight:600;color:#fff;margin-bottom:12px;">Certification Mode</div>
-          <div class="nft-options" style="gap:16px;">
-            <div class="nft-option nft-cert-mode selected" onclick="selectCertificationMode('private', this)" style="padding:20px;border:2px solid #6366f1;background:rgba(99,102,241,0.08);">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <span style="font-size:24px;">🔐</span>
-                <div class="nft-option-title" style="font-size:15px;font-weight:600;color:#fff;">Private Certified</div>
+          <div class="nft-photo-select" id="nft-photo-select" onclick="selectNFTPhoto()">
+            <div class="nft-photo-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
+            <div class="nft-photo-text">Select a photo to certify</div>
+          </div>
+          <div class="nft-photo-preview" id="nft-photo-preview">
+            <img id="nft-preview-img" src="">
+            <button class="nft-photo-remove" onclick="removeNFTPhoto()">✕</button>
+          </div>
+        </div>
+        
+        <!-- 2. Name -->
+        <div class="nft-option-group">
+          <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Original)">
+          <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)" style="display:none">
+        </div>
+        
+        <!-- 3. Certification Mode: Private vs Public -->
+        <div class="nft-option-group">
+          <div class="nft-option-label">Privacy Level</div>
+          <div class="nft-cert-options">
+            <div class="nft-cert-card selected" onclick="selectCertificationMode('private', this)">
+              <div class="nft-cert-card-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span class="nft-cert-card-name">Private Certified</span>
+                <span class="cert-info-icon">i<span class="cert-tooltip">Encrypted on your device before upload. Only you can decrypt and view the original. Public sees only the proof, not the image.</span></span>
               </div>
-              <div class="nft-option-sub" style="font-size:12px;line-height:1.5;color:#a1a1aa;margin-bottom:12px;">Encrypted on your device before upload. Only you can decrypt and view the original. Public sees only the proof, not the image.</div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                <span style="font-size:10px;padding:4px 8px;background:rgba(34,197,94,0.15);color:#4ade80;border-radius:4px;font-weight:600;">✓ Zero-knowledge encryption</span>
-                <span style="font-size:10px;padding:4px 8px;background:rgba(34,197,94,0.15);color:#4ade80;border-radius:4px;font-weight:600;">✓ EXIF preserved</span>
-                <span style="font-size:10px;padding:4px 8px;background:rgba(34,197,94,0.15);color:#4ade80;border-radius:4px;font-weight:600;">✓ Privacy-first</span>
+              <div class="nft-cert-card-chips">
+                <span class="cert-chip green">Encrypted</span>
+                <span class="cert-chip green">EXIF preserved</span>
+                <span class="cert-chip green">Privacy-first</span>
               </div>
             </div>
-            <div class="nft-option nft-cert-mode" onclick="selectCertificationMode('public', this)" style="padding:20px;border:2px solid #333;background:#1a1a1a;">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <span style="font-size:24px;">🌍</span>
-                <div class="nft-option-title" style="font-size:15px;font-weight:600;color:#fff;">Public Certified</div>
+            <div class="nft-cert-card" onclick="selectCertificationMode('public', this)">
+              <div class="nft-cert-card-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span class="nft-cert-card-name">Public Certified</span>
+                <span class="cert-info-icon">i<span class="cert-tooltip">Unencrypted, publicly viewable. Stored on decentralized infrastructure. Ideal for portfolios, social profiles, or selling prints.</span></span>
               </div>
-              <div class="nft-option-sub" style="font-size:12px;line-height:1.5;color:#a1a1aa;margin-bottom:12px;">Unencrypted, publicly viewable. Stored on decentralized infrastructure. Ideal for portfolios, social profiles, or selling prints.</div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                <span style="font-size:10px;padding:4px 8px;background:rgba(34,197,94,0.15);color:#4ade80;border-radius:4px;font-weight:600;">✓ Full quality preserved</span>
-                <span style="font-size:10px;padding:4px 8px;background:rgba(245,158,11,0.15);color:#fbbf24;border-radius:4px;font-weight:600;">⚠ Publicly visible</span>
-                <span style="font-size:10px;padding:4px 8px;background:rgba(34,197,94,0.15);color:#4ade80;border-radius:4px;font-weight:600;">✓ Transferable</span>
+              <div class="nft-cert-card-chips">
+                <span class="cert-chip green">Full quality</span>
+                <span class="cert-chip amber">Publicly visible</span>
+                <span class="cert-chip green">Transferable</span>
               </div>
             </div>
           </div>
         </div>
         
-        <!-- HIDDEN: Edition (Open / Limited) - Keep logic intact -->
-        <div class="nft-option-group" style="display:none;">
-          <div class="nft-option-label">Edition</div>
-          <div class="nft-options">
-            <div class="nft-option selected" onclick="selectNFTEdition('open', this)">
-              <div class="nft-option-title">Open Edition</div>
-              <div class="nft-option-sub">Photo uploaded & linked to record</div>
+        <!-- Optional watermark (Public mode only) -->
+        <div class="nft-option-group" id="watermark-option" style="display:none;">
+          <label class="nft-toggle-row">
+            <div class="nft-toggle-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+              <div>
+                <div class="nft-toggle-title">Add Watermark</div>
+                <div class="nft-toggle-desc">Protect your public original with a visible watermark</div>
+              </div>
             </div>
-            <div class="nft-option" onclick="selectNFTEdition('limited', this)">
-              <div class="nft-option-title">Limited Edition</div>
-              <div class="nft-option-sub">Original stays on device, ownership proof</div>
-            </div>
-          </div>
+            <input type="checkbox" id="nft-watermark-public" class="nft-toggle-check">
+          </label>
         </div>
         
-        <!-- 2. License -->
+        <!-- Strip EXIF toggle -->
+        <div class="nft-option-group">
+          <label class="nft-toggle-row">
+            <div class="nft-toggle-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <div>
+                <div class="nft-toggle-title">Remove Private Data (EXIF)</div>
+                <div class="nft-toggle-desc">Strip location, camera info, and other metadata</div>
+              </div>
+            </div>
+            <input type="checkbox" id="nft-strip-exif-toggle" class="nft-toggle-check" onchange="selectedStripExif = this.checked">
+          </label>
+        </div>
+        
+        <!-- 4. License -->
         <div class="nft-option-group">
           <div class="nft-option-label">License</div>
-          <select class="nft-input" id="nft-license-select" style="padding:10px;background:#1a1a1a;color:#fff;border:1px solid #333;border-radius:8px;font-size:12px;">
+          <select class="nft-input" id="nft-license-select">
             <option value="arr" selected>All Rights Reserved</option>
             <option value="cc-by">CC BY 4.0</option>
             <option value="cc-by-sa">CC BY-SA 4.0</option>
@@ -1969,106 +2036,36 @@ function showMainWindow() {
           </select>
         </div>
         
-        <!-- HIDDEN: Record Type (Compressed / Standard) - Keep logic intact, always use compressed -->
-        <div class="nft-option-group" style="display:none;">
-          <div class="nft-option-label">Record Type</div>
-          <div class="nft-options">
-            <div class="nft-option selected" onclick="selectNFTType('compressed', this)">
-              <div class="nft-option-title">Compressed</div>
-              <div class="nft-option-sub">99.99% cheaper</div>
-              <div class="nft-option-price" id="cnft-price">$0.02</div>
-            </div>
-            <div class="nft-option" onclick="selectNFTType('standard', this)">
-              <div class="nft-option-title">Standard</div>
-              <div class="nft-option-sub">Traditional</div>
-              <div class="nft-option-price" id="nft-price">$0.20</div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- HIDDEN: Image Storage - Keep logic intact, always use IPFS -->
-        <div class="nft-option-group" id="nft-storage-group" style="display:none;">
-          <div class="nft-option-label">Image Storage</div>
-          <div class="nft-options">
-            <div class="nft-option selected" onclick="selectNFTStorage('ipfs', this)">
-              <div class="nft-option-title">Decentralized Storage</div>
-              <div class="nft-option-sub">Decentralized, public • <span id="storage-fee">$0.05</span> fee</div>
-            </div>
-            <div class="nft-option" onclick="selectNFTStorage('cloud', this)">
-              <div class="nft-option-title">Encrypted Cloud</div>
-              <div class="nft-option-sub">Encrypted, zero-knowledge • <span id="cloud-fee">$0.02</span> fee</div>
-            </div>
-            <div class="nft-option" onclick="selectNFTStorage('onchain', this)">
-              <div class="nft-option-title">On-chain</div>
-              <div class="nft-option-sub">Embedded, decentralized, permanent</div>
-            </div>
-          </div>
-
-          <div class="nft-cost-breakdown" id="nft-cost-breakdown" style="display:none;">
-            <div class="nft-cost-row"><span>Estimated cost</span><strong id="nft-cost-total">—</strong></div>
-          </div>
-        </div>
-        
         <!-- Cost Display -->
-        <div style="padding:12px 20px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;margin:0 20px 16px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:12px;color:#a1a1aa;">Estimated Cost</span>
-            <strong id="nft-simple-cost" style="font-size:14px;color:#fff;">~$0.07</strong>
-          </div>
+        <div class="nft-cost-display">
+          <span class="nft-cost-label">Estimated Cost</span>
+          <strong id="nft-simple-cost" class="nft-cost-value">~$0.07</strong>
         </div>
         
-        <!-- HIDDEN: Encrypt & Watermark - Auto-controlled by certification mode -->
-        <div class="nft-option-group" style="display:none;">
-          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;cursor:pointer;font-size:12px;color:#888;">
-            <input type="checkbox" id="nft-encrypt-check" style="accent-color:#9945FF;"> Encrypt
-          </label>
-          <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:#1a1a1a;border:1px solid #333;border-radius:8px;cursor:pointer;font-size:12px;color:#888;">
-            <input type="checkbox" id="nft-watermark-check" style="accent-color:#9945FF;"> Watermark
-          </label>
-        </div>
-        
-        <!-- Optional Watermark for Public Mode -->
-        <div class="nft-option-group" id="watermark-option" style="display:none;padding:0 20px;">
-          <label style="display:flex;align-items:center;gap:10px;padding:12px;background:#1a1a1a;border:1px solid #333;border-radius:8px;cursor:pointer;">
-            <input type="checkbox" id="nft-watermark-public" style="accent-color:#6366f1;width:18px;height:18px;">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#fff;">Add Watermark</div>
-              <div style="font-size:11px;color:#888;margin-top:2px;">Protect your public original with a visible watermark</div>
-            </div>
-          </label>
-        </div>
-        
-        <!-- 6. Select Photo -->
-        <div class="nft-option-group">
-          <div class="nft-option-label">Select Photo</div>
-          <div class="nft-photo-select" id="nft-photo-select" onclick="selectNFTPhoto()">
-            <div class="nft-photo-icon">📷</div>
-            <div class="nft-photo-text">Click to select</div>
-          </div>
-          <div class="nft-photo-preview" id="nft-photo-preview">
-            <img id="nft-preview-img" src="">
-            <button class="nft-photo-remove" onclick="removeNFTPhoto()">✕</button>
-          </div>
-        </div>
-        
-        <!-- 7. Name & Description -->
-        <div class="nft-option-group">
-          <div class="nft-option-label">Details</div>
-          <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Original)">
-          <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)" style="display:none">
-        </div>
-        
-        <!-- 8. Credentials & Certify -->
+        <!-- Wallet Connection -->
         <div class="nft-wallet-row">
           <div class="nft-wallet-dot disconnected" id="mint-wallet-dot"></div>
           <span id="mint-wallet-text">No credentials connected</span>
           <button class="nft-wallet-connect" onclick="connectNFTWallet()">Connect</button>
         </div>
-        <div id="wallet-connect-hint" style="display:none;margin-top:6px;padding:8px 10px;background:rgba(153,69,255,0.1);border:1px solid rgba(153,69,255,0.25);border-radius:8px;font-size:11px;color:#c4b5fd;line-height:1.5;">🔓 A browser tab just opened. Approve the connection in your browser to link your credentials.</div>
+        <div id="wallet-connect-hint" style="display:none;margin-top:6px;padding:8px 10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;font-size:11px;color:#a5b4fc;line-height:1.5;">A browser tab just opened. Approve the connection in your browser to link your credentials.</div>
         
-        <button class="nft-mint-btn" id="nft-mint-btn" disabled onclick="doMintNFT()" style="background:linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);font-size:15px;font-weight:600;padding:16px;">
-          <span style="font-size:18px;">🛡</span> Certify Original
+        <!-- Certify Button -->
+        <button class="nft-mint-btn" id="nft-mint-btn" disabled onclick="doMintNFT()">
+          Certify Original
         </button>
+        
+        <!-- HIDDEN: Internal state checkboxes read by JS — not shown to user -->
+        <div style="display:none;">
+          <input type="checkbox" id="nft-encrypt-check">
+          <input type="checkbox" id="nft-watermark-check">
+          <span id="cnft-price"></span>
+          <span id="nft-price"></span>
+          <span id="storage-fee"></span>
+          <span id="cloud-fee"></span>
+          <div id="nft-cost-breakdown"><div id="nft-cost-total"></div></div>
+          <div id="nft-storage-group"></div>
+        </div>
       </div>
     </div>
     
@@ -2239,7 +2236,7 @@ function showMainWindow() {
         <div class="nft-guide-label">Key facts</div>
 
         <div class="nft-guide-note">
-          <strong>Image quality:</strong> Your photo is never compressed or re-encoded. "Compressed" refers to how the <em>authenticity record</em> is stored (using state compression to save cost) — your image stays pixel-perfect. Compressed records cost ~$0.01 vs ~$2.60 for standard, with identical ownership rights.
+          <strong>Image quality:</strong> Your photo is never compressed or re-encoded. The record type refers to how the <em>authenticity record</em> is stored on-chain — your image stays pixel-perfect. All records have identical ownership rights regardless of storage method.
         </div>
 
         <div class="nft-guide-note" style="margin-top:4px;">
@@ -2878,6 +2875,7 @@ function showMainWindow() {
     let selectedNFTStorage = 'ipfs';
     let selectedNFTEdition = 'open';
     let selectedCertificationMode = 'private';
+    let selectedStripExif = false;
     let selectedNFTPhoto = null;
     let isMinting = false;
     let lastNftFees = null;
@@ -2894,7 +2892,7 @@ function showMainWindow() {
         section.style.display = 'block';
         
         // Initialize with Private mode selected by default
-        const privateOption = document.querySelector('.nft-cert-mode.selected');
+        const privateOption = document.querySelector('.nft-cert-card');
         if (privateOption) {
           selectCertificationMode('private', privateOption);
         }
@@ -2924,10 +2922,12 @@ function showMainWindow() {
         updateOnchainLockedState();
         maybeShowNFTWelcome();
 
-        // Refresh immediately and then periodically
-        refreshNFTPricesRealtime();
+        // Defer initial price refresh so UI is interactive before network IPC fires
         if (nftPriceTimer) clearInterval(nftPriceTimer);
-        nftPriceTimer = setInterval(refreshNFTPricesRealtime, 15000);
+        setTimeout(() => {
+          refreshNFTPricesRealtime();
+          nftPriceTimer = setInterval(refreshNFTPricesRealtime, 15000);
+        }, 1500);
       } catch (e) {
         console.error('openNFTMint error:', e);
       }
@@ -2963,10 +2963,14 @@ function showMainWindow() {
       const storageGroup = document.getElementById('nft-storage-group');
       if (storageGroup) storageGroup.style.display = '';
       // Reset certification mode to Private
-      const certModes = document.querySelectorAll('.nft-cert-mode');
-      if (certModes.length > 0) {
-        selectCertificationMode('private', certModes[0]);
+      const certCards = document.querySelectorAll('.nft-cert-card');
+      if (certCards.length > 0) {
+        selectCertificationMode('private', certCards[0]);
       }
+      // Reset stripExif toggle
+      selectedStripExif = false;
+      const stripToggle = document.getElementById('nft-strip-exif-toggle');
+      if (stripToggle) stripToggle.checked = false;
       updateOnchainLockedState();
       updateMintButton();
     }
@@ -3007,8 +3011,8 @@ function showMainWindow() {
           }
         }
 
-        // Selected option estimate for mint button
-        const selectedEstimate = await ipcRenderer.invoke('estimate-nft-costs', { nftType: selectedNFTType, storageOption: selectedNFTStorage, filePath: selectedNFTPhoto, edition: selectedNFTEdition });
+        // Selected option estimate for mint button (reuse already-fetched result)
+        const selectedEstimate = selectedNFTType === 'compressed' ? cnft : standard;
         if (selectedEstimate && !selectedEstimate.error) {
           lastNftEstimate = selectedEstimate;
         }
@@ -3033,31 +3037,33 @@ function showMainWindow() {
     function selectCertificationMode(mode, el) {
       selectedCertificationMode = mode;
       // Update UI selection
-      el.parentElement.querySelectorAll('.nft-cert-mode').forEach(o => {
+      el.parentElement.querySelectorAll('.nft-cert-card').forEach(o => {
         o.classList.remove('selected');
-        o.style.border = '2px solid #333';
-        o.style.background = '#1a1a1a';
       });
       el.classList.add('selected');
-      el.style.border = '2px solid #6366f1';
-      el.style.background = 'rgba(99,102,241,0.08)';
       
-      // Auto-configure settings based on mode
+      // Auto-configure settings based on mode (must match solana-seeker NFTPhotoPicker presets)
       if (mode === 'private') {
-        // Private: Always encrypted, IPFS storage, Open Edition, Compressed
+        // Private: Always encrypted, IPFS storage, Open Edition, Compressed, no watermark, stripExif off
         selectedNFTEdition = 'open';
         selectedNFTStorage = 'ipfs';
         selectedNFTType = 'compressed';
+        selectedStripExif = false;
         document.getElementById('nft-encrypt-check').checked = true;
         document.getElementById('watermark-option').style.display = 'none';
         document.getElementById('nft-watermark-public').checked = false;
+        const stripToggle1 = document.getElementById('nft-strip-exif-toggle');
+        if (stripToggle1) stripToggle1.checked = false;
       } else {
-        // Public: Unencrypted, IPFS storage, Open Edition, Compressed, optional watermark
+        // Public: Unencrypted, IPFS storage, Open Edition, Compressed, optional watermark, stripExif off
         selectedNFTEdition = 'open';
         selectedNFTStorage = 'ipfs';
         selectedNFTType = 'compressed';
+        selectedStripExif = false;
         document.getElementById('nft-encrypt-check').checked = false;
         document.getElementById('watermark-option').style.display = 'block';
+        const stripToggle2 = document.getElementById('nft-strip-exif-toggle');
+        if (stripToggle2) stripToggle2.checked = false;
       }
       
       // Update hidden controls to match
@@ -3144,7 +3150,9 @@ function showMainWindow() {
     
     async function selectNFTPhoto() {
       try {
+        console.log('[NFT] selectNFTPhoto: invoking IPC');
         const paths = await ipcRenderer.invoke('select-photo-for-nft');
+        console.log('[NFT] selectNFTPhoto: IPC returned', paths ? paths.length : 0, 'paths');
         if (paths && paths.length > 0) {
           selectedNFTPhoto = paths[0];
           const selectedPath = (typeof selectedNFTPhoto === 'string')
@@ -3263,9 +3271,9 @@ function showMainWindow() {
       const btn = document.getElementById('nft-mint-btn');
       btn.disabled = !selectedNFTPhoto || !nftWalletAddress || isMinting;
       if (!btn.disabled && lastNftEstimate && lastNftEstimate.total) {
-        btn.innerHTML = '<span>⬡</span> Certify Original (~$' + (lastNftEstimate.total.usd || 0).toFixed(2) + ')';
+        btn.innerHTML = 'Certify Original (~$' + (lastNftEstimate.total.usd || 0).toFixed(2) + ')';
       } else if (!isMinting) {
-        btn.innerHTML = '<span>⬡</span> Certify Original';
+        btn.innerHTML = 'Certify Original';
       }
     }
     
@@ -3298,6 +3306,7 @@ function showMainWindow() {
       const license = document.getElementById('nft-license-select').value || 'arr';
       const watermark = document.getElementById('nft-watermark-check').checked;
       const encrypt = document.getElementById('nft-encrypt-check').checked;
+      const stripExif = selectedStripExif;
       
       try {
         const result = await ipcRenderer.invoke('mint-nft', {
@@ -3311,6 +3320,7 @@ function showMainWindow() {
           license: license,
           watermark: watermark,
           encrypt: encrypt,
+          stripExif: stripExif,
           certificationMode: selectedCertificationMode,
         });
         
@@ -3350,7 +3360,7 @@ function showMainWindow() {
         setTimeout(() => {
           isMinting = false;
           btn.style.background = '';
-          btn.innerHTML = '<span>⬡</span> Certify Original';
+          btn.innerHTML = 'Certify Original';
           updateMintButton();
           // Restore quick-stats grid after certification failure
           hero.classList.remove('active-op');
@@ -3398,7 +3408,7 @@ function showMainWindow() {
       // Show success popup IMMEDIATELY — don't block on DAS resolution or save
       const overlay = document.createElement('div');
       overlay.id = 'mint-success-overlay';
-      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+      overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
       
       const popup = document.createElement('div');
       popup.style.cssText = 'background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border:1px solid #14F195;border-radius:20px;padding:24px;max-width:400px;width:100%;text-align:center;box-shadow:0 0 60px rgba(20,241,149,0.3);';
@@ -3475,6 +3485,11 @@ function showMainWindow() {
             thumbnailUrl: savedThumbUrl,
             createdAt: new Date().toISOString(),
             attributes: (window._pendingMintProofData?.attributes) || [],
+            contentHash: data.contentHash || null,
+            exifHash: data.exifHash || null,
+            exifRawHash: data.exifRawHash || null,
+            exifBindingHash: data.exifBindingHash || null,
+            certificationMode: data.certificationMode || null,
           });
           window._pendingMintThumbnailUrl = null;
           console.log('[NFT] Minted NFT saved to storage (temp ID:', tempMintAddress, ')');
@@ -3553,6 +3568,11 @@ function showMainWindow() {
                       thumbnailUrl: savedThumbUrl,
                       createdAt: new Date().toISOString(),
                       attributes: (window._pendingMintProofData?.attributes) || [],
+                      contentHash: data.contentHash || null,
+                      exifHash: data.exifHash || null,
+                      exifRawHash: data.exifRawHash || null,
+                      exifBindingHash: data.exifBindingHash || null,
+                      certificationMode: data.certificationMode || null,
                     });
                     console.log('[NFT] Updated saved NFT with resolved assetId:', resolvedMintAddress);
                   } catch (updateErr) {
@@ -3601,6 +3621,9 @@ function showMainWindow() {
             metadataUrl: data.metadataUrl || null,
             contentHash: data.contentHash || null,
             exifHash: data.exifHash || null,
+            exifRawHash: data.exifRawHash || null,
+            exifBindingHash: data.exifBindingHash || null,
+            certificationMode: data.certificationMode || null,
             createdAt: new Date().toISOString(),
             tsaToken: pendingProof?.tsaToken || null,
             tsaUrl: pendingProof?.tsaUrl || null,
@@ -3631,7 +3654,7 @@ function showMainWindow() {
                     const newMint = 'cnft_' + realId;
                     console.log('[NFT] Background DAS resolved:', newMint);
                     _fetchNFTsInFlight = null;
-                    try { await ipcRenderer.invoke('save-minted-nft', { mintAddress: newMint, assetId: realId, ownerAddress: data.wallet || nftWalletAddress, name: data.name || 'Photo Original', imageUrl: displayImageUrl, metadataUrl: data.metadataUrl || null, txSignature: data.mintTx || data.paymentTx || null, storageType: data.storageOption || 'ipfs', isCompressed: true, nftType: 'compressed', edition: data.edition || 'open', license: data.license || 'arr', watermarked: data.watermark === 'true', encrypted: data.encrypt === 'true', encryptionData: pendingEncData, thumbnailUrl: savedThumbUrl, createdAt: new Date().toISOString() }); } catch (_) {}
+                    try { await ipcRenderer.invoke('save-minted-nft', { mintAddress: newMint, assetId: realId, ownerAddress: data.wallet || nftWalletAddress, name: data.name || 'Photo Original', imageUrl: displayImageUrl, metadataUrl: data.metadataUrl || null, txSignature: data.mintTx || data.paymentTx || null, storageType: data.storageOption || 'ipfs', isCompressed: true, nftType: 'compressed', edition: data.edition || 'open', license: data.license || 'arr', watermarked: data.watermark === 'true', encrypted: data.encrypt === 'true', encryptionData: pendingEncData, thumbnailUrl: savedThumbUrl, createdAt: new Date().toISOString(), contentHash: data.contentHash || null, exifHash: data.exifHash || null, exifRawHash: data.exifRawHash || null, exifBindingHash: data.exifBindingHash || null, certificationMode: data.certificationMode || null }); } catch (_) {}
                     try { await ipcRenderer.invoke('remove-stored-nft', tempMintAddress); } catch (_) {}
                     try { await ipcRenderer.invoke('update-certificate-mint', tempMintAddress, newMint); console.log('[NFT] Background: cert updated to', newMint); } catch (_) {}
                     checkForNewNFTsOnce();
@@ -3683,11 +3706,11 @@ function showMainWindow() {
     // Shared enrichment: enrich certs array from an nftMap, then attempt RFC3161 token recovery
     // Returns true if any field was enriched (caller should persist)
     async function enrichCertsWithNFTData(certs, nftMap, logPrefix) {
-      if (!nftMap || Object.keys(nftMap).length === 0) return false;
       let enriched = false;
+      const hasNFTs = nftMap && Object.keys(nftMap).length > 0;
       for (const c of certs) {
         const cKey = (c.mintAddress || '').replace(/^cnft_/, '');
-        const nft = nftMap[cKey];
+        const nft = hasNFTs ? nftMap[cKey] : null;
         if (!nft) continue;
         const attrs = nft.metadata?.attributes || nft.attributes || [];
         if (!c.contentHash) { const a = attrs.find(x => x.trait_type === 'Content Hash'); if (a) { c.contentHash = a.value; enriched = true; } }
@@ -3705,9 +3728,8 @@ function showMainWindow() {
         // Fallback: NFT-level flags (survive metadata stripping)
         if (!c.hasRfc3161 && nft.hasRfc3161) { c.hasRfc3161 = true; enriched = true; }
         if (!c.hasC2pa && nft.hasC2pa) { c.hasC2pa = true; enriched = true; }
-        // All certified NFTs are minted with RFC3161 + C2PA
-        if (!c.hasRfc3161) { c.hasRfc3161 = true; enriched = true; }
-        if (!c.hasC2pa) { c.hasC2pa = true; enriched = true; }
+        // NOTE: Do NOT unconditionally set hasRfc3161/hasC2pa — only set when evidence exists.
+        // Setting the flag without the actual token causes permanent "Recovering..." UI state.
       }
       if (enriched) console.log('[Certs] ' + logPrefix + ' enriched certs from', Object.keys(nftMap).length, 'NFTs');
       // Fetch rfc3161Token from metadata URI for certs that have the flag but no token
@@ -3719,11 +3741,11 @@ function showMainWindow() {
         if (c.hasRfc3161 && !c.rfc3161Token) {
           if (c._recoveryAttemptedAt && (now - c._recoveryAttemptedAt) < RECOVERY_COOLDOWN_MS) continue;
           const cKey = (c.mintAddress || '').replace(/^cnft_/, '');
-          const nft = nftMap[cKey];
-          const metaUrl = nft?.metadataUrl || nft?.metadata?.uri || nft?.uri || '';
+          const nft = hasNFTs ? nftMap[cKey] : null;
+          const metaUrl = nft?.metadataUrl || nft?.metadata?.uri || nft?.uri || c.metadataUrl || '';
           if (metaUrl) {
             try {
-              const encData = nft?.encrypted ? (nft?.encryptionData || null) : null;
+              const encData = (nft?.encrypted || c.encrypted) ? (nft?.encryptionData || null) : null;
               const result = await ipcRenderer.invoke('fetch-rfc3161-token', metaUrl, encData);
               c._recoveryAttemptedAt = Date.now();
               recoveryAttempted++;
@@ -3735,7 +3757,9 @@ function showMainWindow() {
         }
       }
       if (enriched || recoveryAttempted > 0) {
-        try { await ipcRenderer.invoke('save-enriched-certs', certs); } catch (_) {}
+        // Strip _recoveryAttemptedAt before persisting — it's an in-memory cooldown that shouldn't create stale locks across restarts
+        const certsToSave = certs.map(c => { const { _recoveryAttemptedAt, ...rest } = c; return rest; });
+        try { await ipcRenderer.invoke('save-enriched-certs', certsToSave); } catch (_) {}
       }
       return enriched;
     }
@@ -3807,6 +3831,8 @@ function showMainWindow() {
         if (p.encrypted && !c.encrypted) c.encrypted = true;
         if (p.watermarked && !c.watermarked) c.watermarked = true;
         if (p.license && !c.license) c.license = p.license;
+        if (p._recoveryAttemptedAt && !c._recoveryAttemptedAt) c._recoveryAttemptedAt = p._recoveryAttemptedAt;
+        if (p._recoveryFailed && !c._recoveryFailed) c._recoveryFailed = p._recoveryFailed;
       }
     }
     
@@ -4049,7 +4075,9 @@ function showMainWindow() {
           <div style="height:1px;background:#333;margin:12px 0;"></div>
           <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Integrity</div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Content Hash</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="\${cert.contentHash || 'N/A'}">\${cert.contentHash || 'N/A'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Raw EXIF Hash</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="\${cert.exifRawHash || 'N/A'}">\${cert.exifRawHash || 'N/A'}</span></div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">EXIF Hash</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="\${cert.exifHash || 'N/A'}">\${cert.exifHash || 'N/A'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Binding Hash</span><span style="color:#fff;font-size:10px;font-family:monospace;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="\${cert.exifBindingHash || 'N/A'}">\${cert.exifBindingHash || 'N/A'}</span></div>
           <div style="padding:8px;margin:8px 0;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:8px;">
             <div style="font-size:9px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">How to Verify</div>
             <div style="font-size:9px;color:#aaa;line-height:1.5;">
@@ -4174,16 +4202,17 @@ function showMainWindow() {
     function getNFTBadgeTags(nft) {
       const tags = [];
       // Certification mode (private/public) — replaces edition badges in search
-      if (nft.certificationMode === 'private') tags.push('private');
-      else if (nft.certificationMode === 'public') tags.push('public');
+      if (nft.certificationMode === 'private') tags.push('private', 'certified');
+      else if (nft.certificationMode === 'public') tags.push('public', 'certified');
       // Legacy edition tags kept for backward compat search
-      if (nft.edition === 'limited') tags.push('limited');
-      else if (nft.edition === 'open') tags.push('open');
+      if (nft.edition === 'limited') tags.push('limited', 'limited edition');
+      else if (nft.edition === 'open') tags.push('open', 'open edition');
       // Compressed vs standard
       const compressed = nft.isCompressed === true || (nft.mintAddress || '').startsWith('cnft_');
       if (compressed) { tags.push('compressed', 'cnft'); } else { tags.push('standard'); }
       // Encrypted
       if (nft.encrypted) tags.push('encrypted');
+      if (nft.watermarked) tags.push('watermarked');
       // Certified — check cachedCerts
       const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
       const mint = normMint(nft.mintAddress);
@@ -4702,7 +4731,7 @@ function showMainWindow() {
         } else if (nft.edition === 'open') {
           badgeRow.innerHTML += '<div class="nft-chip cert-public">🌍 Public</div>';
         } else {
-          badgeRow.innerHTML += '<div class="nft-chip ' + (isCompressed ? 'cnft' : 'standard') + '">' + (isCompressed ? 'Compressed Record' : 'Standard Record') + '</div>';
+          badgeRow.innerHTML += '<div class="nft-chip ' + (isCompressed ? 'cnft' : 'standard') + '">' + (isCompressed ? 'Public' : 'Private') + '</div>';
         }
         // Storage chip
         const rawImageUrl = (nft && (nft.imageUrl || nft.image)) ? String(nft.imageUrl || nft.image) : '';
@@ -4862,50 +4891,41 @@ function showMainWindow() {
       if (!currentDetailNFT) return;
       const nft = currentDetailNFT;
       const mintAddr = String(nft.mintAddress || nft.assetId || nft.mint || '');
-      const isCompressed = nft.isCompressed === true
-        || mintAddr.startsWith('cnft_')
-        || nft.nftType === 'compressed'
-        || !!(nft.merkleTree)
-        || nft.compression?.compressed === true;
-
-      console.log('[NFT Explorer] mintAddr:', mintAddr, 'isCompressed:', isCompressed, 'assetId:', nft.assetId, 'nftType:', nft.nftType);
-
-      // For any NFT: try Tensor first if we have a valid asset ID
-      let assetId = String(nft.assetId || '').trim();
-      // Extract from cnft_ prefix
+      
+      // Get real asset ID (strip cnft_ prefix, skip tx_ signatures)
+      let assetId = String(nft.assetId || '').trim().replace(/^cnft_/, '');
       if (!assetId && mintAddr.startsWith('cnft_') && !mintAddr.startsWith('cnft_tx_')) {
-        assetId = mintAddr.replace('cnft_', '');
+        assetId = mintAddr.replace(/^cnft_/, '');
       }
-      // For compressed NFTs without cnft_ prefix, the mintAddress IS the assetId
-      if (!assetId && isCompressed && mintAddr.length > 30 && !mintAddr.startsWith('cnft_')) {
-        assetId = mintAddr;
+      // For standard NFTs, the mintAddress IS the asset ID
+      if (!assetId && !mintAddr.startsWith('tx_') && !mintAddr.startsWith('cnft_tx_') && mintAddr.length > 30) {
+        assetId = mintAddr.replace(/^cnft_/, '');
       }
-
-      // Try Tensor for any NFT with a valid asset/mint ID (works for both standard and compressed)
-      const tensorId = assetId && assetId.length > 30 ? assetId
-        : mintAddr.length > 30 && !mintAddr.startsWith('tx_') && !mintAddr.startsWith('cnft_tx_') ? mintAddr
-        : null;
-      if (tensorId) {
-        console.log('[NFT Explorer] Opening Tensor:', tensorId);
-        require('electron').shell.openExternal('https://www.tensor.trade/item/' + tensorId);
+      
+      // Valid asset ID (not a tx signature) → open Tensor
+      if (assetId && assetId.length > 30 && !assetId.startsWith('tx_')) {
+        console.log('[NFT Explorer] Opening Tensor:', assetId);
+        require('electron').shell.openExternal('https://www.tensor.trade/item/' + assetId);
         return;
       }
-
-      // Fallback: tx signature → Solscan
-      const txSig = mintAddr.startsWith('cnft_tx_')
-        ? mintAddr.replace('cnft_tx_', '')
-        : mintAddr.startsWith('tx_')
-        ? mintAddr.replace('tx_', '')
-        : String(nft.txSignature || '').trim();
+      
+      // Only have tx signature → Solscan fallback (Tensor will 404 on tx signatures)
+      const txSig = mintAddr.replace(/^cnft_tx_/, '').replace(/^cnft_/, '').replace(/^tx_/, '') || String(nft.txSignature || '');
       if (txSig && txSig.length > 30) {
+        console.log('[NFT Explorer] Opening Solscan (no asset ID):', txSig);
         require('electron').shell.openExternal('https://solscan.io/tx/' + txSig);
         return;
       }
+      
+      // Last resort
+      console.log('[NFT Explorer] No valid ID found, opening Tensor with:', mintAddr);
+      require('electron').shell.openExternal('https://www.tensor.trade/item/' + mintAddr);
     }
 
     async function openNFTStorageView() {
       if (!currentDetailNFT) return;
       const isCompressed = currentDetailNFT.isCompressed === true;
+      
 
       const rawImageUrl = (currentDetailNFT && (currentDetailNFT.imageUrl || currentDetailNFT.image)) ? String(currentDetailNFT.imageUrl || currentDetailNFT.image) : '';
       const _allUrls3 = rawImageUrl + (currentDetailNFT.arweaveUrl || '');
@@ -4954,7 +4974,7 @@ function showMainWindow() {
       
       document.getElementById('nft-transfer-img').src = imageUrl;
       document.getElementById('nft-transfer-name').textContent = currentDetailNFT.name || 'Unnamed Original';
-      document.getElementById('nft-transfer-type').textContent = isCompressed ? 'Compressed Record' : 'Standard Record';
+      document.getElementById('nft-transfer-type').textContent = (currentDetailNFT.certificationMode === 'private' || currentDetailNFT.edition === 'limited') ? 'Private' : (currentDetailNFT.certificationMode === 'public' || currentDetailNFT.edition === 'open') ? 'Public' : isCompressed ? 'Public' : 'Private';
       
       const recipientInput = document.getElementById('nft-transfer-recipient');
       const confirmBtn = document.querySelector('.nft-transfer-actions .nft-action-btn.primary');
@@ -5290,7 +5310,7 @@ function showMainWindow() {
       // Create modal overlay
       const modal = document.createElement('div');
       modal.id = 'transfer-success-modal';
-      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+      modal.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
       modal.innerHTML = \`
         <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:20px;padding:32px;max-width:360px;width:100%;text-align:center;border:1px solid rgba(20,241,149,0.3);box-shadow:0 20px 60px rgba(20,241,149,0.2);">
           <div style="font-size:56px;margin-bottom:16px;">✅</div>
@@ -5321,7 +5341,7 @@ function showMainWindow() {
       
       const modal = document.createElement('div');
       modal.id = 'transfer-cancelled-modal';
-      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
+      modal.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
       modal.innerHTML = \`
         <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:20px;padding:32px;max-width:360px;width:100%;text-align:center;border:1px solid rgba(255,255,255,0.1);box-shadow:0 20px 60px rgba(0,0,0,0.4);">
           <div style="font-size:56px;margin-bottom:16px;">\${isCancelled ? '🚫' : '⚠️'}</div>
@@ -5722,7 +5742,10 @@ function showMainWindow() {
 </body>
 </html>`;
     
-    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    // Write HTML to temp file and load via file:// — data: URLs cause NSOpenPanel to freeze on macOS
+    const tmpHtmlPath = path.join(app.getPath('temp'), 'photolynk-ui.html');
+    fs.writeFileSync(tmpHtmlPath, html, 'utf8');
+    mainWindow.loadFile(tmpHtmlPath);
   });
   
   mainWindow.on('close', (e) => {
@@ -5732,6 +5755,9 @@ function showMainWindow() {
     }
   });
   mainWindow.on('ready-to-show', () => { mainWindow.show(); });
+  mainWindow.webContents.on('console-message', (e, level, msg) => {
+    if (msg.startsWith('[NFT]')) safeConsole('log', '[Renderer]', msg);
+  });
   mainWindow.setMenuBarVisibility(false);
   
   // DevTools disabled for production
@@ -6054,6 +6080,7 @@ app.whenReady().then(() => {
   nftDesktop.initCache(appDataPath);
   nftDesktop.initNFTStorage(appDataPath);
   nftDesktop.initializeSolana();
+  // Caches are warmed on-demand by refreshNFTPricesRealtime in the renderer
 });
 
 ipcMain.on('open-nft-mint', () => {
@@ -6109,19 +6136,46 @@ ipcMain.on('focus-window', () => {
   }
 });
 
+let _nftDialogOpen = false;
 ipcMain.handle('select-photo-for-nft', async () => {
-  const parentWindow = mainWindow || null;
-  const result = await dialog.showOpenDialog(parentWindow, {
-    properties: ['openFile'],
-    filters: [
-      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'raw', 'cr2', 'cr3', 'nef', 'arw', 'dng', 'orf', 'rw2', 'pef', 'srw', 'raf', 'psd', 'psb', 'exr', 'hdr', 'avif'] }
-    ],
-    title: 'Select Photo for NFT'
-  });
-  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+  if (_nftDialogOpen) return null;
+  _nftDialogOpen = true;
+  safeConsole('log', '[NFT] select-photo-for-nft: opening standard file dialog');
+
+  // Electron 28+ macOS bug: powerSaveBlocker causes NSOpenPanel to hang permanently.
+  // We must stop any active blocker before opening the dialog.
+  let wasBlockerActive = false;
+  try {
+    if (backupPowerSaveBlockerId && powerSaveBlocker.isStarted(backupPowerSaveBlockerId)) {
+      wasBlockerActive = true;
+      powerSaveBlocker.stop(backupPowerSaveBlockerId);
+      backupPowerSaveBlockerId = null;
+    }
+  } catch (e) { }
+
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Photo for NFT',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'avif'] }
+      ]
+    });
+    safeConsole('log', '[NFT] dialog returned. canceled:', result.canceled);
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths;
+  } catch (e) {
+    safeConsole('log', '[NFT] dialog error:', e.message);
     return null;
+  } finally {
+    // Restore the blocker if it was active
+    if (wasBlockerActive) {
+      try { backupPowerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension'); } catch (e) {}
+    }
+    setTimeout(() => { _nftDialogOpen = false; }, 300);
   }
-  return result.filePaths;
 });
 
 ipcMain.handle('fetch-user-nfts', async (event, walletAddress, limit) => {
@@ -6630,13 +6684,14 @@ ipcMain.handle('clipboard-write', (event, text) => {
 ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData) => {
   if (!metadataUrl) return { token: null };
   
-  // Helper: download raw bytes from URL
+  // Helper: download raw bytes from URL with timeout
   const downloadBuffer = (url) => new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? require('https') : require('http');
     const req = mod.get(url, { timeout: 15000 }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return downloadBuffer(res.headers.location).then(resolve).catch(reject);
       }
+      if (res.statusCode >= 400) { return reject(new Error(`HTTP ${res.statusCode}`)); }
       const chunks = [];
       res.on('data', c => chunks.push(c));
       res.on('end', () => resolve(Buffer.concat(chunks)));
@@ -6644,9 +6699,41 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
   });
+
+  // Convert ipfs:// to gateway URL and build fallback list
+  const _extractCid = (u) => {
+    if (!u) return null;
+    if (u.startsWith('ipfs://')) return u.slice(7).split('/')[0].split('?')[0];
+    const idx = u.indexOf('/ipfs/');
+    return idx !== -1 ? u.slice(idx + 6).split('/')[0].split('?')[0] : null;
+  };
+  const cid = _extractCid(metadataUrl);
+  const gateways = ['https://ipfs.io/ipfs/', 'https://w3s.link/ipfs/', 'https://nftstorage.link/ipfs/', 'https://dweb.link/ipfs/', 'https://gateway.pinata.cloud/ipfs/'];
+  let urlsToTry;
+  if (cid) {
+    urlsToTry = gateways.map(g => g + cid);
+  } else if (metadataUrl.startsWith('http')) {
+    urlsToTry = [metadataUrl];
+  } else {
+    safeConsole('log', '[Certs] fetch-rfc3161-token: unsupported URL scheme:', metadataUrl.slice(0, 60));
+    return { token: null };
+  }
   
   try {
-    const buf = await downloadBuffer(metadataUrl);
+    // Try each gateway until one succeeds
+    let buf = null;
+    for (const url of urlsToTry) {
+      try {
+        buf = await downloadBuffer(url);
+        if (buf && buf.length > 0) {
+          safeConsole('log', '[Certs] fetch-rfc3161-token downloaded', buf.length, 'bytes from', url.slice(0, 60));
+          break;
+        }
+      } catch (dlErr) {
+        safeConsole('log', '[Certs] fetch-rfc3161-token gateway failed:', url.slice(0, 50), dlErr.message);
+        buf = null;
+      }
+    }
     if (!buf || buf.length === 0) return { token: null };
     
     // Try JSON parse first (unencrypted metadata)
@@ -6657,11 +6744,14 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
     if (!json && encryptionData?.metadataNonce) {
       try {
         const credentials = store.get('backupCredentials') || {};
-        const masterKeyHex = credentials.masterKey || null;
-        if (masterKeyHex) {
-          const masterKey = Buffer.from(masterKeyHex, 'hex');
+        // Derive masterKey from email/password via PBKDF2 (same as mint + decrypt paths)
+        if (credentials.email && credentials.password) {
+          const salt = credentials.email.toLowerCase().trim();
+          const masterKey = new Uint8Array(crypto.pbkdf2Sync(credentials.password, salt, 30000, 32, 'sha256'));
           json = nftDesktop.decryptMetadataJSON(buf, encryptionData, masterKey);
           if (json) safeConsole('log', '[Certs] Decrypted encrypted metadata for RFC3161 recovery');
+        } else {
+          safeConsole('log', '[Certs] Cannot decrypt metadata — no login credentials stored');
         }
       } catch (decErr) {
         safeConsole('log', '[Certs] Metadata decryption failed:', decErr.message);
@@ -6679,14 +6769,43 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
 });
 
 // Save enriched certs to local file (preserves rfc3161Token/c2paManifest after enrichment)
+// IMPORTANT: merges enrichment INTO existing file — caller may have ownership-filtered subset
 ipcMain.handle('save-enriched-certs', async (event, certs) => {
   try {
     const filePath = nftDesktop.getCertsFilePath ? nftDesktop.getCertsFilePath() : null;
     if (!filePath) return { success: false };
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(certs, null, 2));
-    safeConsole('log', '[Certs] Saved', certs.length, 'enriched certs to', filePath);
+    // Read existing certs so we don't destroy entries the caller didn't have (ownership-filtered)
+    let existing = [];
+    try {
+      if (fs.existsSync(filePath)) existing = JSON.parse(fs.readFileSync(filePath, 'utf8')) || [];
+    } catch (_) {}
+    // Build lookup from incoming enriched certs
+    const enrichedById = {};
+    const enrichedByMint = {};
+    for (const c of certs) {
+      if (c.id) enrichedById[c.id] = c;
+      if (c.mintAddress) enrichedByMint[c.mintAddress] = c;
+    }
+    // Merge enrichment fields into existing certs (preserves certs not in the incoming set)
+    const ENRICH_KEYS = ['rfc3161Token','c2paManifest','hasRfc3161','hasC2pa','contentHash','exifHash',
+      'exifRawHash','exifBindingHash','cameraHash','storageType','encrypted','watermarked','license'];
+    for (const ec of existing) {
+      const src = (ec.id ? enrichedById[ec.id] : null) || (ec.mintAddress ? enrichedByMint[ec.mintAddress] : null);
+      if (!src) continue;
+      for (const k of ENRICH_KEYS) { if (src[k] && !ec[k]) ec[k] = src[k]; }
+    }
+    // Append any new certs that weren't in the existing file
+    const existingIds = new Set(existing.map(c => c.id).filter(Boolean));
+    const existingMints = new Set(existing.map(c => c.mintAddress).filter(Boolean));
+    for (const c of certs) {
+      if (c.id && existingIds.has(c.id)) continue;
+      if (c.mintAddress && existingMints.has(c.mintAddress)) continue;
+      existing.push(c);
+    }
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2));
+    safeConsole('log', '[Certs] Saved', existing.length, 'enriched certs to', filePath);
     return { success: true };
   } catch (e) {
     safeConsole('log', '[Certs] Save enriched error:', e.message);
@@ -6697,20 +6816,39 @@ ipcMain.handle('save-enriched-certs', async (event, certs) => {
 // Certificates handlers
 ipcMain.handle('get-certificates', async () => {
   // Helper: read local cert file + server-side cert file (tray IS the server)
+  // Cross-enriches rfc3161Token/c2paManifest between sources so the token is never lost
   function readLocalCerts() {
     const allCerts = [];
     const seenIds = new Set();
+    const certById = {};
+    const ENRICH_FIELDS = ['rfc3161Token','c2paManifest','hasRfc3161','hasC2pa','contentHash','exifHash',
+      'exifRawHash','exifBindingHash','cameraHash','storageType','encrypted','watermarked','license','metadataUrl'];
+    // Helper: add cert or cross-enrich if duplicate
+    const addOrEnrich = (c) => {
+      if (!c.id) return;
+      if (seenIds.has(c.id)) {
+        // Cross-enrich: copy fields from this source into the already-seen cert (and vice-versa)
+        const existing = certById[c.id];
+        if (existing) {
+          for (const k of ENRICH_FIELDS) {
+            if (c[k] && !existing[k]) existing[k] = c[k];
+          }
+        }
+        return;
+      }
+      allCerts.push(c); seenIds.add(c.id); certById[c.id] = c;
+    };
     // 1. Tray's own local cert file
     try {
       const localPath = nftDesktop.getCertsFilePath ? nftDesktop.getCertsFilePath() : null;
       if (localPath && fs.existsSync(localPath)) {
         const certs = JSON.parse(fs.readFileSync(localPath, 'utf8'));
-        for (const c of certs) { if (c.id && !seenIds.has(c.id)) { allCerts.push(c); seenIds.add(c.id); } }
+        for (const c of certs) addOrEnrich(c);
       }
     } catch (_) {}
     // 2. Server-side cert files (cloud/nft/<userKey>/certificates.json) — tray has direct access
+    //    These disk files preserve rfc3161Token + c2paManifest (DISK_SAFE_KEYS on server)
     try {
-      const credentials = store.get('backupCredentials') || {};
       const nftBaseDir = path.join(app.getPath('userData'), 'cloud', 'nft');
       if (fs.existsSync(nftBaseDir)) {
         const userDirs = fs.readdirSync(nftBaseDir);
@@ -6719,7 +6857,7 @@ ipcMain.handle('get-certificates', async () => {
           if (fs.existsSync(certFile)) {
             try {
               const certs = JSON.parse(fs.readFileSync(certFile, 'utf8'));
-              for (const c of certs) { if (c.id && !seenIds.has(c.id)) { allCerts.push(c); seenIds.add(c.id); } }
+              for (const c of certs) addOrEnrich(c);
             } catch (_) {}
           }
         }
@@ -6752,44 +6890,43 @@ ipcMain.handle('get-certificates', async () => {
         req.on('error', () => resolve([]));
         req.on('timeout', () => { req.destroy(); resolve([]); });
       });
-      // Merge server certs with local certs — local ones may not have synced yet
+      // Merge: LOCAL disk certs are primary (they preserve rfc3161Token + c2paManifest).
+      // Server API certs are secondary — the API strips large blobs for mobile OOM safety.
       const localCerts = readLocalCerts();
       safeConsole('log', '[Certs IPC] Server returned', serverCerts.length, 'certs, local file has', localCerts.length, 'certs');
-      if (localCerts.length > 0) {
-        const localById = {};
-        const localByMint = {};
-        for (const lc of localCerts) {
-          if (lc.id) localById[lc.id] = lc;
-          if (lc.mintAddress) localByMint[lc.mintAddress] = lc;
-        }
-        // Enrich server certs with ALL fields from local (local has enrichment data that was stripped before sync)
-        for (const sc of serverCerts) {
-          const lc = (sc.id ? localById[sc.id] : null) || (sc.mintAddress ? localByMint[sc.mintAddress] : null);
-          if (!lc) continue;
-          if (lc.rfc3161Token && !sc.rfc3161Token) sc.rfc3161Token = lc.rfc3161Token;
-          if (lc.c2paManifest && !sc.c2paManifest) sc.c2paManifest = lc.c2paManifest;
-          if (lc.hasRfc3161 && !sc.hasRfc3161) sc.hasRfc3161 = true;
-          if (lc.hasC2pa && !sc.hasC2pa) sc.hasC2pa = true;
-          if (lc.encrypted && !sc.encrypted) sc.encrypted = true;
-          if (lc.watermarked && !sc.watermarked) sc.watermarked = true;
-          if (lc.license && !sc.license) sc.license = lc.license;
-          if (lc.storageType && !sc.storageType) sc.storageType = lc.storageType;
-          if (lc.contentHash && !sc.contentHash) sc.contentHash = lc.contentHash;
-          if (lc.exifHash && !sc.exifHash) sc.exifHash = lc.exifHash;
-          if (lc.cameraHash && !sc.cameraHash) sc.cameraHash = lc.cameraHash;
-        }
-        const serverIds = new Set(serverCerts.map(c => c.id));
-        const serverMints = new Set(serverCerts.map(c => c.mintAddress).filter(Boolean));
-        const localOnly = localCerts.filter(c => !serverIds.has(c.id) && !(c.mintAddress && serverMints.has(c.mintAddress)));
-        safeConsole('log', '[Certs IPC] Local-only certs:', localOnly.length);
-        const merged = [...serverCerts, ...localOnly];
-        // Sort by newest first before returning
-        merged.sort((a, b) => new Date(b.createdAt || b.issuedAt || 0) - new Date(a.createdAt || a.issuedAt || 0));
-        return { certificates: merged };
+      const localById = {};
+      const localByMint = {};
+      for (const lc of localCerts) {
+        if (lc.id) localById[lc.id] = lc;
+        if (lc.mintAddress) localByMint[lc.mintAddress] = lc;
       }
-      // Sort server certs by newest first before returning
-      serverCerts.sort((a, b) => new Date(b.createdAt || b.issuedAt || 0) - new Date(a.createdAt || a.issuedAt || 0));
-      return { certificates: serverCerts };
+      // Enrich local certs with any fields the server has that local doesn't (e.g. new fields added server-side)
+      for (const sc of serverCerts) {
+        const lc = (sc.id ? localById[sc.id] : null) || (sc.mintAddress ? localByMint[sc.mintAddress] : null);
+        if (!lc) continue;
+        // Fill gaps in local from server (but NEVER overwrite local rfc3161Token/c2paManifest with empty)
+        if (sc.hasRfc3161 && !lc.hasRfc3161) lc.hasRfc3161 = true;
+        if (sc.hasC2pa && !lc.hasC2pa) lc.hasC2pa = true;
+        if (sc.encrypted && !lc.encrypted) lc.encrypted = true;
+        if (sc.watermarked && !lc.watermarked) lc.watermarked = true;
+        if (sc.license && !lc.license) lc.license = sc.license;
+        if (sc.storageType && !lc.storageType) lc.storageType = sc.storageType;
+        if (sc.contentHash && !lc.contentHash) lc.contentHash = sc.contentHash;
+        if (sc.exifHash && !lc.exifHash) lc.exifHash = sc.exifHash;
+        if (sc.cameraHash && !lc.cameraHash) lc.cameraHash = sc.cameraHash;
+        // If local has hasRfc3161 flag but server doesn't have it (and local has no token), clear the stale flag
+        // This prevents the permanent "Recovering..." state when the flag was set but token is unrecoverable
+        if (lc.hasRfc3161 && !lc.rfc3161Token && !sc.hasRfc3161) { lc.hasRfc3161 = false; }
+      }
+      // Add server-only certs that don't exist locally (e.g. minted on another device)
+      const localIds = new Set(localCerts.map(c => c.id));
+      const localMints = new Set(localCerts.map(c => c.mintAddress).filter(Boolean));
+      const serverOnly = serverCerts.filter(c => !localIds.has(c.id) && !(c.mintAddress && localMints.has(c.mintAddress)));
+      safeConsole('log', '[Certs IPC] Server-only certs:', serverOnly.length);
+      const merged = [...localCerts, ...serverOnly];
+      // Sort by newest first before returning
+      merged.sort((a, b) => new Date(b.createdAt || b.issuedAt || 0) - new Date(a.createdAt || a.issuedAt || 0));
+      return { certificates: merged };
     }
     // No server credentials — return local only
     const localOnly = readLocalCerts();
@@ -6934,8 +7071,8 @@ ipcMain.handle('get-sol-price', async () => {
   return await nftDesktop.getSolPrice();
 });
 
-// Real-time NFT cost estimate (SOL price + network fee signals)
-ipcMain.handle('estimate-nft-costs', async (event, { nftType, storageOption, filePath, edition } = {}) => {
+// Real-time NFT cost estimate — fully synchronous, never blocks main process
+ipcMain.handle('estimate-nft-costs', (event, { nftType, storageOption, filePath, edition } = {}) => {
   try {
     let fileSizeBytes = 0;
     if (filePath) {
@@ -6945,7 +7082,7 @@ ipcMain.handle('estimate-nft-costs', async (event, { nftType, storageOption, fil
         fileSizeBytes = 0;
       }
     }
-    return await nftDesktop.estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes, edition });
+    return nftDesktop.estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes, edition });
   } catch (e) {
     return { error: e.message };
   }
