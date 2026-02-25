@@ -2640,6 +2640,15 @@ async function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
   }
 }
 
+// DAS total-check cache: skip full pagination if total hasn't changed (1 call vs ~24)
+let _lastDasTotal = null;       // Last known total from DAS page 1
+let _lastDasTotalTs = 0;        // Timestamp of last total check
+let _lastDasForceRefresh = false; // Set to true after mint to force full re-scan
+
+function invalidateDasCache() {
+  _lastDasForceRefresh = true;
+}
+
 /**
  * Fetch NFTs using Solana DAS (Digital Asset Standard) API
  * Same implementation as mobile app's fetchCompressedNFTs
@@ -2729,6 +2738,9 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
   // Find a working endpoint and paginate with auto-halve on "Response is too big"
   const endpoints = buildDasUrls();
   let items = [];
+  const forceRefresh = _lastDasForceRefresh;
+  if (forceRefresh) _lastDasForceRefresh = false;
+
   for (const endpoint of endpoints) {
     let dasPage = 1;
     let found = false;
@@ -2737,12 +2749,23 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       console.log(`[DAS] page ${dasPage} (limit=${pageSize})...`);
       const result = await requestPage(endpoint, dasPage, pageSize);
 
+      // DAS total-check: after page 1 succeeds, compare total to last known
+      if (result.ok && dasPage === 1 && !forceRefresh && _lastDasTotal !== null) {
+        const currentTotal = result.total || 0;
+        if (currentTotal === _lastDasTotal) {
+          console.log(`[DAS] Total unchanged (${currentTotal}), skipping full pagination`);
+          _lastDasTotalTs = Date.now();
+          return []; // No new NFTs — local storage is already up to date
+        }
+        console.log(`[DAS] Total changed: ${_lastDasTotal} → ${currentTotal}, doing full scan`);
+      }
+
       if (!result.ok) {
         // Rate limited (429) — wait and retry with exponential backoff
-        if ((result.errorCode === 429 || result.errorCode === -32429) && rateLimitRetries < 4) {
-          const backoff = Math.pow(2, rateLimitRetries) * 5000; // 5s, 10s, 20s, 40s
+        if ((result.errorCode === 429 || result.errorCode === -32429) && rateLimitRetries < 6) {
+          const backoff = Math.min(60000, Math.pow(2, rateLimitRetries) * 10000); // 10s, 20s, 40s, 60s, 60s, 60s
           rateLimitRetries++;
-          console.log(`[DAS] Rate limited, retrying in ${backoff / 1000}s (attempt ${rateLimitRetries}/4)`);
+          console.log(`[DAS] Rate limited, retrying in ${backoff / 1000}s (attempt ${rateLimitRetries}/6)`);
           await new Promise(r => setTimeout(r, backoff));
           continue;
         }
@@ -2776,8 +2799,13 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
   }
 
   if (!items.length) {
+    _lastDasTotal = _lastDasTotal || 0; // Record 0 so next check can compare
+    _lastDasTotalTs = Date.now();
     return [];
   }
+  // Update cached total for next check
+  _lastDasTotal = items.length;
+  _lastDasTotalTs = Date.now();
   console.log(`[DAS] Total assets fetched: ${items.length}`);
 
   // Process a single DAS item into an NFT object
@@ -4817,6 +4845,9 @@ module.exports = {
   EDITION_ROYALTY_BPS,
   SOLANA_RPC_ENDPOINTS,
   PINATA_JWT,
+  
+  // DAS cache control
+  invalidateDasCache,
   
   // Status flags
   solanaAvailable,

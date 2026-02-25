@@ -3148,25 +3148,48 @@ function showMainWindow() {
       updateMintButton();
     }
     
+    let _filePickerOpen = false;
     async function selectNFTPhoto() {
+      // Guard against multiple simultaneous file pickers
+      if (_filePickerOpen) return;
+      _filePickerOpen = true;
+      // Use an HTML file input instead of Electron's dialog.showOpenDialog
+      // which hangs on macOS Electron 28+ tray apps.
       try {
-        console.log('[NFT] selectNFTPhoto: invoking IPC');
-        const paths = await ipcRenderer.invoke('select-photo-for-nft');
-        console.log('[NFT] selectNFTPhoto: IPC returned', paths ? paths.length : 0, 'paths');
-        if (paths && paths.length > 0) {
-          selectedNFTPhoto = paths[0];
-          const selectedPath = (typeof selectedNFTPhoto === 'string')
-            ? selectedNFTPhoto
-            : (selectedNFTPhoto && typeof selectedNFTPhoto.path === 'string')
-              ? selectedNFTPhoto.path
-              : String(selectedNFTPhoto || '');
-          document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(selectedPath);
+        console.log('[NFT] selectNFTPhoto: using HTML file input');
+        const filePath = await new Promise((resolve) => {
+          let resolved = false;
+          const done = (val) => { if (!resolved) { resolved = true; resolve(val); } };
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/tiff,image/bmp,image/avif,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.bmp,.tiff,.tif,.avif,.dng,.cr2,.cr3,.nef,.arw,.orf,.rw2';
+          input.style.display = 'none';
+          input.onchange = () => {
+            if (input.files && input.files.length > 0) {
+              // Electron with nodeIntegration: File objects have a .path property
+              done(input.files[0].path || null);
+            } else {
+              done(null);
+            }
+            input.remove();
+          };
+          // Electron fires 'cancel' event on file input when user cancels (Chromium 91+)
+          input.addEventListener('cancel', () => { done(null); input.remove(); });
+          document.body.appendChild(input);
+          input.click();
+          // Safety timeout — if neither change nor cancel fires in 2 minutes, unlock
+          setTimeout(() => { done(null); try { input.remove(); } catch(_){} }, 120000);
+        });
+        console.log('[NFT] file input returned:', filePath ? '1 path' : 'none');
+        if (filePath) {
+          selectedNFTPhoto = filePath;
+          document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(filePath);
           document.getElementById('nft-photo-select').style.display = 'none';
           document.getElementById('nft-photo-preview').style.display = 'block';
           // Auto-populate name from filename if field is empty
           const nameInput = document.getElementById('nft-name-input');
           if (nameInput && !nameInput.value.trim()) {
-            const baseName = selectedPath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+            const baseName = filePath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
             if (baseName) nameInput.value = baseName;
           }
           refreshNFTPricesRealtime();
@@ -3174,6 +3197,8 @@ function showMainWindow() {
         }
       } catch (e) {
         console.error('selectNFTPhoto error:', e);
+      } finally {
+        _filePickerOpen = false;
       }
     }
     
@@ -3529,7 +3554,44 @@ function showMainWindow() {
         checkForNewNFTsOnce();
         startNFTAutoRefresh();
 
-        // Step 3: For cNFTs without mintAddress, resolve real assetId from DAS in background
+        // Step 3: Generate Certificate of Authenticity IMMEDIATELY (before DAS resolution)
+        // DAS resolution can take minutes when rate-limited — cert must not be blocked by it.
+        // Cert is created with temp tx_ ID now, updated to cnft_ ID later via update-certificate-mint.
+        try {
+          const pendingProof = window._pendingMintProofData || null;
+          window._pendingMintProofData = null;
+          console.log('[NFT] Certificate: pendingProof tsaToken?', !!pendingProof?.tsaToken, 'c2pa?', !!pendingProof?.c2paManifest, 'mintTimestamp?', pendingProof?.mintTimestamp);
+          await ipcRenderer.invoke('generate-certificate', {
+            forceGenerate: true, // bypass tx_ guard — this is a real post-mint call
+            mintAddress: tempMintAddress,
+            txSignature: data.mintTx || data.paymentTx || null,
+            ownerAddress: data.wallet || nftWalletAddress,
+            name: data.name || 'Photo Original',
+            edition: data.edition || 'open',
+            license: data.license || 'arr',
+            watermarked: data.watermark === 'true',
+            encrypted: data.encrypt === 'true',
+            storageType: data.storageOption || 'ipfs',
+            imageUrl: data.imageUrl || null,
+            metadataUrl: data.metadataUrl || null,
+            contentHash: data.contentHash || null,
+            exifHash: data.exifHash || null,
+            exifRawHash: data.exifRawHash || null,
+            exifBindingHash: data.exifBindingHash || null,
+            certificationMode: data.certificationMode || null,
+            createdAt: new Date().toISOString(),
+            tsaToken: pendingProof?.tsaToken || null,
+            tsaUrl: pendingProof?.tsaUrl || null,
+            tsaPolicy: pendingProof?.tsaPolicy || null,
+            c2paManifest: pendingProof?.c2paManifest || null,
+            mintTimestamp: pendingProof?.mintTimestamp || null,
+          });
+          console.log('[NFT] Certificate of Authenticity generated');
+        } catch (certErr) {
+          console.warn('[NFT] Certificate generation failed:', certErr.message);
+        }
+
+        // Step 4: For cNFTs without mintAddress, resolve real assetId from DAS in background
         let resolvedMintAddress = tempMintAddress;
         if (isCNFT && !initialId && (data.metadataUrl || data.mintTx) && nftWalletAddress) {
           try {
@@ -3599,41 +3661,6 @@ function showMainWindow() {
           } catch (dasErr) {
             console.warn('[NFT] DAS assetId resolution failed:', dasErr.message);
           }
-        }
-
-        // Step 4: Generate Certificate of Authenticity (all editions)
-        try {
-          const pendingProof = window._pendingMintProofData || null;
-          window._pendingMintProofData = null;
-          console.log('[NFT] Certificate: pendingProof tsaToken?', !!pendingProof?.tsaToken, 'c2pa?', !!pendingProof?.c2paManifest, 'mintTimestamp?', pendingProof?.mintTimestamp);
-          await ipcRenderer.invoke('generate-certificate', {
-            forceGenerate: true, // bypass tx_ guard — this is a real post-mint call
-            mintAddress: resolvedMintAddress,
-            txSignature: data.mintTx || data.paymentTx || null,
-            ownerAddress: data.wallet || nftWalletAddress,
-            name: data.name || 'Photo Original',
-            edition: data.edition || 'open',
-            license: data.license || 'arr',
-            watermarked: data.watermark === 'true',
-            encrypted: data.encrypt === 'true',
-            storageType: data.storageOption || 'ipfs',
-            imageUrl: data.imageUrl || null,
-            metadataUrl: data.metadataUrl || null,
-            contentHash: data.contentHash || null,
-            exifHash: data.exifHash || null,
-            exifRawHash: data.exifRawHash || null,
-            exifBindingHash: data.exifBindingHash || null,
-            certificationMode: data.certificationMode || null,
-            createdAt: new Date().toISOString(),
-            tsaToken: pendingProof?.tsaToken || null,
-            tsaUrl: pendingProof?.tsaUrl || null,
-            tsaPolicy: pendingProof?.tsaPolicy || null,
-            c2paManifest: pendingProof?.c2paManifest || null,
-            mintTimestamp: pendingProof?.mintTimestamp || null,
-          });
-          console.log('[NFT] Certificate of Authenticity generated');
-        } catch (certErr) {
-          console.warn('[NFT] Certificate generation failed:', certErr.message);
         }
 
         // Step 5: Background DAS retry — if mint still has tx_ prefix, keep trying to resolve
@@ -3841,7 +3868,7 @@ function showMainWindow() {
       if (certPollInterval) return;
       // Initial sync after 5s
       setTimeout(loadCertificatesBackground, 5000);
-      certPollInterval = setInterval(loadCertificatesBackground, 60000);
+      certPollInterval = setInterval(loadCertificatesBackground, 300000);
       console.log('[Certs] Background sync started');
     }
     
@@ -4197,7 +4224,7 @@ function showMainWindow() {
     let nftPageIndex = 0;
     const NFT_PAGE_SIZE = 12; // 3x4 grid
     let nftAutoRefreshInterval = null;
-    const NFT_AUTO_REFRESH_MS = 60000; // Check for new NFTs every 60 seconds
+    const NFT_AUTO_REFRESH_MS = 300000; // Check for new NFTs every 5 minutes (matches mobile)
 
     function getNFTBadgeTags(nft) {
       const tags = [];
@@ -6136,47 +6163,8 @@ ipcMain.on('focus-window', () => {
   }
 });
 
-let _nftDialogOpen = false;
-ipcMain.handle('select-photo-for-nft', async () => {
-  if (_nftDialogOpen) return null;
-  _nftDialogOpen = true;
-  safeConsole('log', '[NFT] select-photo-for-nft: opening standard file dialog');
-
-  // Electron 28+ macOS bug: powerSaveBlocker causes NSOpenPanel to hang permanently.
-  // We must stop any active blocker before opening the dialog.
-  let wasBlockerActive = false;
-  try {
-    if (backupPowerSaveBlockerId && powerSaveBlocker.isStarted(backupPowerSaveBlockerId)) {
-      wasBlockerActive = true;
-      powerSaveBlocker.stop(backupPowerSaveBlockerId);
-      backupPowerSaveBlockerId = null;
-    }
-  } catch (e) { }
-
-  try {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Select Photo for NFT',
-      properties: ['openFile'],
-      filters: [
-        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'avif'] }
-      ]
-    });
-    safeConsole('log', '[NFT] dialog returned. canceled:', result.canceled);
-    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
-      return null;
-    }
-    return result.filePaths;
-  } catch (e) {
-    safeConsole('log', '[NFT] dialog error:', e.message);
-    return null;
-  } finally {
-    // Restore the blocker if it was active
-    if (wasBlockerActive) {
-      try { backupPowerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension'); } catch (e) {}
-    }
-    setTimeout(() => { _nftDialogOpen = false; }, 300);
-  }
-});
+// NOTE: select-photo-for-nft IPC removed — renderer now uses HTML <input type="file">
+// which bypasses the Electron 28+ macOS NSOpenPanel hang bug entirely.
 
 ipcMain.handle('fetch-user-nfts', async (event, walletAddress, limit) => {
   // Pass StealthCloud auth headers so cached images from stealthlynk.io can be downloaded
@@ -6338,6 +6326,11 @@ ipcMain.handle('mint-nft', async (event, data) => {
     // Send progress to renderer
     event.sender.send('mint-progress', progress);
   });
+  
+  // Invalidate DAS cache so next refresh does full re-scan to pick up new NFT
+  if (result && result.success) {
+    nftDesktop.invalidateDasCache();
+  }
   
   return result;
 });
@@ -8081,7 +8074,8 @@ app.on('before-quit', () => {
   freePort3000ForPhotoLynk();
 });
 
-// Hide dock icon on macOS
+// Hide dock icon on macOS (tray-only app). File picker now uses HTML <input type="file">
+// in the renderer so it works even with dock hidden (no NSOpenPanel dependency).
 if (process.platform === 'darwin' && app.dock) {
   try {
     app.dock.hide();
