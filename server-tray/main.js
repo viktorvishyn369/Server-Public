@@ -1171,8 +1171,8 @@ function showMainWindow() {
       --error: #F87171;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; overflow: hidden; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; flex-direction: column; height: 100vh; position: relative; }
+    html, body { height: 100%; overflow: hidden; overflow-x: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; flex-direction: column; height: 100vh; position: relative; max-width: 100vw; overflow-x: hidden; }
     
     /* Views */
     .view { display: none; flex-direction: column; height: 100%; }
@@ -1235,7 +1235,7 @@ function showMainWindow() {
     .inline-status-message.visible { display: block; }
     
     /* Content — now sits between header/status and tab bar */
-    .content { flex: 1; overflow-y: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+    .content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
     
     /* Tab panels — only active one is visible */
     .tab-panel { display: none; flex-direction: column; gap: 10px; }
@@ -1547,7 +1547,8 @@ function showMainWindow() {
     .nft-transfer-actions .nft-action-btn.primary:disabled { background: rgba(153, 69, 255, 0.3); color: rgba(255,255,255,0.4); cursor: not-allowed; }
     
     /* NFT Mint Panel (full-screen overlay) */
-    .nft-mint-section { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; background: var(--bg-primary); padding: 20px 16px 16px; overflow-y: auto; }
+    .nft-mint-section { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; background: var(--bg-primary); padding: 20px 16px 16px; overflow-y: auto; overflow-x: hidden; box-sizing: border-box; width: 100%; max-width: 100%; }
+    .nft-mint-section > * { max-width: 100%; box-sizing: border-box; }
     .nft-mint-section::-webkit-scrollbar { width: 4px; }
     .nft-mint-section::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
     .nft-mint-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -1708,14 +1709,14 @@ function showMainWindow() {
           </div>
         </div>
         <div class="qs-cell">
-          <div class="qs-icon" style="background:rgba(99,102,241,0.12);">☁️</div>
+          <div class="qs-icon" style="background:rgba(99,102,241,0.12);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
           <div class="qs-text">
             <div class="qs-label">Last Backup</div>
             <div class="qs-value" id="qs-backup">—</div>
           </div>
         </div>
         <div class="qs-cell">
-          <div class="qs-icon" style="background:rgba(153,69,255,0.12);">🛡️</div>
+          <div class="qs-icon" style="background:rgba(153,69,255,0.12);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9945FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
           <div class="qs-text">
             <div class="qs-label">Originals</div>
             <div class="qs-value" id="qs-nfts">—</div>
