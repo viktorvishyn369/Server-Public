@@ -926,6 +926,7 @@ function startPairingServer() {
                   }
                   if (typeof cachedUuid !== 'undefined') {
                     cachedUuid = '${userUuid}';
+                    uuidLocked = true;
                   }
                 })();
               `);
@@ -1024,11 +1025,11 @@ function startPairingServer() {
                 overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
                 
                 var popup = document.createElement('div');
-                popup.style.cssText = 'background:#1a1a2e;border:1px solid #03E1FF;border-radius:16px;padding:32px;text-align:center;max-width:300px;box-shadow:0 0 40px rgba(3,225,255,0.3);';
+                popup.style.cssText = 'background:#1a1a2e;border:1px solid #03E1FF;border-radius:16px;padding:32px;text-align:center;max-width:300px;overflow:hidden;box-shadow:0 0 40px rgba(3,225,255,0.3);';
                 
                 popup.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">✓</div>' +
                   '<div style="font-size:18px;font-weight:600;color:#fff;margin-bottom:8px;">Paired Successfully</div>' +
-                  '<div style="font-size:14px;color:#888;margin-bottom:20px;">${email.replace(/'/g, "\\'")}</div>' +
+                  '<div style="font-size:13px;color:#888;margin-bottom:20px;word-break:break-all;overflow-wrap:break-word;max-width:100%;">${email.replace(/'/g, "\\'")}</div>' +
                   '<div style="font-size:12px;color:#03E1FF;">Credentials saved. Ready to sync!</div>';
                 
                 overlay.appendChild(popup);
@@ -1122,8 +1123,12 @@ function showMainWindow() {
   const savedDownloadPath = store.get('syncDownloadPath') || defaultDownloadPath;
   
   // Compute initial uploads path with UUID if credentials exist
+  // Prefer device_uuid from mobile pairing (critical for wallet-migrated users
+  // where email:password would derive a different UUID than the legacy one)
   let initialUploadsPath = uploadsPath;
-  if (credentials.email && credentials.password) {
+  if (credentials.device_uuid) {
+    initialUploadsPath = path.join(uploadsPath, credentials.device_uuid);
+  } else if (credentials.email && credentials.password) {
     const userUuid = computeUserUuidSync(credentials.email, credentials.password);
     if (userUuid) {
       initialUploadsPath = path.join(uploadsPath, userUuid);
@@ -1212,7 +1217,7 @@ function showMainWindow() {
     .quick-stats { margin: 8px 12px; padding: 6px 8px; background: linear-gradient(135deg, rgba(0,255,163,0.07) 0%, #111114 50%, rgba(0,255,163,0.03) 100%); border: none; border-radius: 16px; transition: all 0.3s; position: relative; overflow: hidden; }
     .quick-stats::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 60%; background: linear-gradient(180deg, rgba(0,255,163,0.09) 0%, rgba(0,255,163,0.03) 40%, transparent 100%); pointer-events: none; border-radius: 16px 16px 0 0; }
     .quick-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; background: transparent; border-radius: 10px; overflow: hidden; position: relative; z-index: 1; }
-    .qs-cell { background: transparent; padding: 8px 6px; display: flex; align-items: center; gap: 8px; }
+    .qs-cell { background: transparent; padding: 8px 6px; display: flex; align-items: center; gap: 8px; overflow: hidden; min-width: 0; }
     .qs-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }
     .qs-text { min-width: 0; flex: 1; }
     .qs-label { font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); line-height: 1; margin-bottom: 2px; }
@@ -1697,7 +1702,7 @@ function showMainWindow() {
       <div class="gs-petal" style="background:#00CC88;opacity:1.00;transform:rotate(315deg) translateY(-16px)"></div>
       <div class="gs-center"></div>
     </div>
-    <div class="fp-label">Opening file browser...</div>
+    <div class="fp-label">Preparing...</div>
     <div class="fp-sub">Please wait</div>
   </div>
   <!-- MAIN VIEW -->
@@ -1978,7 +1983,7 @@ function showMainWindow() {
         <div class="nft-option-group">
           <div class="nft-photo-select" id="nft-photo-select" onclick="selectNFTPhoto()">
             <div class="nft-photo-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
-            <div class="nft-photo-text">Select a photo to certify</div>
+            <div class="nft-photo-text">Click to open folder and drag a photo here</div>
           </div>
           <div class="nft-photo-preview" id="nft-photo-preview">
             <img id="nft-preview-img" src="">
@@ -2480,6 +2485,7 @@ function showMainWindow() {
     
     // Initialize cachedUuid from initialUploadsPath if it contains a UUID
     let cachedUuid = null;
+    let uuidLocked = false; // When true, pairing provided the UUID — don't recompute from email:password
     const initialPath = "${(initialUploadsPath || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}";
     if (initialPath && initialPath !== baseUploadsPath) {
       // Extract UUID from the path (last segment)
@@ -2492,8 +2498,18 @@ function showMainWindow() {
         console.log('[UUID] Initialized from stored credentials:', cachedUuid);
       }
     }
+    // If device_uuid was provided by mobile pairing, lock it so form changes don't override
+    if (${credentials.device_uuid ? 'true' : 'false'}) {
+      uuidLocked = true;
+      console.log('[UUID] Locked from pairing device_uuid');
+    }
     
     async function getUserUploadsPath() {
+      // If UUID was provided by mobile pairing, always use it (don't recompute)
+      if (uuidLocked && cachedUuid) {
+        return baseUploadsPath + (baseUploadsPath.includes('\\\\') ? '\\\\' : '/') + cachedUuid;
+      }
+      
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
       
@@ -3181,36 +3197,70 @@ function showMainWindow() {
     }
     
     let _filePickerOpen = false;
+    const IMAGE_EXTS = ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff','tif','avif','dng','cr2','cr3','nef','arw','orf','rw2'];
+    
+    function handleNFTPhotoSelected(filePath) {
+      selectedNFTPhoto = filePath;
+      document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(filePath);
+      document.getElementById('nft-photo-select').style.display = 'none';
+      document.getElementById('nft-photo-preview').style.display = 'block';
+      // Auto-populate name from filename if field is empty
+      const nameInput = document.getElementById('nft-name-input');
+      if (nameInput && !nameInput.value.trim()) {
+        const baseName = filePath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+        if (baseName) nameInput.value = baseName;
+      }
+      refreshNFTPricesRealtime();
+      updateMintButton();
+    }
+    
     async function selectNFTPhoto() {
-      if (_filePickerOpen) return;
-      _filePickerOpen = true;
-      // Show full-screen spinner overlay while native file dialog initialises
-      const overlay = document.getElementById('file-picker-overlay');
-      if (overlay) overlay.classList.add('active');
+      // Open Pictures folder instantly (same approach as Settings > Open button)
+      // User drags the photo from the opened folder onto the drop zone
       try {
-        const paths = await ipcRenderer.invoke('select-photo-for-nft');
-        if (paths && paths.length > 0) {
-          const filePath = paths[0];
-          selectedNFTPhoto = filePath;
-          document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(filePath);
-          document.getElementById('nft-photo-select').style.display = 'none';
-          document.getElementById('nft-photo-preview').style.display = 'block';
-          // Auto-populate name from filename if field is empty
-          const nameInput = document.getElementById('nft-name-input');
-          if (nameInput && !nameInput.value.trim()) {
-            const baseName = filePath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-            if (baseName) nameInput.value = baseName;
-          }
-          refreshNFTPricesRealtime();
-          updateMintButton();
-        }
+        await ipcRenderer.invoke('open-pictures-folder');
       } catch (e) {
         console.error('selectNFTPhoto error:', e);
-      } finally {
-        _filePickerOpen = false;
-        if (overlay) overlay.classList.remove('active');
       }
     }
+    
+    // Prevent default file drag behavior globally (Electron would navigate to the file)
+    document.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+    document.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); });
+    
+    // Drag-and-drop support for NFT photo select area
+    (function setupNFTPhotoDrop() {
+      const dropTarget = document.getElementById('nft-photo-select');
+      if (!dropTarget) return;
+      dropTarget.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropTarget.style.borderColor = '#6366f1';
+        dropTarget.style.background = 'rgba(99,102,241,0.08)';
+      });
+      dropTarget.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropTarget.style.borderColor = '';
+        dropTarget.style.background = '';
+      });
+      dropTarget.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropTarget.style.borderColor = '';
+        dropTarget.style.background = '';
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+          const file = files[0];
+          const ext = (file.name.split('.').pop() || '').toLowerCase();
+          if (IMAGE_EXTS.includes(ext)) {
+            handleNFTPhotoSelected(file.path);
+          } else {
+            console.warn('[NFT] Dropped file is not a supported image:', file.name);
+          }
+        }
+      });
+    })();
     
     function removeNFTPhoto() {
       selectedNFTPhoto = null;
@@ -6027,7 +6077,10 @@ ipcMain.on('save-backup-folders', (event, folders) => {
 
 ipcMain.on('open-folder', (event, folderPath) => {
   if (folderPath && typeof folderPath === 'string') {
-    shell.openPath(folderPath);
+    try { fs.mkdirSync(folderPath, { recursive: true }); } catch (e) {}
+    shell.openPath(folderPath).then(err => {
+      if (err) console.error('[open-folder] shell.openPath error:', err);
+    });
   }
 });
 
@@ -6117,6 +6170,16 @@ app.whenReady().then(() => {
   nftDesktop.initNFTStorage(appDataPath);
   nftDesktop.initializeSolana();
   // Caches are warmed on-demand by refreshNFTPricesRealtime in the renderer
+  
+  // Pre-warm macOS file dialog: read Pictures dir to cache UTI metadata and reduce NSOpenPanel cold-start
+  if (process.platform === 'darwin') {
+    setTimeout(() => {
+      try {
+        const picturesDir = app.getPath('pictures') || app.getPath('home');
+        fs.readdir(picturesDir, { withFileTypes: true }, () => {});
+      } catch (e) { /* ignore */ }
+    }, 3000);
+  }
 });
 
 ipcMain.on('open-nft-mint', () => {
@@ -6174,8 +6237,10 @@ ipcMain.on('focus-window', () => {
 
 ipcMain.handle('select-photo-for-nft', async () => {
   const parentWindow = mainWindow || null;
+  const defaultDir = app.getPath('pictures') || app.getPath('home');
   const result = await dialog.showOpenDialog(parentWindow, {
     properties: ['openFile'],
+    defaultPath: defaultDir,
     filters: [
       { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'avif', 'dng', 'cr2', 'cr3', 'nef', 'arw', 'orf', 'rw2'] }
     ],
@@ -6185,6 +6250,13 @@ ipcMain.handle('select-photo-for-nft', async () => {
     return null;
   }
   return result.filePaths;
+});
+
+ipcMain.handle('open-pictures-folder', async () => {
+  const picturesDir = app.getPath('pictures') || app.getPath('home');
+  try { require('fs').mkdirSync(picturesDir, { recursive: true }); } catch (e) {}
+  await shell.openPath(picturesDir);
+  return picturesDir;
 });
 
 ipcMain.handle('fetch-user-nfts', async (event, walletAddress, limit) => {
