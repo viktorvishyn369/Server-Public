@@ -3222,7 +3222,10 @@ function openNFTMintWindow(appDataPath, credentials) {
   const promoDays = getPromoDaysRemaining();
   
   const html = generateNFTMintHTML(fees, promo, promoDays, credentials);
-  mintWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  // Write HTML to temp file and load via file:// — data: URLs cause NSOpenPanel to freeze on macOS
+  const tmpMintPath = path.join(os.tmpdir(), 'photolynk-mint.html');
+  fs.writeFileSync(tmpMintPath, html, 'utf8');
+  mintWindow.loadFile(tmpMintPath);
   
   mintWindow.on('closed', () => {
     mintWindow = null;
@@ -3368,7 +3371,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   <div class="section">
     <div class="section-title">IMAGE STORAGE</div>
     <div class="card">
-      <div class="option selected" onclick="selectStorage('cloud', this)" data-storage="cloud">
+      <div class="option" onclick="selectStorage('cloud', this)" data-storage="cloud">
         <div class="option-radio"></div>
         <div class="option-text">
           <div class="option-title">StealthCloud</div>
@@ -3376,7 +3379,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
         </div>
         <div class="option-price" id="cloud-price">$${cnftCloudTotal.toFixed(2)}</div>
       </div>
-      <div class="option" onclick="selectStorage('ipfs', this)" data-storage="ipfs">
+      <div class="option selected" onclick="selectStorage('ipfs', this)" data-storage="ipfs">
         <div class="option-radio"></div>
         <div class="option-text">
           <div class="option-title">IPFS (Pinata)</div>
@@ -3452,11 +3455,16 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
     };
     
     let selectedType = 'compressed';  // 'compressed' or 'standard'
-    let selectedStorage = 'cloud';     // 'cloud' or 'ipfs'
+    let selectedStorage = 'ipfs';      // 'ipfs' or 'cloud' (default matches inline panel: Private = IPFS)
     let selectedPhoto = null;
     let walletAddress = null;
     let isMinting = false;
     let stripExif = false;             // Privacy option to remove EXIF metadata
+    let certificationMode = 'private'; // 'private' (encrypted) or 'public'
+    let encrypt = true;                // Private mode: always encrypted (matches inline panel default)
+    let edition = 'open';              // 'open' or 'limited'
+    let license = 'arr';              // All Rights Reserved by default
+    let watermark = false;
     
     function toggleStripExif() {
       stripExif = !stripExif;
@@ -3515,14 +3523,49 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       }
     }
     
+    let _filePickerOpen = false;
     async function selectPhoto() {
-      const paths = await ipcRenderer.invoke('select-photo-for-nft');
-      if (paths && paths.length > 0) {
-        selectedPhoto = paths[0];
-        document.getElementById('preview-img').src = 'file://' + selectedPhoto;
-        document.querySelector('.photo-select').style.display = 'none';
-        document.getElementById('photo-preview').style.display = 'block';
-        updateMintButton();
+      // Guard against multiple simultaneous file pickers
+      if (_filePickerOpen) return;
+      _filePickerOpen = true;
+      try {
+        const filePath = await new Promise((resolve) => {
+          let resolved = false;
+          const done = (val) => { if (!resolved) { resolved = true; resolve(val); } };
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.style.display = 'none';
+          input.onchange = () => {
+            if (input.files && input.files.length > 0) {
+              done(input.files[0].path || null);
+            } else {
+              done(null);
+            }
+            input.remove();
+          };
+          input.addEventListener('cancel', () => { done(null); input.remove(); });
+          document.body.appendChild(input);
+          input.click();
+          setTimeout(() => { done(null); try { input.remove(); } catch(_){} }, 120000);
+        });
+        if (filePath) {
+          selectedPhoto = filePath;
+          document.getElementById('preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(filePath);
+          document.querySelector('.photo-select').style.display = 'none';
+          document.getElementById('photo-preview').style.display = 'block';
+          // Auto-populate name from filename
+          const nameInput = document.getElementById('nft-name');
+          if (nameInput && !nameInput.value.trim()) {
+            const baseName = filePath.split('/').pop().replace(/\\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+            if (baseName) nameInput.value = baseName;
+          }
+          updateMintButton();
+        }
+      } catch (e) {
+        console.error('selectPhoto error:', e);
+      } finally {
+        _filePickerOpen = false;
       }
     }
     
@@ -3615,6 +3658,11 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
           description: description,
           walletAddress: walletAddress,
           stripExif: stripExif,         // Privacy option to remove EXIF metadata
+          edition: edition,             // 'open' or 'limited'
+          license: license,             // License type (e.g. 'arr', 'cc-by', etc.)
+          watermark: watermark,         // Whether to apply watermark
+          encrypt: encrypt,             // Whether to encrypt (true for Private mode)
+          certificationMode: certificationMode, // 'private' or 'public'
         });
         
         if (result.success) {

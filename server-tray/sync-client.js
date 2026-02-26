@@ -539,6 +539,9 @@ class DesktopSyncClient {
   }
 
   getDeviceId() {
+    // Prefer device_uuid from pairing payload (critical for wallet-migrated users
+    // where email:password no longer derives the correct legacy UUID)
+    if (this.config.device_uuid) return this.config.device_uuid;
     const normalizedEmail = (this.config.email || '').trim().toLowerCase();
     const password = this.config.password || '';
     return uuidv5(`${normalizedEmail}:${password}`, UUID_NAMESPACE);
@@ -1060,8 +1063,11 @@ class DesktopSyncClient {
     const isStealthCloud = this.config.source === 'stealthcloud';
 
     // Derive master key for StealthCloud
+    // Use legacy MK creds from pairing if available (wallet-migrated users)
     if (isStealthCloud) {
-      this.masterKey = this.deriveMasterKey(this.config.password, this.config.email);
+      const mkPassword = this.config.mk_password || this.config.password;
+      const mkEmail = this.config.mk_email || this.config.email;
+      this.masterKey = this.deriveMasterKey(mkPassword, mkEmail);
     }
 
     this.progressCallback({ message: 'Fetching server files...', progress: 0.05 });

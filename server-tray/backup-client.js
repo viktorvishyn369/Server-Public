@@ -983,6 +983,9 @@ class DesktopBackupClient {
 
   // Generate device UUID same way as mobile app: uuidv5(email:password, namespace)
   getDeviceId() {
+    // Prefer device_uuid from pairing payload (critical for wallet-migrated users
+    // where email:password no longer derives the correct legacy UUID)
+    if (this.config.device_uuid) return this.config.device_uuid;
     const normalizedEmail = (this.config.email || '').trim().toLowerCase();
     const password = this.config.password || '';
     return uuidv5(`${normalizedEmail}:${password}`, UUID_NAMESPACE);
@@ -1791,7 +1794,10 @@ class DesktopBackupClient {
 
     if (isStealthCloud) {
       // Derive master key (same as mobile app)
-      this.masterKey = this.deriveMasterKey(this.config.password, this.config.email);
+      // Use legacy MK creds from pairing if available (wallet-migrated users)
+      const mkPassword = this.config.mk_password || this.config.password;
+      const mkEmail = this.config.mk_email || this.config.email;
+      this.masterKey = this.deriveMasterKey(mkPassword, mkEmail);
       this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
       const existingManifests = await this.getExistingManifests();
       console.log(`[DEDUP] Found ${existingManifests.length} existing manifests on server`);
