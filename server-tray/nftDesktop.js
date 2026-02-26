@@ -261,7 +261,7 @@ const PROMO_FEES = {
 // REGULAR FEES (after promotion ends) - matches mobile exactly
 const REGULAR_FEES = {
   // Compressed NFT fees (regular)
-  APP_COMMISSION_CNFT_IPFS_USD: 0.50,        // cNFT + IPFS
+  APP_COMMISSION_CNFT_IPFS_USD: 0.72,        // cNFT + IPFS
   APP_COMMISSION_CNFT_CLOUD_USD: 0.20,       // cNFT + StealthCloud
   // Standard NFT fees (regular)
   APP_COMMISSION_STANDARD_IPFS_USD: 1.00,    // Standard + IPFS
@@ -273,14 +273,22 @@ function getCurrentFees() {
 }
 
 /**
- * Limited Edition fee: 0.1% of file size in KB, floored, minimum $1.
- * e.g. 5000 KB → $5, 1500 KB → $1, 500 KB → $1 (minimum)
+ * Compute size-based commission fee (matches solana-seeker).
+ * Base: $0.72 for files up to 3 MB.
+ * Each additional 1 MB above 3 MB adds +10% to the base.
+ * Formula: fee = 0.72 × (1 + max(0, ceil(sizeMB − 3)) × 0.10)
  */
-function computeLimitedEditionFee(fileSizeBytes) {
-  const sizeKb = (fileSizeBytes || 0) / 1024;
-  const fee = Math.floor(sizeKb * 0.001);
-  return Math.max(fee, 1);
+const BASE_COMMISSION_USD = 0.72;
+const SIZE_THRESHOLD_MB = 3;
+const SIZE_SURCHARGE_PER_MB = 0.10;
+
+function computeSizeBasedFee(fileSizeBytes) {
+  const sizeMb = (fileSizeBytes || 0) / (1024 * 1024);
+  const extraMb = Math.max(0, Math.ceil(sizeMb - SIZE_THRESHOLD_MB));
+  const multiplier = 1 + extraMb * SIZE_SURCHARGE_PER_MB;
+  return Math.round(BASE_COMMISSION_USD * multiplier * 100) / 100;
 }
+const computeLimitedEditionFee = computeSizeBasedFee;
 
 // ============================================================================
 // NFT IMAGE CACHE
@@ -606,11 +614,7 @@ function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes, editi
   const useCloud = storageOption === 'cloud';
   const isLimited = edition === 'limited';
 
-  const feeUsd = isLimited
-    ? computeLimitedEditionFee(fileSizeBytes)
-    : (isCompressed
-      ? (useCloud ? fees.APP_COMMISSION_CNFT_CLOUD_USD : fees.APP_COMMISSION_CNFT_IPFS_USD)
-      : (useCloud ? fees.APP_COMMISSION_STANDARD_CLOUD_USD : fees.APP_COMMISSION_STANDARD_IPFS_USD));
+  const feeUsd = computeSizeBasedFee(fileSizeBytes);
   const feeSol = usdToSol(feeUsd, solPrice);
 
   let rentLamports = 0;
