@@ -3416,6 +3416,7 @@ function showMainWindow() {
           }
           // Cache thumbnailUrl from mint result (encrypted thumb on StealthCloud)
           window._pendingMintThumbnailUrl = result.thumbnailUrl || null;
+          window._pendingMintIpfsThumbnailUrl = result.ipfsThumbnailUrl || null;
           // Cache RFC 3161 + C2PA proof data + attributes (needed after payment completes)
           window._pendingMintProofData = {
             tsaToken: result.tsaToken || null,
@@ -3568,6 +3569,7 @@ function showMainWindow() {
             encrypted: data.encrypt === 'true',
             encryptionData: pendingEncData,
             thumbnailUrl: savedThumbUrl,
+            ipfsThumbnailUrl: window._pendingMintIpfsThumbnailUrl || null,
             createdAt: new Date().toISOString(),
             attributes: (window._pendingMintProofData?.attributes) || [],
             contentHash: data.contentHash || null,
@@ -3577,6 +3579,7 @@ function showMainWindow() {
             certificationMode: data.certificationMode || null,
           });
           window._pendingMintThumbnailUrl = null;
+          window._pendingMintIpfsThumbnailUrl = null;
           console.log('[NFT] Minted NFT saved to storage (temp ID:', tempMintAddress, ')');
         } catch (saveErr) {
           console.warn('[NFT] Post-mint save failed:', saveErr.message);
@@ -3603,6 +3606,7 @@ function showMainWindow() {
             encrypted: data.encrypt === 'true',
             encryptionData: pendingEncData,
             thumbnailUrl: savedThumbUrl,
+            ipfsThumbnailUrl: window._pendingMintIpfsThumbnailUrl || null,
             createdAt: new Date().toISOString(),
           };
           appendNewNFTs([mintedNFT]);
@@ -3688,6 +3692,7 @@ function showMainWindow() {
                       encrypted: data.encrypt === 'true',
                       encryptionData: pendingEncData,
                       thumbnailUrl: savedThumbUrl,
+                      ipfsThumbnailUrl: window._pendingMintIpfsThumbnailUrl || null,
                       createdAt: new Date().toISOString(),
                       attributes: (window._pendingMintProofData?.attributes) || [],
                       contentHash: data.contentHash || null,
@@ -3741,7 +3746,7 @@ function showMainWindow() {
                     const newMint = 'cnft_' + realId;
                     console.log('[NFT] Background DAS resolved:', newMint);
                     _fetchNFTsInFlight = null;
-                    try { await ipcRenderer.invoke('save-minted-nft', { mintAddress: newMint, assetId: realId, ownerAddress: data.wallet || nftWalletAddress, name: data.name || 'Photo Original', imageUrl: displayImageUrl, metadataUrl: data.metadataUrl || null, txSignature: data.mintTx || data.paymentTx || null, storageType: data.storageOption || 'ipfs', isCompressed: true, nftType: 'compressed', edition: data.edition || 'open', license: data.license || 'arr', watermarked: data.watermark === 'true', encrypted: data.encrypt === 'true', encryptionData: pendingEncData, thumbnailUrl: savedThumbUrl, createdAt: new Date().toISOString(), contentHash: data.contentHash || null, exifHash: data.exifHash || null, exifRawHash: data.exifRawHash || null, exifBindingHash: data.exifBindingHash || null, certificationMode: data.certificationMode || null }); } catch (_) {}
+                    try { await ipcRenderer.invoke('save-minted-nft', { mintAddress: newMint, assetId: realId, ownerAddress: data.wallet || nftWalletAddress, name: data.name || 'Photo Original', imageUrl: displayImageUrl, metadataUrl: data.metadataUrl || null, txSignature: data.mintTx || data.paymentTx || null, storageType: data.storageOption || 'ipfs', isCompressed: true, nftType: 'compressed', edition: data.edition || 'open', license: data.license || 'arr', watermarked: data.watermark === 'true', encrypted: data.encrypt === 'true', encryptionData: pendingEncData, thumbnailUrl: savedThumbUrl, ipfsThumbnailUrl: window._pendingMintIpfsThumbnailUrl || null, createdAt: new Date().toISOString(), contentHash: data.contentHash || null, exifHash: data.exifHash || null, exifRawHash: data.exifRawHash || null, exifBindingHash: data.exifBindingHash || null, certificationMode: data.certificationMode || null }); } catch (_) {}
                     try { await ipcRenderer.invoke('remove-stored-nft', tempMintAddress); } catch (_) {}
                     try { await ipcRenderer.invoke('update-certificate-mint', tempMintAddress, newMint); console.log('[NFT] Background: cert updated to', newMint); } catch (_) {}
                     checkForNewNFTsOnce();
@@ -5542,7 +5547,7 @@ function showMainWindow() {
         const hasEncKeys = !!(nft.encrypted && nft.encryptionData);
         const isCached = !!nft.cachedPath && !hasEncKeys;
         const imageUrl = isCached ? nft.cachedPath : (nft.image || nft.imageUrl || '');
-        const originalUrl = nft.imageUrl || nft.image || '';  // Keep original network URL for fallback
+        const originalUrl = nft.ipfsThumbnailUrl || nft.imageUrl || nft.image || '';  // Prefer IPFS thumb as fallback (tiny ~30KB)
         const nftName = nft.name || 'Original #' + (globalIdx + 1);
         const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
