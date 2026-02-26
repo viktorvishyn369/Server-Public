@@ -869,13 +869,17 @@ function startPairingServer() {
             return;
           }
           
-          // Store credentials securely
-          store.set('backupCredentials', {
+          // Store credentials securely (include device_uuid + legacy MK creds for migrated users)
+          const creds = {
             email: email,
             password: password,
             remoteAddress: '',
             remotePort: '3000'
-          });
+          };
+          if (data.device_uuid) creds.device_uuid = data.device_uuid;
+          if (data.mk_email) creds.mk_email = data.mk_email;
+          if (data.mk_password) creds.mk_password = data.mk_password;
+          store.set('backupCredentials', creds);
           
           // Generate new pairing token for security (one-time use)
           const newToken = generatePairingToken();
@@ -886,8 +890,10 @@ function startPairingServer() {
           
           safeConsole('log', '[Pairing] Credentials received from mobile for:', email);
           
-          // Compute UUID v5 and create user folder
-          const userUuid = computeUserUuidSync(email, password);
+          // Use device_uuid from mobile if provided (critical for wallet-migrated users
+          // where email:password no longer derives the correct legacy UUID).
+          // Fall back to computing from email:password for older mobile versions.
+          const userUuid = data.device_uuid || computeUserUuidSync(email, password);
           if (userUuid && uploadsPath) {
             const userFolderPath = path.join(uploadsPath, userUuid);
             
@@ -967,6 +973,9 @@ function startPairingServer() {
                 email: email,
                 password: password,
                 serverUrl: stealthCloudBaseUrl,
+                device_uuid: data.device_uuid || undefined,
+                mk_email: data.mk_email || undefined,
+                mk_password: data.mk_password || undefined,
               });
               await authClient.login();
               if (authClient.token) {
@@ -1558,14 +1567,17 @@ function showMainWindow() {
     .nft-mint-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
     .nft-promo-banner { background: linear-gradient(135deg, #9945FF 0%, #14F195 100%); padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: 0.2px; }
     .nft-option-group { margin-bottom: 14px; }
-    .nft-option-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; font-weight: 600; }
+    .nft-option-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; font-weight: 600; }
     .nft-options { display: flex; gap: 6px; }
     .nft-option { flex: 1; padding: 10px 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; cursor: pointer; text-align: center; transition: all 0.2s; }
     .nft-option:hover { border-color: #9945FF; }
     .nft-option.selected { border-color: #9945FF; background: rgba(153,69,255,0.15); }
-    .nft-option-title { font-size: 11px; font-weight: 500; color: var(--text-primary); }
-    .nft-option-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
-    .nft-option-price { font-size: 11px; font-weight: 600; color: #14F195; margin-top: 4px; }
+    .nft-option-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    .nft-option-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+    .nft-option-price { font-size: 13px; font-weight: 600; color: #14F195; margin-top: 4px; }
+    .nft-cert-section { background: #111114; border-radius: 16px; border: 1px solid #252530; padding: 14px; margin-bottom: 14px; }
+    .nft-cert-section-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-bottom: 10px; }
+    .nft-cert-card-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-bottom: 8px; }
     .nft-cert-options { display: flex; flex-direction: column; gap: 10px; }
     .nft-cert-card { display:flex; flex-direction:column; align-items:flex-start; padding:14px 16px !important; border-radius:12px !important; border:1.5px solid rgba(255,255,255,0.07) !important; background:rgba(255,255,255,0.02) !important; position:relative; cursor:pointer; transition: all 0.2s ease; }
     .nft-cert-card:hover { border-color:rgba(153,69,255,0.4) !important; background:rgba(153,69,255,0.04) !important; }
@@ -1573,31 +1585,26 @@ function showMainWindow() {
     .nft-cert-card-header { display:flex; align-items:center; gap:8px; margin-bottom:8px; width:100%; }
     .nft-cert-card-header svg { flex-shrink:0; opacity:0.6; }
     .nft-cert-card.selected .nft-cert-card-header svg { opacity:1; color:#a78bfa; }
-    .nft-cert-card-name { font-size:13px; font-weight:600; color:#e4e4e7; }
+    .nft-cert-card-name { font-size:14px; font-weight:600; color:#e4e4e7; }
     .nft-cert-card.selected .nft-cert-card-name { color:#fff; }
     .nft-cert-card-chips { display:flex; flex-wrap:wrap; gap:5px; }
-    .cert-chip { font-size:9px; font-weight:600; padding:3px 7px; border-radius:4px; letter-spacing:0.2px; }
+    .cert-chip { font-size:10px; font-weight:600; padding:3px 8px; border-radius:4px; letter-spacing:0.2px; }
     .cert-chip.green { background:rgba(34,197,94,0.1); color:#4ade80; }
     .cert-chip.amber { background:rgba(245,158,11,0.1); color:#fbbf24; }
-    .cert-info-icon { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; border:1px solid rgba(255,255,255,0.1); color:#666; font-size:9px; font-weight:700; cursor:default; position:absolute; top:12px; right:12px; transition: all 0.15s; }
-    .cert-info-icon:hover { border-color:rgba(255,255,255,0.25); color:#999; }
-    .cert-info-icon:hover .cert-tooltip { opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); }
-    .cert-tooltip { position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%) translateY(4px); background:#1a1a2e; color:#d4d4d8; font-size:11px; font-weight:400; line-height:1.5; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); white-space:normal; width:230px; text-align:left; opacity:0; visibility:hidden; transition:all 0.2s ease; pointer-events:none; z-index:10; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
-    .cert-tooltip::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#1a1a2e; }
     .nft-cost-breakdown { margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); }
-    .nft-cost-row { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+    .nft-cost-row { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
     .nft-cost-row:first-child { margin-top: 0; }
     .nft-cost-row strong { color: var(--text-primary); font-weight: 600; }
-    .nft-cost-meta { margin-top: 8px; font-size: 9px; color: rgba(255,255,255,0.45); }
+    .nft-cost-meta { margin-top: 8px; font-size: 10px; color: rgba(255,255,255,0.45); }
     .nft-photo-select { border: 2px dashed rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.015); }
     .nft-photo-select:hover { border-color: rgba(153,69,255,0.5); background: rgba(153,69,255,0.04); }
     .nft-photo-icon { margin-bottom: 6px; display: flex; justify-content: center; }
-    .nft-photo-text { font-size: 12px; color: var(--text-muted); }
+    .nft-photo-text { font-size: 13px; color: var(--text-muted); }
     .nft-photo-preview { display: none; position: relative; border-radius: 12px; overflow: hidden; }
     .nft-photo-preview img { width: 100%; max-height: 140px; object-fit: cover; border-radius: 12px; }
     .nft-photo-remove { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
     .nft-photo-remove:hover { background: rgba(239,68,68,0.7); }
-    .nft-input { width: 100%; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; background: rgba(255,255,255,0.03); color: var(--text-primary); font-size: 12px; margin-bottom: 0; transition: border-color 0.15s; }
+    .nft-input { width: 100%; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; background: rgba(255,255,255,0.03); color: var(--text-primary); font-size: 13px; margin-bottom: 0; transition: border-color 0.15s; }
     .nft-input:focus { outline: none; border-color: rgba(153,69,255,0.5); background: rgba(153,69,255,0.04); }
     .nft-input::placeholder { color: var(--text-muted); }
     /* Toggle row (watermark, strip exif, license) */
@@ -1605,8 +1612,8 @@ function showMainWindow() {
     .nft-toggle-row:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
     .nft-toggle-left { display: flex; align-items: center; gap: 10px; }
     .nft-toggle-left svg { flex-shrink: 0; opacity: 0.5; }
-    .nft-toggle-title { font-size: 12px; font-weight: 500; color: #e4e4e7; }
-    .nft-toggle-desc { font-size: 10px; color: #71717a; margin-top: 1px; line-height: 1.3; }
+    .nft-toggle-title { font-size: 13px; font-weight: 500; color: #e4e4e7; }
+    .nft-toggle-desc { font-size: 11px; color: #71717a; margin-top: 1px; line-height: 1.4; }
     /* Custom toggle switch */
     .nft-toggle-check { -webkit-appearance: none; appearance: none; width: 36px; height: 20px; border-radius: 10px; background: rgba(255,255,255,0.1); position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
     .nft-toggle-check::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #71717a; transition: all 0.2s; }
@@ -1614,13 +1621,13 @@ function showMainWindow() {
     .nft-toggle-check:checked::after { left: 18px; background: #a78bfa; }
     /* Cost display */
     .nft-cost-display { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; margin-bottom: 10px; }
-    .nft-cost-label { font-size: 11px; color: #71717a; font-weight: 500; }
-    .nft-cost-value { font-size: 13px; font-weight: 700; color: #14F195; }
+    .nft-cost-label { font-size: 12px; color: #71717a; font-weight: 500; }
+    .nft-cost-value { font-size: 14px; font-weight: 700; color: #14F195; }
     /* Wallet row */
-    .nft-wallet-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; margin-bottom: 12px; font-size: 11px; }
+    .nft-wallet-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; margin-bottom: 12px; font-size: 12px; }
     .nft-wallet-dot { width: 7px; height: 7px; border-radius: 50%; background: #14F195; box-shadow: 0 0 6px rgba(20,241,149,0.4); }
     .nft-wallet-dot.disconnected { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.3); }
-    .nft-wallet-connect { margin-left: auto; padding: 5px 12px; border-radius: 6px; border: 1px solid rgba(153,69,255,0.4); background: rgba(153,69,255,0.1); color: #a78bfa; cursor: pointer; font-size: 10px; font-weight: 600; transition: all 0.15s; }
+    .nft-wallet-connect { margin-left: auto; padding: 5px 12px; border-radius: 6px; border: 1px solid rgba(153,69,255,0.4); background: rgba(153,69,255,0.1); color: #a78bfa; cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.15s; }
     .nft-wallet-connect:hover { background: rgba(153,69,255,0.2); border-color: rgba(153,69,255,0.6); color: #c4b5fd; }
     .nft-guide-btn { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #9945FF; background: transparent; color: #9945FF; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 6px; padding: 0; line-height: 16px; }
     .nft-guide-btn:hover { background: rgba(153,69,255,0.2); }
@@ -1667,9 +1674,32 @@ function showMainWindow() {
     .nft-loading, .nft-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; color: var(--text-muted); font-size: 12px; gap: 8px; }
     .nft-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: #9945FF; border-radius: 50%; animation: spin 1s linear infinite; transform-origin: center center; box-sizing: border-box; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #file-picker-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:#000; z-index:99999; flex-direction:column; align-items:center; justify-content:center; gap:20px; }
+    #file-picker-overlay.active { display:flex; }
+    .gradient-spinner { width:70px; height:70px; position:relative; animation: gs-spin 2s linear infinite; }
+    @keyframes gs-spin { 0%{transform:rotate(0deg) scale(0.9)} 50%{transform:rotate(180deg) scale(1.1)} 100%{transform:rotate(360deg) scale(0.9)} }
+    .gs-petal { position:absolute; width:20px; height:27px; border-radius:10px; top:50%; left:50%; margin-left:-10px; margin-top:-13.5px; transform-origin:10px 13.5px; }
+    .gs-center { position:absolute; top:50%; left:50%; width:21px; height:21px; border-radius:50%; background:#1E3A8A; transform:translate(-50%,-50%); }
+    #file-picker-overlay .fp-label { font-size:16px; color:#fff; font-weight:600; }
+    #file-picker-overlay .fp-sub { font-size:13px; color:#888; }
   </style>
 </head>
 <body>
+  <div id="file-picker-overlay">
+    <div class="gradient-spinner">
+      <div class="gs-petal" style="background:#03E1FF;opacity:0.60;transform:rotate(0deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00FFA3;opacity:0.65;transform:rotate(45deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#02C4E0;opacity:0.70;transform:rotate(90deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00CC88;opacity:0.75;transform:rotate(135deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#03E1FF;opacity:0.80;transform:rotate(180deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00FFA3;opacity:0.85;transform:rotate(225deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#02C4E0;opacity:0.90;transform:rotate(270deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00CC88;opacity:1.00;transform:rotate(315deg) translateY(-16px)"></div>
+      <div class="gs-center"></div>
+    </div>
+    <div class="fp-label">Opening file browser...</div>
+    <div class="fp-sub">Please wait</div>
+  </div>
   <!-- MAIN VIEW -->
   <div id="main-view" class="view active">
     <div class="header">
@@ -1963,17 +1993,18 @@ function showMainWindow() {
         </div>
         
         <!-- 3. Certification Mode: Private vs Public -->
-        <div class="nft-option-group">
-          <div class="nft-option-label">Privacy Level</div>
+        <div class="nft-cert-section">
+          <div class="nft-option-label">Certification Mode</div>
+          <div class="nft-cert-section-desc">Create a tamper-proof certification with secure archival. Choose your privacy level.</div>
           <div class="nft-cert-options">
             <div class="nft-cert-card selected" onclick="selectCertificationMode('private', this)">
               <div class="nft-cert-card-header">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 <span class="nft-cert-card-name">Private Certified</span>
-                <span class="cert-info-icon">i<span class="cert-tooltip">Encrypted on your device before upload. Only you can decrypt and view the original. Public sees only the proof, not the image.</span></span>
               </div>
+              <div class="nft-cert-card-desc">Encrypted on your device before upload. Only you can decrypt and view the original.</div>
               <div class="nft-cert-card-chips">
-                <span class="cert-chip green">Encrypted</span>
+                <span class="cert-chip green">Zero-knowledge</span>
                 <span class="cert-chip green">EXIF preserved</span>
                 <span class="cert-chip green">Privacy-first</span>
               </div>
@@ -1982,8 +2013,8 @@ function showMainWindow() {
               <div class="nft-cert-card-header">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 <span class="nft-cert-card-name">Public Certified</span>
-                <span class="cert-info-icon">i<span class="cert-tooltip">Unencrypted, publicly viewable. Stored on decentralized infrastructure. Ideal for portfolios, social profiles, or selling prints.</span></span>
               </div>
+              <div class="nft-cert-card-desc">Unencrypted, publicly viewable. Stored on secure infrastructure. Ideal for portfolios.</div>
               <div class="nft-cert-card-chips">
                 <span class="cert-chip green">Full quality</span>
                 <span class="cert-chip amber">Publicly visible</span>
@@ -3151,38 +3182,15 @@ function showMainWindow() {
     
     let _filePickerOpen = false;
     async function selectNFTPhoto() {
-      // Guard against multiple simultaneous file pickers
       if (_filePickerOpen) return;
       _filePickerOpen = true;
-      // Use an HTML file input instead of Electron's dialog.showOpenDialog
-      // which hangs on macOS Electron 28+ tray apps.
+      // Show full-screen spinner overlay while native file dialog initialises
+      const overlay = document.getElementById('file-picker-overlay');
+      if (overlay) overlay.classList.add('active');
       try {
-        console.log('[NFT] selectNFTPhoto: using HTML file input');
-        const filePath = await new Promise((resolve) => {
-          let resolved = false;
-          const done = (val) => { if (!resolved) { resolved = true; resolve(val); } };
-          const input = document.createElement('input');
-          input.type = 'file';
-          input.accept = 'image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/tiff,image/bmp,image/avif,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.bmp,.tiff,.tif,.avif,.dng,.cr2,.cr3,.nef,.arw,.orf,.rw2';
-          input.style.display = 'none';
-          input.onchange = () => {
-            if (input.files && input.files.length > 0) {
-              // Electron with nodeIntegration: File objects have a .path property
-              done(input.files[0].path || null);
-            } else {
-              done(null);
-            }
-            input.remove();
-          };
-          // Electron fires 'cancel' event on file input when user cancels (Chromium 91+)
-          input.addEventListener('cancel', () => { done(null); input.remove(); });
-          document.body.appendChild(input);
-          input.click();
-          // Safety timeout — if neither change nor cancel fires in 2 minutes, unlock
-          setTimeout(() => { done(null); try { input.remove(); } catch(_){} }, 120000);
-        });
-        console.log('[NFT] file input returned:', filePath ? '1 path' : 'none');
-        if (filePath) {
+        const paths = await ipcRenderer.invoke('select-photo-for-nft');
+        if (paths && paths.length > 0) {
+          const filePath = paths[0];
           selectedNFTPhoto = filePath;
           document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(filePath);
           document.getElementById('nft-photo-select').style.display = 'none';
@@ -3200,6 +3208,7 @@ function showMainWindow() {
         console.error('selectNFTPhoto error:', e);
       } finally {
         _filePickerOpen = false;
+        if (overlay) overlay.classList.remove('active');
       }
     }
     
@@ -5770,10 +5779,7 @@ function showMainWindow() {
 </body>
 </html>`;
     
-    // Write HTML to temp file and load via file:// — data: URLs cause NSOpenPanel to freeze on macOS
-    const tmpHtmlPath = path.join(app.getPath('temp'), 'photolynk-ui.html');
-    fs.writeFileSync(tmpHtmlPath, html, 'utf8');
-    mainWindow.loadFile(tmpHtmlPath);
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   });
   
   mainWindow.on('close', (e) => {
@@ -5783,6 +5789,8 @@ function showMainWindow() {
     }
   });
   mainWindow.on('ready-to-show', () => { mainWindow.show(); });
+  
+  
   mainWindow.webContents.on('console-message', (e, level, msg) => {
     if (msg.startsWith('[NFT]')) safeConsole('log', '[Renderer]', msg);
   });
@@ -6164,8 +6172,20 @@ ipcMain.on('focus-window', () => {
   }
 });
 
-// NOTE: select-photo-for-nft IPC removed — renderer now uses HTML <input type="file">
-// which bypasses the Electron 28+ macOS NSOpenPanel hang bug entirely.
+ipcMain.handle('select-photo-for-nft', async () => {
+  const parentWindow = mainWindow || null;
+  const result = await dialog.showOpenDialog(parentWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'avif', 'dng', 'cr2', 'cr3', 'nef', 'arw', 'orf', 'rw2'] }
+    ],
+    title: 'Select Photo to Certify'
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths;
+});
 
 ipcMain.handle('fetch-user-nfts', async (event, walletAddress, limit) => {
   // Pass StealthCloud auth headers so cached images from stealthlynk.io can be downloaded
@@ -6317,9 +6337,11 @@ ipcMain.handle('mint-nft', async (event, data) => {
   };
   
   // Derive master key from credentials if encryption is requested
+  // Use legacy MK creds for migrated wallet users (encryption key = original email+password)
   if (data.encrypt && credentials.email && credentials.password) {
-    const salt = credentials.email.toLowerCase().trim();
-    mintParams.masterKey = new Uint8Array(crypto.pbkdf2Sync(credentials.password, salt, 30000, 32, 'sha256'));
+    const mkEmail = (credentials.mk_email || credentials.email).toLowerCase().trim();
+    const mkPassword = credentials.mk_password || credentials.password;
+    mintParams.masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword, mkEmail, 30000, 32, 'sha256'));
   }
   
   // Use nftDesktop.mintNFT which handles upload and opens wallet for payment
@@ -6487,8 +6509,10 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     if (!credentials.email || !credentials.password) {
       return { success: false, error: 'Login credentials not available — log in first' };
     }
-    const salt = credentials.email.toLowerCase().trim();
-    const masterKey = new Uint8Array(crypto.pbkdf2Sync(credentials.password, salt, 30000, 32, 'sha256'));
+    // Use legacy MK creds for migrated wallet users (encryption key = original email+password)
+    const mkEmail2 = (credentials.mk_email || credentials.email).toLowerCase().trim();
+    const mkPassword2 = credentials.mk_password || credentials.password;
+    const masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword2, mkEmail2, 30000, 32, 'sha256'));
 
     // Prefer encrypted thumbnail (small, fast) over full image (may be data URI or multi-MB)
     const useThumb = !!(thumbnailUrl && encryptionData.thumbnailNonce);
@@ -6740,8 +6764,10 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
         const credentials = store.get('backupCredentials') || {};
         // Derive masterKey from email/password via PBKDF2 (same as mint + decrypt paths)
         if (credentials.email && credentials.password) {
-          const salt = credentials.email.toLowerCase().trim();
-          const masterKey = new Uint8Array(crypto.pbkdf2Sync(credentials.password, salt, 30000, 32, 'sha256'));
+          // Use legacy MK creds for migrated wallet users
+          const mkEmail3 = (credentials.mk_email || credentials.email).toLowerCase().trim();
+          const mkPassword3 = credentials.mk_password || credentials.password;
+          const masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword3, mkEmail3, 30000, 32, 'sha256'));
           json = nftDesktop.decryptMetadataJSON(buf, encryptionData, masterKey);
           if (json) safeConsole('log', '[Certs] Decrypted encrypted metadata for RFC3161 recovery');
         } else {
@@ -7617,13 +7643,21 @@ let activeBackupClient = null;
 
 ipcMain.on('start-desktop-backup', async (event, config) => {
   try {
-    // Save credentials for next time
+    // Save credentials for next time (preserve pairing fields: device_uuid, mk_email, mk_password)
+    const prevCreds = store.get('backupCredentials') || {};
     store.set('backupCredentials', {
       email: config.email,
       password: config.password,
       remoteAddress: config.remoteAddress,
-      remotePort: config.remotePort
+      remotePort: config.remotePort,
+      ...(prevCreds.device_uuid ? { device_uuid: prevCreds.device_uuid } : {}),
+      ...(prevCreds.mk_email ? { mk_email: prevCreds.mk_email } : {}),
+      ...(prevCreds.mk_password ? { mk_password: prevCreds.mk_password } : {}),
     });
+    // Inject pairing fields into config so backup-client gets correct UUID + MK creds
+    if (prevCreds.device_uuid && !config.device_uuid) config.device_uuid = prevCreds.device_uuid;
+    if (prevCreds.mk_email && !config.mk_email) config.mk_email = prevCreds.mk_email;
+    if (prevCreds.mk_password && !config.mk_password) config.mk_password = prevCreds.mk_password;
     
     // For StealthCloud, check subscription first
     if (config.destination === 'stealthcloud') {
@@ -7783,15 +7817,25 @@ ipcMain.on('start-desktop-sync', async (event, config) => {
   try {
     safeConsole('log', `[SYNC] Config received:`, JSON.stringify({ source: config.source, email: config.email, downloadPath: config.downloadPath, hasPassword: !!config.password }));
     
+    // Save credentials (preserve pairing fields: device_uuid, mk_email, mk_password)
+    const prevSyncCreds = store.get('backupCredentials') || {};
     store.set('backupCredentials', {
       email: config.email,
       password: config.password,
       remoteAddress: config.remoteAddress,
-      remotePort: config.remotePort
+      remotePort: config.remotePort,
+      ...(prevSyncCreds.device_uuid ? { device_uuid: prevSyncCreds.device_uuid } : {}),
+      ...(prevSyncCreds.mk_email ? { mk_email: prevSyncCreds.mk_email } : {}),
+      ...(prevSyncCreds.mk_password ? { mk_password: prevSyncCreds.mk_password } : {}),
     });
+    // Inject pairing fields into config so sync-client gets correct UUID + MK creds
+    if (prevSyncCreds.device_uuid && !config.device_uuid) config.device_uuid = prevSyncCreds.device_uuid;
+    if (prevSyncCreds.mk_email && !config.mk_email) config.mk_email = prevSyncCreds.mk_email;
+    if (prevSyncCreds.mk_password && !config.mk_password) config.mk_password = prevSyncCreds.mk_password;
     
-    // Compute UUID v5 from email:password and ensure we save to user folder
-    const userUuid = computeUserUuidSync(config.email, config.password);
+    // Use device_uuid from pairing if available (critical for wallet-migrated users),
+    // otherwise compute from email:password
+    const userUuid = config.device_uuid || computeUserUuidSync(config.email, config.password);
     let downloadPath = config.downloadPath;
     
     // If downloadPath doesn't already contain the UUID, append it
