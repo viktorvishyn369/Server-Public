@@ -2600,7 +2600,9 @@ async function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
                 const encryptedFromAttr = getAttr('Encrypted') === 'true';
                 const encryptedFromProps = !!(metadataJson.properties && metadataJson.properties.encryption && metadataJson.properties.encryption.encrypted);
                 const encrypted = encryptedFromAttr || encryptedFromProps;
-                const imgUrl = metadataJson.image || '';
+                let imgUrl = metadataJson.image || '';
+                // Convert ipfs:// scheme to gateway URL (old standard NFTs use raw ipfs:// URIs)
+                if (imgUrl.startsWith('ipfs://')) imgUrl = 'https://ipfs.io/ipfs/' + imgUrl.replace(/^ipfs:\/\/(ipfs\/)?/, '');
                 const encProps = (metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
                 const storageAttr = getAttr('Storage');
                 const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imgUrl.includes('stealthlynk.io') || imgUrl.includes('stealthcloud')) ? 'cloud' : imgUrl.startsWith('data:') ? 'onchain' : (imgUrl.includes('akrd.net') || imgUrl.includes('arweave.net')) ? 'arweave' : 'ipfs';
