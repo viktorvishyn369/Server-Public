@@ -463,7 +463,7 @@
                     pctSubEl.textContent = 'Uptime data will appear after first hour';
                 }
 
-                noteEl.textContent = 'Live from stealthlynk.io \u2014 ' + new Date(data.now).toLocaleTimeString();
+                noteEl.textContent = 'Live from stealthlynk.io \u2014 ' + new Date(data.now).toLocaleTimeString('en-US', { timeZone: 'UTC', timeZoneName: 'short' });
             } catch (e) {
                 pillText.textContent = 'Status unavailable';
                 pctEl.textContent = '--%';
