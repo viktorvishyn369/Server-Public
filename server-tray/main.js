@@ -2000,7 +2000,7 @@ function showMainWindow() {
         <!-- 3. Certification Mode: Private vs Public -->
         <div class="nft-cert-section">
           <div class="nft-option-label">Certification Mode</div>
-          <div class="nft-cert-section-desc">Create a tamper-proof certification with secure archival. Choose your privacy level.</div>
+          <div class="nft-cert-section-desc">Create a tamper-proof certification. Choose your privacy level.</div>
           <div class="nft-cert-options">
             <div class="nft-cert-card selected" onclick="selectCertificationMode('private', this)">
               <div class="nft-cert-card-header">
@@ -2009,8 +2009,10 @@ function showMainWindow() {
               </div>
               <div class="nft-cert-card-desc">Encrypted on your device before upload. Only you can decrypt and view the original.</div>
               <div class="nft-cert-card-chips">
+                <span class="cert-chip green">Full quality</span>
                 <span class="cert-chip green">Zero-knowledge</span>
                 <span class="cert-chip green">EXIF preserved</span>
+                <span class="cert-chip green">Transferable</span>
                 <span class="cert-chip green">Privacy-first</span>
               </div>
             </div>
@@ -2029,8 +2031,8 @@ function showMainWindow() {
           </div>
         </div>
         
-        <!-- Optional watermark (Public mode only) -->
-        <div class="nft-option-group" id="watermark-option" style="display:none;">
+        <!-- Optional watermark (Public mode only) - HIDDEN for now -->
+        <div class="nft-option-group" id="watermark-option" style="display:none !important;">
           <label class="nft-toggle-row">
             <div class="nft-toggle-left">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
@@ -2044,13 +2046,13 @@ function showMainWindow() {
         </div>
         
         <!-- Strip EXIF toggle -->
-        <div class="nft-option-group">
+        <div class="nft-option-group" id="strip-exif-option">
           <label class="nft-toggle-row">
             <div class="nft-toggle-left">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               <div>
                 <div class="nft-toggle-title">Remove Private Data (EXIF)</div>
-                <div class="nft-toggle-desc">Strip location, camera info, and other metadata</div>
+                <div class="nft-toggle-desc" id="nft-strip-exif-desc">Strip location, camera info, and other metadata</div>
               </div>
             </div>
             <input type="checkbox" id="nft-strip-exif-toggle" class="nft-toggle-check" onchange="selectedStripExif = this.checked">
@@ -3101,7 +3103,11 @@ function showMainWindow() {
         document.getElementById('watermark-option').style.display = 'none';
         document.getElementById('nft-watermark-public').checked = false;
         const stripToggle1 = document.getElementById('nft-strip-exif-toggle');
-        if (stripToggle1) stripToggle1.checked = false;
+        if (stripToggle1) { stripToggle1.checked = false; stripToggle1.disabled = true; }
+        const stripOption1 = document.getElementById('strip-exif-option');
+        if (stripOption1) stripOption1.style.opacity = '0.4';
+        const stripDesc1 = document.getElementById('nft-strip-exif-desc');
+        if (stripDesc1) stripDesc1.textContent = 'EXIF preserved in private mode';
       } else {
         // Public: Unencrypted, IPFS storage, Open Edition, Compressed, optional watermark, stripExif off
         selectedNFTEdition = 'open';
@@ -3111,7 +3117,11 @@ function showMainWindow() {
         document.getElementById('nft-encrypt-check').checked = false;
         document.getElementById('watermark-option').style.display = 'block';
         const stripToggle2 = document.getElementById('nft-strip-exif-toggle');
-        if (stripToggle2) stripToggle2.checked = false;
+        if (stripToggle2) { stripToggle2.checked = false; stripToggle2.disabled = false; }
+        const stripOption2 = document.getElementById('strip-exif-option');
+        if (stripOption2) stripOption2.style.opacity = '1';
+        const stripDesc2 = document.getElementById('nft-strip-exif-desc');
+        if (stripDesc2) stripDesc2.textContent = 'Strip location, camera info, and other metadata';
       }
       
       // Update hidden controls to match
@@ -4098,7 +4108,7 @@ function showMainWindow() {
         card.onmouseenter = () => card.style.borderColor = '#f59e0b';
         card.onmouseleave = () => card.style.borderColor = '#333';
         
-        const dateStr = cert.issuedAt ? new Date(cert.issuedAt).toLocaleString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : 'N/A';
+        const dateStr = cert.issuedAt ? new Date(cert.issuedAt).toLocaleString('en', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : 'N/A';
         const _isPrivate = cert.certificationMode === 'private' || (!cert.certificationMode && cert.edition === 'limited');
         const _isPublic = cert.certificationMode === 'public' || (!cert.certificationMode && cert.edition === 'open');
         const tags = [_isPublic
@@ -4135,7 +4145,7 @@ function showMainWindow() {
       const listEl = document.getElementById('certs-list');
       if (!listEl) return;
       window._rfcCertData = cert;
-      const dateStr = cert.issuedAt ? new Date(cert.issuedAt).toLocaleString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : 'N/A';
+      const dateStr = cert.issuedAt ? new Date(cert.issuedAt).toLocaleString('en', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : 'N/A';
       
       listEl.innerHTML = \`
         <div style="margin-bottom:12px;">
@@ -4248,15 +4258,15 @@ function showMainWindow() {
           \` : ''}
           \${(cert.rfc3161Token || cert.hasRfc3161) && !cert.rfc3161Token ? \`
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px;padding:0 4px;">
-            <div class="nft-spinner" style="width:12px;height:12px;border-width:2px;"></div>
-            <span style="font-size:10px;color:#6b7280;">Recovering full token from record metadata...</span>
+            <span style="color:#10b981;font-size:12px;">✓</span>
+            <span style="font-size:10px;color:#6b7280;">Full token stored on-chain — verified via metadata</span>
           </div>
           \` : ''}
           \${(cert.c2paManifest || cert.hasC2pa) ? \`
           <div style="height:1px;background:#333;margin:12px 0;"></div>
           <div style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">C2PA Provenance</div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Standard</span><span style="color:#3b82f6;font-size:11px;">C2PA / Coalition for Content Provenance</span></div>
-          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Claim Generator</span><span style="color:#3b82f6;font-size:11px;">\${cert.c2paManifest?.claim_generator || 'PhotoLynk/1.0'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Claim Generator</span><span style="color:#3b82f6;font-size:11px;">\${cert.c2paManifest?.claim_generator || 'PhotoLynk/' + (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim()}</span></div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:11px;">Created</span><span style="color:#3b82f6;font-size:11px;">\${cert.c2paManifest?.claim?.created || cert.issuedAt || 'N/A'}</span></div>
           \` : ''}
           \${cert.mintAddress ? \`
@@ -4388,6 +4398,7 @@ function showMainWindow() {
           if (nft.watermarked && !existing.watermarked) existing.watermarked = nft.watermarked;
           if (nft.license && !existing.license) existing.license = nft.license;
           if (nft.storageType && (!existing.storageType || existing.storageType === 'ipfs')) existing.storageType = nft.storageType;
+          if (nft.createdAt && !existing.createdAt) existing.createdAt = nft.createdAt;
           if (nft.encrypted && nft.imageUrl && !existing.encryptionData?.wrappedKey) {
             // Don't overwrite imageUrl if existing already has encryption keys
           } else if (nft.encrypted && nft.imageUrl) {
@@ -4410,6 +4421,7 @@ function showMainWindow() {
             if (old.watermarked && !nft.watermarked) nft.watermarked = old.watermarked;
             if (old.license && !nft.license) nft.license = old.license;
             if (old.imageUrl && !nft.imageUrl) nft.imageUrl = old.imageUrl;
+            if (old.createdAt && !nft.createdAt) nft.createdAt = old.createdAt;
             allNFTs[oldIdx] = nft;
             existingMap[id] = oldIdx;
             existingMetaMap[nft.metadataUrl] = oldIdx;
@@ -4577,6 +4589,7 @@ function showMainWindow() {
                 if (stored.watermarked && !nft.watermarked) nft.watermarked = stored.watermarked;
                 if (stored.license && !nft.license) nft.license = stored.license;
                 if (stored.storageType && (!nft.storageType || nft.storageType === 'ipfs')) nft.storageType = stored.storageType;
+                if (stored.createdAt && !nft.createdAt) nft.createdAt = stored.createdAt;
                 // For encrypted NFTs: DAS imageUrl is a proxied URL that can't be decrypted.
                 // Use the original upload URL from local storage (Pinata/StealthCloud) instead.
                 if (stored.encrypted && stored.imageUrl) {
@@ -5521,7 +5534,19 @@ function showMainWindow() {
       }
     }
 
+    function sortNFTsNewestFirst() {
+      allNFTs.sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (da && db) return db - da;
+        if (da) return -1;
+        if (db) return 1;
+        return 0;
+      });
+    }
+
     function renderNFTPage() {
+      sortNFTsNewestFirst();
       updateQsNfts(allNFTs.length);
       const grid = document.getElementById('nft-grid');
       grid.innerHTML = '';

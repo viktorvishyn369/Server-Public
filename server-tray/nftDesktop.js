@@ -2653,14 +2653,54 @@ function invalidateDasCache() {
   _lastDasForceRefresh = true;
 }
 
+// Global lock: only one fetchNFTsFromDAS runs at a time; concurrent callers await the same promise
+let _dasInFlight = null;
+
 /**
  * Fetch NFTs using Solana DAS (Digital Asset Standard) API
  * Same implementation as mobile app's fetchCompressedNFTs
  */
 async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
+  // Global lock: if another DAS fetch is already running, piggyback on it
+  if (_dasInFlight) {
+    console.log('[DAS] fetchNFTsFromDAS — already in flight, waiting for existing call');
+    return _dasInFlight;
+  }
+
+  const run = async () => {
+    try {
+      return await _fetchNFTsFromDASImpl(walletAddress, limit, authHeaders);
+    } finally {
+      _dasInFlight = null;
+    }
+  };
+  _dasInFlight = run();
+  return _dasInFlight;
+}
+
+async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = null) {
   let pageSize = 20; // Start small — auto-halves on "Response is too big"
   const MIN_PAGE_SIZE = 5;
   const MAX_PAGES = 50; // Desktop has no OOM concerns, fetch everything
+
+  // Cooldown: if DAS was called recently (within 2 min), skip unless force-refreshing
+  if (!_lastDasForceRefresh && _lastDasTotalTs && Date.now() - _lastDasTotalTs < 120000) {
+    console.log(`[DAS] Called ${Math.round((Date.now() - _lastDasTotalTs) / 1000)}s ago, skipping (cooldown 120s)`);
+    return [];
+  }
+
+  // Early exit: if local NFT count matches cached DAS total, skip API call entirely (0 calls)
+  const forceRefresh = _lastDasForceRefresh;
+  if (forceRefresh) _lastDasForceRefresh = false;
+  if (!forceRefresh && _lastDasTotal !== null && Date.now() - _lastDasTotalTs < 600000) {
+    try {
+      const localNFTs = await getStoredNFTs();
+      if (localNFTs.length >= _lastDasTotal) {
+        console.log(`[DAS] Local NFTs (${localNFTs.length}) >= cached DAS total (${_lastDasTotal}), skipping API call`);
+        return [];
+      }
+    } catch (_) {}
+  }
 
   const buildDasUrls = () => {
     const urls = [];
@@ -2742,9 +2782,6 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
   // Find a working endpoint and paginate with auto-halve on "Response is too big"
   const endpoints = buildDasUrls();
   let items = [];
-  const forceRefresh = _lastDasForceRefresh;
-  if (forceRefresh) _lastDasForceRefresh = false;
-
   for (const endpoint of endpoints) {
     let dasPage = 1;
     let found = false;
@@ -2766,10 +2803,10 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
 
       if (!result.ok) {
         // Rate limited (429) — wait and retry with exponential backoff
-        if ((result.errorCode === 429 || result.errorCode === -32429) && rateLimitRetries < 6) {
-          const backoff = Math.min(60000, Math.pow(2, rateLimitRetries) * 10000); // 10s, 20s, 40s, 60s, 60s, 60s
+        if ((result.errorCode === 429 || result.errorCode === -32429) && rateLimitRetries < 3) {
+          const backoff = Math.min(30000, (rateLimitRetries + 1) * 10000); // 10s, 20s, 30s
           rateLimitRetries++;
-          console.log(`[DAS] Rate limited, retrying in ${backoff / 1000}s (attempt ${rateLimitRetries}/6)`);
+          console.log(`[DAS] Rate limited, retrying in ${backoff / 1000}s (attempt ${rateLimitRetries}/3)`);
           await new Promise(r => setTimeout(r, backoff));
           continue;
         }
@@ -2933,6 +2970,7 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
       metadata: metadataJson ? { uri: metadataUrl, attributes: attrs, properties: metadataJson.properties || {} } : null,
       hasRfc3161: !!(metadataJson?.properties?.certificate?.rfc3161?.tsaTokenBase64),
       hasC2pa: !!(metadataJson?.properties?.c2pa),
+      createdAt: item.created_at || null,
       source: 'das',
     };
   };
