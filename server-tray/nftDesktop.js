@@ -2685,16 +2685,16 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
   const MIN_PAGE_SIZE = 5;
   const MAX_PAGES = 50; // Desktop has no OOM concerns, fetch everything
 
-  // Cooldown: if DAS was called recently (within 2 min), skip unless force-refreshing
-  if (!_lastDasForceRefresh && _lastDasTotalTs && Date.now() - _lastDasTotalTs < 120000) {
-    console.log(`[DAS] Called ${Math.round((Date.now() - _lastDasTotalTs) / 1000)}s ago, skipping (cooldown 120s)`);
+  // Cooldown: if DAS was called recently (within 5 min), skip unless force-refreshing
+  if (!_lastDasForceRefresh && _lastDasTotalTs && Date.now() - _lastDasTotalTs < 300000) {
+    console.log(`[DAS] Called ${Math.round((Date.now() - _lastDasTotalTs) / 1000)}s ago, skipping (cooldown 300s)`);
     return [];
   }
 
   // Early exit: if local NFT count matches cached DAS total, skip API call entirely (0 calls)
   const forceRefresh = _lastDasForceRefresh;
   if (forceRefresh) _lastDasForceRefresh = false;
-  if (!forceRefresh && _lastDasTotal !== null && Date.now() - _lastDasTotalTs < 600000) {
+  if (!forceRefresh && _lastDasTotal !== null && Date.now() - _lastDasTotalTs < 900000) {
     try {
       const localNFTs = await getStoredNFTs();
       if (localNFTs.length >= _lastDasTotal) {

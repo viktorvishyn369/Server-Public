@@ -2904,11 +2904,11 @@ function showMainWindow() {
     // NFT State
     let nftWalletAddress = null;
     // Deduplicates concurrent fetch-user-nfts calls — all callers share one in-flight DAS request
-    // TTL cache: reuse last successful result for 2 minutes to avoid DAS spam on auto-refresh
+    // TTL cache: reuse last successful result for 5 minutes to avoid DAS spam on auto-refresh
     let _fetchNFTsInFlight = null;
     let _fetchNFTsCache = null;
     let _fetchNFTsCacheTs = 0;
-    const _FETCH_NFTS_TTL_MS = 120000; // 2 minutes
+    const _FETCH_NFTS_TTL_MS = 300000; // 5 minutes
     async function fetchUserNFTsCached(limit = 1000, forceRefresh = false) {
       if (!nftWalletAddress) return { success: false, nfts: [] };
       // Return cached result if still fresh
