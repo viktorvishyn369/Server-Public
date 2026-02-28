@@ -2260,10 +2260,12 @@ async function mintNFT(params, onProgress) {
     let imageUrl = imageUpload.imageUrl || imageUpload.arweaveUrl || imageUpload.gatewayUrl;
     console.log('[NFT] Image uploaded:', imageUrl);
     
-    // Generate and upload gallery thumbnail to StealthCloud
+    // Generate and upload gallery thumbnail
     // Encrypted: 50%-width encrypted thumbnail (.bin) — desktop album decrypts it for display
     // Unencrypted: plain JPEG thumbnail (matches mobile flow)
+    // IPFS mode: dual thumbnail — IPFS (decentralized fallback) + StealthCloud (fast primary)
     let thumbnailUrl = null;
+    let ipfsThumbnailUrl = null;
     if (credentials && credentials.baseUrl && credentials.token) {
       onProgress?.({ status: 'Creating thumbnail...' });
       if (encryptionData && nftKeyB64) {
@@ -2299,10 +2301,30 @@ async function mintNFT(params, onProgress) {
             const thumbPath = path.join(os.tmpdir(), `nft_thumb_${Date.now()}.jpg`);
             fs.writeFileSync(thumbPath, thumbBuf);
             cleanupTempFiles.push(thumbPath);
-            const thumbUpload = await uploadToStealthCloud(thumbPath, credentials);
-            if (thumbUpload.success) {
-              thumbnailUrl = thumbUpload.imageUrl;
-              console.log('[NFT] Thumbnail stored:', thumbnailUrl);
+            const useIpfsMode = storageOption === 'ipfs' || (storageOption !== 'cloud' && storageOption !== 'arweave' && storageOption !== 'onchain');
+            if (useIpfsMode && PINATA_JWT) {
+              // Hybrid IPFS: dual thumbnail — IPFS (decentralized fallback) + StealthCloud (fast primary)
+              // 1) Upload to IPFS (decentralized fallback + on-chain preview for Tensor/explorers)
+              const thumbIpfs = await uploadToPinata(thumbPath, 'image/jpeg');
+              if (thumbIpfs.success) {
+                ipfsThumbnailUrl = thumbIpfs.arweaveUrl;
+                console.log('[NFT] Thumbnail uploaded to IPFS:', ipfsThumbnailUrl);
+              }
+              // 2) Also upload to StealthCloud (fast primary for gallery)
+              const thumbSC = await uploadToStealthCloud(thumbPath, credentials);
+              if (thumbSC.success) {
+                thumbnailUrl = thumbSC.imageUrl;
+                console.log('[NFT] Thumbnail also stored on StealthCloud:', thumbnailUrl);
+              }
+              // Fallback: if StealthCloud failed, use IPFS as primary
+              if (!thumbnailUrl) thumbnailUrl = ipfsThumbnailUrl;
+            } else {
+              // StealthCloud / Arweave / On-Chain: thumbnail → StealthCloud only
+              const thumbUpload = await uploadToStealthCloud(thumbPath, credentials);
+              if (thumbUpload.success) {
+                thumbnailUrl = thumbUpload.imageUrl;
+                console.log('[NFT] Thumbnail stored:', thumbnailUrl);
+              }
             }
           }
         } catch (thumbErr) {
@@ -2469,6 +2491,7 @@ async function mintNFT(params, onProgress) {
       reference,
       encryptionData: encryptionData || null,
       thumbnailUrl: thumbnailUrl || null,
+      ipfsThumbnailUrl: ipfsThumbnailUrl || null,
       // RFC 3161 + C2PA proof data (cached by renderer for generate-certificate after payment)
       tsaToken: tsaResult?.tsaToken || null,
       tsaUrl: tsaResult?.tsaUrl || null,
