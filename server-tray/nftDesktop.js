@@ -2552,14 +2552,33 @@ async function fetchStandardNFTMetadata(mintAddress) {
   }
 }
 
+// Global lock: only one fetchUserNFTs runs at a time; concurrent callers await the same promise
+let _fetchUserNFTsInFlight = null;
+
 /**
  * Fetch NFTs from blockchain using DAS API (same as mobile)
  * @param {string} walletAddress - Solana wallet address
  * @param {number} limit - Max NFTs to return (default 9 for 3x3 grid)
  * @returns {Object} { success, nfts, error }
  */
-async function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
-  if (!walletAddress) return { success: false, nfts: [], error: 'No wallet address' };
+function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
+  if (!walletAddress) return Promise.resolve({ success: false, nfts: [], error: 'No wallet address' });
+  if (_fetchUserNFTsInFlight) {
+    console.log('[NFT] fetchUserNFTs — already in flight, waiting for existing call');
+    return _fetchUserNFTsInFlight;
+  }
+  const run = async () => {
+    try {
+      return await _fetchUserNFTsImpl(walletAddress, limit, authHeaders);
+    } finally {
+      _fetchUserNFTsInFlight = null;
+    }
+  };
+  _fetchUserNFTsInFlight = run();
+  return _fetchUserNFTsInFlight;
+}
+
+async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) {
   
   // Ensure Solana connection is initialized (needed for RPC fetch below)
   initializeSolana();
