@@ -3,13 +3,16 @@
 // Full implementation matching solana-seeker/nftOperations.js
 // Uses @solana/web3.js for blockchain operations
 
-const { shell, BrowserWindow } = require('electron');
+const { shell, BrowserWindow, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const os = require('os');
+
+// Get userData path safely
+const userDataPath = app.getPath('userData');
 
 // App version for C2PA claim_generator — read from package.json so it stays in sync
 let APP_VERSION = '2.0.0';
@@ -2688,14 +2691,37 @@ async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) 
   }
 }
 
+// Persist DAS cache to disk
+const DAS_CACHE_FILE = path.join(userDataPath, 'nft_das_cache.json');
+
+function saveDasCache(total, ts) {
+  try {
+    fs.writeFileSync(DAS_CACHE_FILE, JSON.stringify({ total, ts }));
+  } catch (_) {}
+}
+
+function loadDasCache() {
+  try {
+    if (fs.existsSync(DAS_CACHE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DAS_CACHE_FILE, 'utf8'));
+      _lastDasTotal = data.total;
+      _lastDasTotalTs = data.ts;
+      console.log(`[DAS] Restored cache from disk: total=${_lastDasTotal}, age=${Math.round((Date.now() - _lastDasTotalTs)/1000)}s`);
+    }
+  } catch (_) {}
+}
+
+function invalidateDasCache() {
+  console.log('[NFT] Invalidating DAS cache (force refresh next scan)');
+  _lastDasForceRefresh = true;
+}
+
 // DAS total-check cache: skip full pagination if total hasn't changed (1 call vs ~24)
 let _lastDasTotal = null;       // Last known total from DAS page 1
 let _lastDasTotalTs = 0;        // Timestamp of last total check
 let _lastDasForceRefresh = false; // Set to true after mint to force full re-scan
 
-function invalidateDasCache() {
-  _lastDasForceRefresh = true;
-}
+loadDasCache();
 
 // Global lock: only one fetchNFTsFromDAS runs at a time; concurrent callers await the same promise
 let _dasInFlight = null;
@@ -2727,16 +2753,16 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
   const MIN_PAGE_SIZE = 5;
   const MAX_PAGES = 50; // Desktop has no OOM concerns, fetch everything
 
-  // Cooldown: if DAS was called recently (within 5 min), skip unless force-refreshing
-  if (!_lastDasForceRefresh && _lastDasTotalTs && Date.now() - _lastDasTotalTs < 300000) {
-    console.log(`[DAS] Called ${Math.round((Date.now() - _lastDasTotalTs) / 1000)}s ago, skipping (cooldown 300s)`);
+  // Cooldown: if DAS was called recently (within 5 min) AND returned results, skip unless force-refreshing
+  const forceRefresh = _lastDasForceRefresh;
+  if (forceRefresh) _lastDasForceRefresh = false;
+  if (!forceRefresh && _lastDasTotalTs && _lastDasTotal > 0 && Date.now() - _lastDasTotalTs < 300000) {
+    console.log(`[DAS] Called ${Math.round((Date.now() - _lastDasTotalTs) / 1000)}s ago with ${_lastDasTotal} results, skipping (cooldown 300s)`);
     return [];
   }
 
   // Early exit: if local NFT count matches cached DAS total, skip API call entirely (0 calls)
-  const forceRefresh = _lastDasForceRefresh;
-  if (forceRefresh) _lastDasForceRefresh = false;
-  if (!forceRefresh && _lastDasTotal !== null && Date.now() - _lastDasTotalTs < 900000) {
+  if (!forceRefresh && _lastDasTotal !== null && _lastDasTotal > 0 && Date.now() - _lastDasTotalTs < 900000) {
     try {
       const localNFTs = await getStoredNFTs();
       if (localNFTs.length >= _lastDasTotal) {
@@ -2748,35 +2774,37 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
 
   const buildDasUrls = () => {
     const urls = [];
-    // Helius primary
-    urls.push({ name: 'helius', url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***' });
+    // Server DAS proxy first (30s server-side cache, avoids Helius rate limits)
+    urls.push({ name: 'server-proxy', url: 'http://localhost:3000/api/nft-service/das-proxy', isProxy: true });
+    // Helius direct fallback
+    urls.push({ name: 'helius-1', url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***' });
+    urls.push({ name: 'helius-2', url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***' });
     if (process.env.HELIUS_API_KEY) {
       urls.push({ name: 'helius-env', url: `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}` });
     }
-    // Note: only Helius supports DAS getAssetsByOwner — no public fallback available
     return urls;
   };
 
   const requestPage = (endpoint, page, pgSize) => new Promise((resolve) => {
-    const body = JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'photolynk-desktop-nft-fetch',
-      method: 'getAssetsByOwner',
-      params: { ownerAddress: walletAddress, page, limit: pgSize },
-    });
+    const dasParams = { ownerAddress: walletAddress, page, limit: pgSize };
+    const body = endpoint.isProxy
+      ? JSON.stringify({ method: 'getAssetsByOwner', params: dasParams })
+      : JSON.stringify({ jsonrpc: '2.0', id: 'photolynk-desktop-nft-fetch', method: 'getAssetsByOwner', params: dasParams });
     const u = new URL(endpoint.url);
     const isHttps = u.protocol === 'https:';
     const client = isHttps ? https : http;
+
+    const reqHeaders = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
+    if (endpoint.isProxy && authHeaders) {
+      Object.assign(reqHeaders, authHeaders);
+    }
 
     const options = {
       hostname: u.hostname,
       port: u.port ? Number(u.port) : (isHttps ? 443 : 80),
       path: u.pathname + (u.search || ''),
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      },
+      headers: reqHeaders,
       timeout: 30000,
     };
 
@@ -2840,6 +2868,7 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
         if (currentTotal === _lastDasTotal) {
           console.log(`[DAS] Total unchanged (${currentTotal}), skipping full pagination`);
           _lastDasTotalTs = Date.now();
+          saveDasCache(_lastDasTotal, _lastDasTotalTs);
           return []; // No new NFTs — local storage is already up to date
         }
         console.log(`[DAS] Total changed: ${_lastDasTotal} → ${currentTotal}, doing full scan`);
@@ -2884,13 +2913,13 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
   }
 
   if (!items.length) {
-    _lastDasTotal = _lastDasTotal || 0; // Record 0 so next check can compare
-    _lastDasTotalTs = Date.now();
+    // Don't set cooldown on failure — allow immediate retry
     return [];
   }
-  // Update cached total for next check
+  // Update cached total for next check — only after successful fetch with results
   _lastDasTotal = items.length;
   _lastDasTotalTs = Date.now();
+  saveDasCache(_lastDasTotal, _lastDasTotalTs);
   console.log(`[DAS] Total assets fetched: ${items.length}`);
 
   // Process a single DAS item into an NFT object
@@ -4279,15 +4308,16 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
         return { verified: false, error: 'Transaction not found' };
       }
       
-      // Use DAS API for real asset ID
+      // Use DAS API for real asset ID - route through proxy with Helius fallback
       const assetId = mintAddress.replace('cnft_', '');
-      return new Promise((resolve) => {
-        const postData = JSON.stringify({
-          jsonrpc: '2.0', id: 'verify-cnft', method: 'getAsset', params: { id: assetId }
-        });
-        const req = https.request({
-          hostname: 'api.mainnet-beta.solana.com', port: 443, path: '/', method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) }
+      
+      // Try proxy first
+      const tryProxy = () => new Promise((resolve) => {
+        const postData = JSON.stringify({ method: 'getAsset', params: { id: assetId } });
+        const req = http.request({
+          hostname: 'localhost', port: 3000, path: '/api/nft-service/das-proxy', method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+          timeout: 10000
         }, (res) => {
           let data = '';
           res.on('data', chunk => data += chunk);
@@ -4297,15 +4327,52 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
               if (json.result?.id) {
                 resolve({ verified: true, exists: true, owner: json.result.ownership?.owner, compressed: true });
               } else {
-                resolve({ verified: false, error: 'Asset not found' });
+                resolve(null); // Try fallback
               }
-            } catch (e) { resolve({ verified: false, error: e.message }); }
+            } catch (e) { resolve(null); }
           });
         });
-        req.on('error', (e) => resolve({ verified: false, error: e.message }));
+        req.on('error', () => resolve(null)); // Try fallback
+        req.on('timeout', () => { req.destroy(); resolve(null); });
         req.write(postData);
         req.end();
       });
+      
+      // Try Helius direct fallback
+      const tryHelius = (apiKey) => new Promise((resolve) => {
+        const postData = JSON.stringify({
+          jsonrpc: '2.0', id: 'verify-cnft', method: 'getAsset', params: { id: assetId }
+        });
+        const req = https.request({
+          hostname: 'mainnet.helius-rpc.com', port: 443, path: `/?api-key=${apiKey}`, method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+          timeout: 10000
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              if (json.result?.id) {
+                resolve({ verified: true, exists: true, owner: json.result.ownership?.owner, compressed: true });
+              } else {
+                resolve(null);
+              }
+            } catch (e) { resolve(null); }
+          });
+        });
+        req.on('error', () => resolve(null));
+        req.on('timeout', () => { req.destroy(); resolve(null); });
+        req.write(postData);
+        req.end();
+      });
+      
+      // Try proxy first, then fallback to Helius keys
+      let result = await tryProxy();
+      if (!result) result = await tryHelius('***REMOVED***');
+      if (!result) result = await tryHelius('***REMOVED***');
+      
+      return result || { verified: false, error: 'Asset not found or rate limited' };
     }
     
     // Standard NFT verification
