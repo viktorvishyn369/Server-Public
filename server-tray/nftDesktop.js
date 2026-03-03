@@ -672,7 +672,7 @@ function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes, editi
 // Akord API Key for Arweave permanent storage (get at https://akord.com)
 const AKORD_API_KEY = process.env.AKORD_API_KEY || '';
 
-const PINATA_JWT = '***REMOVED***';
+const PINATA_JWT = process.env.PINATA_JWT || '';
 
 /**
  * Upload file to Pinata IPFS (same as mobile)
