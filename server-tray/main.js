@@ -7155,7 +7155,8 @@ ipcMain.handle('build-nft-transfer-tx', async (event, { mint, from, to, isCompre
 ipcMain.handle('confirm-transaction', async (event, signature) => {
   try {
     const { Connection } = require('@solana/web3.js');
-    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=***REMOVED***', 'confirmed');
+    const rpcUrl = process.env.HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}` : 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl, 'confirmed');
     
     const result = await connection.confirmTransaction(signature, 'confirmed');
     return { success: !result.value.err, error: result.value.err };

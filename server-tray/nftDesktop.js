@@ -4366,7 +4366,7 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
         req.end();
       });
       
-      // Try proxy first, then fallback to public RPC
+      // Try proxy first, then fallback to env key
       let result = await tryProxy();
       if (!result && process.env.HELIUS_API_KEY) {
         result = await tryHelius(process.env.HELIUS_API_KEY);
