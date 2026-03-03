@@ -1,21 +1,25 @@
-MIT License
+Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International
 
-Copyright (c) 2024 PhotoLynk Contributors
+Copyright (c) 2026 Viktor Vishyn / PhotoLynk
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+You are free to:
+- View and study the source code
+- Share the repository link
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Under the following terms:
+- Attribution: You must give appropriate credit to PhotoLynk
+- NonCommercial: You may NOT use this code for commercial purposes
+- NoDerivatives: You may NOT distribute modified versions
+- No Building: You may NOT build, compile, or distribute applications without explicit written permission
+- No Intellectual Property Use: You may NOT use the ideas, logic, algorithms, or implementation patterns from this codebase in any commercial product, listing, or production system without explicit written permission
+
+COMMERCIAL USE REQUIRES WRITTEN PERMISSION FROM:
+Viktor Vishyn
+Email: support@photolynk.io
+
+To view a copy of this license, visit:
+https://creativecommons.org/licenses/by-nc-nd/4.0/
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
