@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { app, Tray, Menu, shell, nativeImage, Notification, clipboard, BrowserWindow, ipcMain, powerSaveBlocker, dialog } = require('electron');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
