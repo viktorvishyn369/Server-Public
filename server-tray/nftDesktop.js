@@ -2774,11 +2774,10 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
 
   const buildDasUrls = () => {
     const urls = [];
-    // Server DAS proxy first (30s server-side cache, avoids Helius rate limits)
+    // Server DAS proxy first (30s server-side cache, avoids rate limits)
     urls.push({ name: 'server-proxy', url: 'http://localhost:3000/api/nft-service/das-proxy', isProxy: true });
-    // Helius direct fallback
-    urls.push({ name: 'helius-1', url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***' });
-    urls.push({ name: 'helius-2', url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***' });
+    // Public Solana RPC fallback
+    urls.push({ name: 'solana-public', url: 'https://api.mainnet-beta.solana.com' });
     if (process.env.HELIUS_API_KEY) {
       urls.push({ name: 'helius-env', url: `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}` });
     }
@@ -4367,10 +4366,11 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
         req.end();
       });
       
-      // Try proxy first, then fallback to Helius keys
+      // Try proxy first, then fallback to public RPC
       let result = await tryProxy();
-      if (!result) result = await tryHelius('***REMOVED***');
-      if (!result) result = await tryHelius('***REMOVED***');
+      if (!result && process.env.HELIUS_API_KEY) {
+        result = await tryHelius(process.env.HELIUS_API_KEY);
+      }
       
       return result || { verified: false, error: 'Asset not found or rate limited' };
     }
