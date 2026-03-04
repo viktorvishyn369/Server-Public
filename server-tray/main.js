@@ -1862,7 +1862,7 @@ function showMainWindow() {
       <div id="nft-album-overlay" class="nft-album-overlay">
         <div class="nft-album-header">
           <button class="nft-close-btn" onclick="closeNFTAlbum()">✕</button>
-          <span class="nft-album-title">Proof Vault</span>
+          <span class="nft-album-title">Photo Album</span>
           <button class="nft-refresh-btn" onclick="refreshNFTAlbum()">↻</button>
         </div>
         <div class="nft-search-bar">
@@ -4054,7 +4054,8 @@ function showMainWindow() {
       const nftMap = await buildNFTMap(ownedNFTs);
       try { await enrichCertsWithNFTData(serverCerts, nftMap, 'FG'); } catch (e) { console.log('[Certs] FG enrich error:', e.message); }
 
-      // Auto-generate certificates for ALL NFTs that don't have one yet
+      // Auto-generate certificates for ecosystem NFTs that don't have one yet
+      // Only PhotoLynk-created NFTs get proofs — external NFTs are skipped
       // (matches mobile discoverAndImportNFTs auto-cert generation)
       if (Object.keys(nftMap).length > 0) {
         try {

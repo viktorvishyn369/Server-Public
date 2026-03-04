@@ -248,6 +248,74 @@
             }
         }
 
+        /* PhotoLynk Desktop Downloads */
+        .dl-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        .dl-row {
+            display: flex; align-items: center; gap: 14px;
+            background: rgba(255,255,255,0.03); border: 1px solid var(--border-color);
+            border-radius: 6px; padding: 14px 16px; transition: border-color 0.2s;
+        }
+        .dl-row:hover { border-color: #444; }
+        .dl-row.unavailable { opacity: 0.4; pointer-events: none; }
+        .dl-icon { width: 36px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.04); border-radius: 8px; }
+        .dl-icon svg { width: 22px; height: 22px; fill: var(--text-secondary); }
+        .dl-info { flex: 1; min-width: 0; }
+        .dl-title { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
+        .dl-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dl-btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: var(--text-primary); color: var(--bg-primary);
+            padding: 7px 16px; border-radius: 5px; border: none;
+            font-size: 0.82rem; font-weight: 600; cursor: pointer;
+            text-decoration: none; transition: opacity 0.2s; flex-shrink: 0;
+        }
+        .dl-btn:hover { opacity: 0.85; }
+        .dl-btn svg { width: 14px; height: 14px; fill: currentColor; }
+        .dl-unavail { font-size: 0.78rem; color: var(--text-muted); font-style: italic; }
+        .dl-version-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e; padding: 3px 10px; border-radius: 999px;
+            font-size: 0.75rem; font-weight: 500; margin-top: 16px;
+        }
+        .dl-version-dot { width: 5px; height: 5px; border-radius: 50%; background: #22c55e; }
+        .sha-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color); }
+        .sha-section h4 { font-size: 0.88rem; font-weight: 600; margin-bottom: 10px; color: var(--text-secondary); }
+        .sha-table { width: 100%; border-collapse: collapse; }
+        .sha-table th, .sha-table td { text-align: left; padding: 8px 10px; font-size: 0.78rem; border-bottom: 1px solid var(--border-color); }
+        .sha-table th { color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.68rem; }
+        .sha-table td { color: var(--text-secondary); }
+        .sha-hash {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.68rem; word-break: break-all; color: var(--text-primary);
+            background: rgba(255,255,255,0.03); padding: 3px 6px;
+            border-radius: 3px; display: inline-block; cursor: pointer; position: relative;
+        }
+        .sha-hash:hover { background: rgba(255,255,255,0.07); }
+        .sha-toast {
+            position: absolute; top: -26px; left: 50%; transform: translateX(-50%);
+            background: #22c55e; color: #000; padding: 2px 8px; border-radius: 3px;
+            font-size: 0.65rem; font-weight: 600; opacity: 0; transition: opacity 0.2s;
+            pointer-events: none; font-family: -apple-system, sans-serif;
+        }
+        .sha-toast.show { opacity: 1; }
+        .sha-cmds { margin-top: 14px; }
+        .sha-cmds .cmd-label { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 3px; font-weight: 500; }
+        .sha-cmds .cmd-block {
+            background: rgba(0,0,0,0.4); border: 1px solid var(--border-color);
+            border-radius: 5px; padding: 8px 12px; margin-bottom: 8px;
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 0.72rem; color: #22c55e; overflow-x: auto;
+        }
+        .dl-loading { text-align: center; padding: 20px 0; color: var(--text-muted); font-size: 0.85rem; }
+        .dl-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border-color); border-top-color: var(--text-secondary); border-radius: 50%; animation: dlspin 0.8s linear infinite; margin-right: 6px; vertical-align: middle; }
+        @keyframes dlspin { to { transform: rotate(360deg); } }
+        @media (max-width: 600px) {
+            .dl-row { flex-wrap: wrap; gap: 10px; }
+            .dl-btn { width: 100%; justify-content: center; }
+            .sha-table th:first-child, .sha-table td:first-child { display: none; }
+        }
+
         .uptime-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -337,6 +405,28 @@
                 <p>
                     PhotoLynk is designed as a consumer-facing product while maintaining engineering principles suitable for professional and long-term use.
                 </p>
+                <div id="photolynk-downloads">
+                    <div class="dl-version-pill" id="dl-version-pill">
+                        <span class="dl-version-dot"></span>
+                        <span id="dl-version-text">Loading...</span>
+                    </div>
+                    <div class="dl-grid" id="dl-grid">
+                        <div class="dl-loading"><span class="dl-spinner"></span> Loading builds...</div>
+                    </div>
+                    <div class="sha-section" id="sha-section">
+                        <h4>SHA-256 Integrity Verification</h4>
+                        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">After downloading, verify file integrity by comparing the checksum.</p>
+                        <div id="sha-table-container">
+                            <div class="dl-loading"><span class="dl-spinner"></span> Loading checksums...</div>
+                        </div>
+                        <div class="sha-cmds">
+                            <div class="cmd-label">macOS / Linux</div>
+                            <div class="cmd-block">shasum -a 256 ~/Downloads/PhotoLynk*.dmg</div>
+                            <div class="cmd-label">Windows (PowerShell)</div>
+                            <div class="cmd-block">Get-FileHash "$env:USERPROFILE\Downloads\PhotoLynk*.exe" -Algorithm SHA256</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -477,6 +567,77 @@
 
         loadUptime();
         setInterval(loadUptime, 60000);
+
+        // PhotoLynk Desktop Downloads
+        const DL_ICONS = {
+            mac: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>',
+            windows: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 12V6.5l8-1.1V12H3zm0 .5V18l8 1.1V12.5H3zm9 0V19.2l9 1.3V12.5h-9zm0-6.7V12h9V3.5l-9 1.3z"/></svg>',
+            linux: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2a.67.67 0 00.114.333l.003.003c.391.778 1.113 1.368 1.884 1.43.777.07 1.543-.29 2.031-.846l.086-.09c.053-.08.082-.114.118-.16l.003-.003c.237-.268.566-.587.883-.727.304-.135.578-.199.818-.332.24-.133.449-.267.612-.535.164-.267.228-.602.228-.869 0-.133-.013-.267-.04-.4a.67.67 0 00-.334-.466c-.146-.073-.294-.06-.434-.065a.38.38 0 01-.14-.031c-.032-.007-.056-.028-.091-.028-.36-.003-.66-.197-.96-.465a6.482 6.482 0 01-.585-.607 4.14 4.14 0 01-.789-1.867c-.098-.666.035-1.334.287-2 .335-.866.78-1.733 1.008-2.466.186-.6.258-1.2.143-1.7-.158-.667-.5-1.267-1.01-1.834-.502-.533-1.157-.934-1.875-1.2a5.86 5.86 0 00-.225-.067C14.354.232 13.379 0 12.504 0z"/></svg>',
+            dl: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>'
+        };
+        const DL_PLATFORMS = {
+            'mac-arm64': { label: 'macOS (Apple Silicon)', icon: 'mac', note: 'M1 / M2 / M3 / M4' },
+            'mac-x64':   { label: 'macOS (Intel)',         icon: 'mac', note: 'Intel-based Mac' },
+            'win-x64':   { label: 'Windows (x64)',         icon: 'windows', note: 'Windows 10+' },
+            'linux-x64': { label: 'Linux (x86_64)',        icon: 'linux', note: 'Ubuntu 20.04+' },
+        };
+        function dlCopyHash(el) {
+            const h = el.getAttribute('data-hash');
+            if (!h) return;
+            navigator.clipboard.writeText(h).then(() => {
+                const t = el.querySelector('.sha-toast');
+                if (t) { t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200); }
+            });
+        }
+        function dlFormatSize(b) {
+            if (!b || b < 1024) return '';
+            if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+            return (b / 1048576).toFixed(1) + ' MB';
+        }
+        async function loadDownloads() {
+            const grid = document.getElementById('dl-grid');
+            const shaContainer = document.getElementById('sha-table-container');
+            const versionText = document.getElementById('dl-version-text');
+            const shaSection = document.getElementById('sha-section');
+            try {
+                const res = await fetch('/api/downloads/list', { cache: 'no-store' });
+                if (!res.ok) throw new Error('Failed');
+                const data = await res.json();
+                if (!data.builds || data.builds.length === 0) {
+                    grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;font-style:italic;padding:12px 0;">No builds available yet. Check back soon.</div>';
+                    shaSection.style.display = 'none';
+                    versionText.textContent = 'Coming soon';
+                    return;
+                }
+                versionText.textContent = 'v' + data.builds[0].version + ' \u2014 Latest';
+                const byPlatform = {};
+                data.builds.forEach(b => { byPlatform[b.platform] = b; });
+                let html = '';
+                for (const [pk, cfg] of Object.entries(DL_PLATFORMS)) {
+                    const b = byPlatform[pk];
+                    if (b) {
+                        html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[cfg.icon] + '</div><div class="dl-info"><div class="dl-title">' + cfg.label + '</div><div class="dl-meta">' + b.filename + ' \u2014 ' + dlFormatSize(b.size) + '</div></div><a href="/api/downloads/file/' + encodeURIComponent(b.filename) + '" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
+                    } else {
+                        html += '<div class="dl-row unavailable"><div class="dl-icon">' + DL_ICONS[cfg.icon] + '</div><div class="dl-info"><div class="dl-title">' + cfg.label + '</div><div class="dl-meta">' + cfg.note + '</div></div><span class="dl-unavail">Not available yet</span></div>';
+                    }
+                }
+                grid.innerHTML = html;
+                const withHash = data.builds.filter(b => b.sha256);
+                if (withHash.length === 0) { shaContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-style:italic;">No checksums available.</div>'; return; }
+                let tbl = '<table class="sha-table"><thead><tr><th>Platform</th><th>File</th><th>SHA-256</th></tr></thead><tbody>';
+                for (const b of withHash) {
+                    const cfg = DL_PLATFORMS[b.platform] || {};
+                    tbl += '<tr><td>' + (cfg.label || b.platform) + '</td><td style="font-weight:500;white-space:nowrap;">' + b.filename + '</td><td><span class="sha-hash" data-hash="' + b.sha256 + '" onclick="dlCopyHash(this)" title="Click to copy">' + b.sha256 + '<span class="sha-toast">Copied!</span></span></td></tr>';
+                }
+                tbl += '</tbody></table>';
+                shaContainer.innerHTML = tbl;
+            } catch (e) {
+                grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;font-style:italic;padding:12px 0;">Desktop downloads coming soon.</div>';
+                shaSection.style.display = 'none';
+                versionText.textContent = 'Coming soon';
+            }
+        }
+        loadDownloads();
     </script>
 </body>
 </html>

@@ -27,6 +27,7 @@ const MIME_TYPES = {
   '.dng': 'image/x-adobe-dng', '.cr2': 'image/x-canon-cr2', '.cr3': 'image/x-canon-cr3',
   '.nef': 'image/x-nikon-nef', '.arw': 'image/x-sony-arw', '.raf': 'image/x-fuji-raf',
   '.orf': 'image/x-olympus-orf', '.rw2': 'image/x-panasonic-rw2',
+  '.pef': 'image/x-pentax-pef', '.srw': 'image/x-samsung-srw',
 };
 function detectMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -181,6 +182,25 @@ const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
 
 // PhotoLynk shared Merkle Tree for compressed NFTs (same as mobile)
 const PHOTOLYNK_MERKLE_TREE = '7qSKB5q1JMmsGx2cHzAJPxvjzXCbAfpWNDTKDM3tSunS';
+
+/**
+ * Check if an NFT was created within the PhotoLynk ecosystem.
+ * Only ecosystem NFTs should get certificates/proofs generated.
+ * Matches solana-seeker/nftOperations.js and mobile-v2/nftCertificates.js
+ */
+function isPhotoLynkEcosystem(nft) {
+  if (!nft) return false;
+  if (nft.merkleTree === PHOTOLYNK_MERKLE_TREE) return true;
+  if (nft.creatorWallet === NFT_COMMISSION_WALLET) return true;
+  const attrs = nft.metadata?.attributes || nft.attributes || [];
+  const hasContentHash = attrs.some(a => a.trait_type === 'Content Hash');
+  const hasExifHash = attrs.some(a => a.trait_type === 'EXIF Hash');
+  if (hasContentHash && hasExifHash) return true;
+  const metaCert = nft.metadata?.properties?.certificate;
+  if (metaCert && metaCert.type && metaCert.type.includes('PhotoLynk')) return true;
+  if (nft.name && nft.name.includes('PhotoLynk')) return true;
+  return false;
+}
 
 // IPFS Gateways for image loading (Pinata removed — now returns 403)
 const IPFS_GATEWAYS = [
@@ -3820,7 +3840,7 @@ function openNFTAlbumWindow(appDataPath, walletAddress) {
   albumWindow = new BrowserWindow({
     width: 480,
     height: 600,
-    title: 'Proof Vault',
+    title: 'Photo Album',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -3840,7 +3860,7 @@ function generateNFTAlbumHTML(walletAddress) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Proof Vault</title>
+  <title>Photo Album</title>
   <style>
     :root {
       --bg: #0a0a0a;
@@ -3881,7 +3901,7 @@ function generateNFTAlbumHTML(walletAddress) {
 </head>
 <body>
   <div class="header">
-    <h1>🛡️ Proof Vault</h1>
+    <h1>Photo Album</h1>
     <div class="header-actions">
       <button class="header-btn" onclick="refreshAlbum()" title="Refresh">↻</button>
       <button class="header-btn" onclick="window.close()" title="Close">✕</button>
@@ -4683,6 +4703,9 @@ async function estimateTransferFee(isCompressed, recipientAddress, fromAddress) 
  */
 function generateCertificate(nftData) {
   if (!nftData) return null;
+  // Only generate certificates for NFTs created within the PhotoLynk ecosystem
+  // External NFTs (Bored Apes, DeGods, etc.) must never get PhotoLynk proofs
+  if (!nftData.forceGenerate && !isPhotoLynkEcosystem(nftData)) return null;
   // Never generate certs for temporary tx_ entries — wait for real cnft_ ID
   // (unless forceGenerate is set, which is used by the post-mint path where we know it's a real mint)
   if (!nftData.forceGenerate && nftData.mintAddress && String(nftData.mintAddress).startsWith('tx_')) return null;
@@ -5029,6 +5052,8 @@ module.exports = {
   decryptNFTImage,
   decryptMetadataJSON,
   
+  // Ecosystem check
+  isPhotoLynkEcosystem,
   // Certificates (matches mobile)
   generateCertificate,
   saveCertificateLocal,
