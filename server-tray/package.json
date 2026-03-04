@@ -1,9 +1,9 @@
 {
   "name": "photolynk-server-tray",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "PhotoLynk Server - System Tray Manager",
-  "license": "MIT",
-  "homepage": "https://github.com/viktorvishyn369/PhotoLynk",
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/viktorvishyn369/PhotoLynk-Private",
   "author": {
     "name": "PhotoLynk",
     "email": "photolynk@users.noreply.github.com"
