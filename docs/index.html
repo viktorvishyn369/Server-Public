@@ -214,10 +214,10 @@
     <script>
     // Platform config for mapping GitHub release assets to download cards
     const PLATFORMS = [
-        { key: 'mac-arm', match: 'Apple-Silicon.dmg', label: 'macOS — Apple Silicon', note: 'M1 / M2 / M3 / M4', ext: '.dmg', icon: 'mac' },
-        { key: 'mac-intel', match: 'Intel.dmg', label: 'macOS — Intel', note: 'Intel-based Mac', ext: '.dmg', icon: 'mac' },
-        { key: 'win', match: 'Windows-Setup.exe', label: 'Windows x64', note: 'Windows 10+', ext: '.exe', icon: 'win' },
-        { key: 'linux-appimage', match: 'Linux-x64.AppImage', label: 'Linux — Ubuntu / Debian', note: 'AppImage (x86_64)', ext: '.AppImage', icon: 'linux' },
+        { key: 'mac-arm', match: 'Apple-Silicon.dmg', file: 'macOS-Apple-Silicon.dmg', label: 'macOS — Apple Silicon', note: 'M1 / M2 / M3 / M4', ext: '.dmg', icon: 'mac' },
+        { key: 'mac-intel', match: 'Intel.dmg', file: 'macOS-Intel.dmg', label: 'macOS — Intel', note: 'Intel-based Mac', ext: '.dmg', icon: 'mac' },
+        { key: 'win', match: 'Windows-Setup.exe', file: 'Windows-Setup.exe', label: 'Windows x64', note: 'Windows 10+', ext: '.exe', icon: 'win' },
+        { key: 'linux-appimage', match: 'Linux-x64.AppImage', file: 'Linux-x64.AppImage', label: 'Linux — Ubuntu / Debian', note: 'AppImage (x86_64)', ext: '.AppImage', icon: 'linux' },
     ];
 
     const ICONS = {
@@ -297,18 +297,10 @@
 
         } catch (e) {
             console.error('[PhotoLynk]', e);
-            // Static fallback cards when API is rate-limited or unavailable
-            const FALLBACK_VER = '2.0.1';
-            const BASE = 'https://github.com/viktorvishyn369/PhotoLynk-Solana/releases/download/v' + FALLBACK_VER + '/PhotoLynk-Desktop-' + FALLBACK_VER;
+            // Fallback: link to GitHub Releases page (no hardcoded version)
             let html = '';
-            const fallbackAssets = [
-                { url: BASE + '-macOS-Apple-Silicon.dmg', label: 'macOS — Apple Silicon', note: 'M1 / M2 / M3 / M4', ext: '.dmg', icon: 'mac' },
-                { url: BASE + '-macOS-Intel.dmg', label: 'macOS — Intel', note: 'Intel-based Mac', ext: '.dmg', icon: 'mac' },
-                { url: BASE + '-Windows-Setup.exe', label: 'Windows x64', note: 'Windows 10+', ext: '.exe', icon: 'win' },
-                { url: BASE + '-Linux-x64.AppImage', label: 'Linux — Ubuntu / Debian', note: 'AppImage (x86_64)', ext: '.AppImage', icon: 'linux' },
-            ];
-            for (const p of fallbackAssets) {
-                html += `<a class="dl-card" href="${p.url}" title="Download ${p.label}">
+            for (const p of PLATFORMS) {
+                html += `<a class="dl-card" href="https://github.com/viktorvishyn369/PhotoLynk-Solana/releases/latest" target="_blank" title="Download ${p.label}">
                     <div class="dl-icon">${ICONS[p.icon]}</div>
                     <div class="dl-info">
                         <div class="dl-title">${p.label}</div>
@@ -318,8 +310,8 @@
                 </a>`;
             }
             grid.innerHTML = html;
-            hashC.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">Checksums available on <a href="https://github.com/viktorvishyn369/PhotoLynk-Solana/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a>.</div>';
-            vText.textContent = 'v' + FALLBACK_VER;
+            hashC.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">Visit <a href="https://github.com/viktorvishyn369/PhotoLynk-Solana/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a> for checksums.</div>';
+            vText.textContent = 'Latest';
         }
     }
 

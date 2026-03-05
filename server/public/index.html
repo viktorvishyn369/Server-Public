@@ -671,10 +671,10 @@
             dl: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>'
         };
         const DL_PLATFORMS = [
-            { key: 'mac-arm64', match: 'Apple-Silicon.dmg', label: 'macOS (Apple Silicon)', icon: 'mac', note: 'M1 / M2 / M3 / M4', ext: '.dmg' },
-            { key: 'mac-x64',   match: 'Intel.dmg',         label: 'macOS (Intel)',         icon: 'mac', note: 'Intel-based Mac', ext: '.dmg' },
-            { key: 'win-x64',   match: 'Windows-Setup.exe', label: 'Windows (x64)',         icon: 'windows', note: 'Windows 10+', ext: '.exe' },
-            { key: 'linux-x64', match: 'Linux-x64.AppImage',label: 'Linux (x86_64)',        icon: 'linux', note: 'Ubuntu 20.04+', ext: '.AppImage' },
+            { key: 'mac-arm64', match: 'Apple-Silicon.dmg', file: 'macOS-Apple-Silicon.dmg', label: 'macOS (Apple Silicon)', icon: 'mac', note: 'M1 / M2 / M3 / M4', ext: '.dmg' },
+            { key: 'mac-x64',   match: 'Intel.dmg',         file: 'macOS-Intel.dmg',        label: 'macOS (Intel)',         icon: 'mac', note: 'Intel-based Mac', ext: '.dmg' },
+            { key: 'win-x64',   match: 'Windows-Setup.exe', file: 'Windows-Setup.exe',      label: 'Windows (x64)',         icon: 'windows', note: 'Windows 10+', ext: '.exe' },
+            { key: 'linux-x64', match: 'Linux-x64.AppImage',file: 'Linux-x64.AppImage',     label: 'Linux (x86_64)',        icon: 'linux', note: 'Ubuntu 20.04+', ext: '.AppImage' },
         ];
         function dlCopyHash(el) {
             const h = el.getAttribute('data-hash');
@@ -697,7 +697,7 @@
                 if (asset) {
                     html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[p.icon] + '</div><div class="dl-info"><div class="dl-title">' + p.label + '</div><div class="dl-meta">' + p.ext + ' \u2014 ' + dlFormatSize(asset.size) + '</div></div><a href="' + asset.browser_download_url + '" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
                 } else {
-                    const fallbackUrl = 'https://github.com/viktorvishyn369/PhotoLynk/releases/download/v' + ver + '/PhotoLynk-Desktop-' + ver + '-' + p.match;
+                    const fallbackUrl = 'https://github.com/viktorvishyn369/PhotoLynk/releases/download/v' + ver + '/PhotoLynk-Desktop-' + ver + '-' + p.file;
                     html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[p.icon] + '</div><div class="dl-info"><div class="dl-title">' + p.label + '</div><div class="dl-meta">' + p.ext + ' \u2014 ' + p.note + '</div></div><a href="' + fallbackUrl + '" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
                 }
             }
@@ -728,8 +728,14 @@
                 const ver = (rel.tag_name || '').replace(/^v/, '');
                 renderDownloadCards(grid, DL_PLATFORMS, rel.assets || [], versionText, ver, shaContainer, shaSection);
             } catch (e) {
-                // Static fallback when GitHub API is rate-limited
-                renderDownloadCards(grid, DL_PLATFORMS, null, versionText, '2.0.1', shaContainer, shaSection);
+                // Fallback: link directly to GitHub Releases page (no hardcoded version)
+                versionText.textContent = 'Latest';
+                let html = '';
+                for (const p of DL_PLATFORMS) {
+                    html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[p.icon] + '</div><div class="dl-info"><div class="dl-title">' + p.label + '</div><div class="dl-meta">' + p.ext + ' \u2014 ' + p.note + '</div></div><a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" target="_blank" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
+                }
+                grid.innerHTML = html;
+                shaContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-style:italic;">Visit <a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a> for checksums.</div>';
             }
         }
         loadDownloads();
