@@ -1,34 +1,307 @@
 <!doctype html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PhotoLynk Legal</title>
+    <title>PhotoLynk — Encrypted Photo &amp; Video Backup</title>
+    <meta name="description" content="PhotoLynk: end-to-end encrypted photo and video backup with blockchain provenance. Download for macOS, Windows, Linux, iOS and Android.">
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📷</text></svg>">
     <style>
-      :root { color-scheme: light; }
-      body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #0b0b0c; color: #f2f2f2; }
-      .wrap { max-width: 860px; margin: 0 auto; padding: 48px 18px; }
-      .card { background: #141416; border: 1px solid #242428; border-radius: 14px; padding: 22px; }
-      h1 { margin: 0 0 12px 0; font-size: 26px; }
-      p { color: #cfcfd6; line-height: 1.6; }
-      a { color: #a78bfa; text-decoration: none; font-weight: 650; }
-      a:hover { text-decoration: underline; }
-      ul { margin: 10px 0 0 18px; }
-      li { margin: 6px 0; }
-      .muted { color: #9a9aa4; font-size: 13px; margin-top: 14px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0b; --bg-card: #131316; --bg-card-hover: #1a1a1e;
+            --border: #222228; --border-hover: #3a3a42;
+            --text: #f2f2f5; --text-dim: #a0a0aa; --text-muted: #666670;
+            --accent: #a78bfa; --accent-dim: rgba(167,139,250,0.12);
+            --green: #22c55e; --green-dim: rgba(34,197,94,0.12);
+            --blue: #3b82f6; --blue-dim: rgba(59,130,246,0.10);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; min-height: 100vh; }
+
+        .container { max-width: 880px; margin: 0 auto; padding: 56px 20px 40px; }
+
+        /* Hero */
+        .hero { text-align: center; margin-bottom: 56px; }
+        .hero-logo { font-size: 2.6rem; font-weight: 750; letter-spacing: -0.03em; margin-bottom: 8px; }
+        .hero-logo span { background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+        .hero-sub { font-size: 1.05rem; color: var(--text-dim); max-width: 520px; margin: 0 auto; }
+        .version-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--green-dim); border: 1px solid rgba(34,197,94,0.25); color: var(--green); padding: 4px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 550; margin-top: 18px; }
+        .version-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+        /* Section headings */
+        .section { margin-bottom: 48px; }
+        .section-title { font-size: 1.1rem; font-weight: 650; margin-bottom: 16px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+        .section-title svg { width: 20px; height: 20px; fill: var(--text-dim); flex-shrink: 0; }
+
+        /* Download grid */
+        .dl-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        @media (max-width: 640px) { .dl-grid { grid-template-columns: 1fr; } }
+
+        .dl-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 18px 20px; display: flex; align-items: center; gap: 14px;
+            text-decoration: none; color: inherit; transition: border-color 0.2s, background 0.2s;
+            cursor: pointer; position: relative; overflow: hidden;
+        }
+        .dl-card:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+        .dl-card.unavailable { opacity: 0.35; pointer-events: none; }
+
+        .dl-icon { width: 40px; height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.04); border-radius: 9px; }
+        .dl-icon svg { width: 22px; height: 22px; fill: var(--text-dim); }
+        .dl-info { flex: 1; min-width: 0; }
+        .dl-title { font-size: 0.92rem; font-weight: 600; }
+        .dl-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+        .dl-badge { font-size: 0.68rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--text-dim); flex-shrink: 0; }
+
+        /* Source code card */
+        .source-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 20px 24px; display: flex; align-items: center; gap: 16px;
+            text-decoration: none; color: inherit; transition: border-color 0.2s, background 0.2s;
+        }
+        .source-card:hover { border-color: var(--accent); background: var(--accent-dim); }
+        .source-info { flex: 1; }
+        .source-title { font-size: 0.95rem; font-weight: 600; }
+        .source-desc { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
+        .source-arrow { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; }
+
+        /* Mobile section */
+        .mobile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        @media (max-width: 640px) { .mobile-grid { grid-template-columns: 1fr; } }
+        .mobile-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 20px 24px; display: flex; align-items: center; gap: 14px;
+            text-decoration: none; color: inherit; transition: border-color 0.2s, background 0.2s;
+        }
+        .mobile-card:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+        .mobile-card.disabled { opacity: 0.4; pointer-events: none; }
+
+        /* SHA section */
+        .sha-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; }
+        .sha-section h3 { font-size: 0.92rem; font-weight: 600; margin-bottom: 10px; }
+        .sha-section p { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; }
+        .hash-tbl { width: 100%; border-collapse: collapse; }
+        .hash-tbl th, .hash-tbl td { text-align: left; padding: 8px 10px; font-size: 0.78rem; border-bottom: 1px solid var(--border); }
+        .hash-tbl th { color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.68rem; }
+        .hash-val { font-family: 'SF Mono','Fira Code','Consolas',monospace; font-size: 0.68rem; word-break: break-all; color: var(--text); background: rgba(255,255,255,0.03); padding: 3px 7px; border-radius: 4px; display: inline-block; cursor: pointer; position: relative; }
+        .hash-val:hover { background: rgba(255,255,255,0.07); }
+        .hash-toast { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); background: var(--green); color: #000; padding: 2px 10px; border-radius: 4px; font-size: 0.68rem; font-weight: 600; opacity: 0; transition: opacity 0.2s; pointer-events: none; font-family: -apple-system,sans-serif; }
+        .hash-toast.show { opacity: 1; }
+        .cmd-block { background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin-top: 6px; font-family: 'SF Mono','Fira Code','Consolas',monospace; font-size: 0.74rem; color: var(--green); overflow-x: auto; }
+        .cmd-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 14px; font-weight: 500; }
+
+        /* Legal */
+        .legal-links { display: flex; flex-wrap: wrap; gap: 10px; }
+        .legal-link { display: inline-block; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 18px; font-size: 0.85rem; font-weight: 550; color: var(--text-dim); text-decoration: none; transition: border-color 0.2s, color 0.2s; }
+        .legal-link:hover { border-color: var(--border-hover); color: var(--text); }
+
+        /* Footer */
+        footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); text-align: center; }
+        .footer-text { color: var(--text-muted); font-size: 0.78rem; }
+        .footer-text a { color: var(--text-dim); text-decoration: none; }
+        .footer-text a:hover { color: var(--text); }
+
+        /* Loading */
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--text-dim); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading { text-align: center; padding: 32px 0; color: var(--text-muted); font-size: 0.85rem; }
     </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="card">
-        <h1>PhotoLynk Legal</h1>
-        <p>Public legal pages for the PhotoLynk / PhotoLynk apps.</p>
-        <ul>
-          <li><a href="privacy-policy.html">Privacy Policy</a></li>
-          <li><a href="terms.html">Terms of Service</a></li>
-        </ul>
-        <div class="muted">Hosted via GitHub Pages.</div>
-      </div>
+</head>
+<body>
+    <div class="container">
+        <!-- Hero -->
+        <div class="hero">
+            <div class="hero-logo"><span>PhotoLynk</span></div>
+            <p class="hero-sub">End-to-end encrypted photo &amp; video backup with blockchain provenance and NFT certificates</p>
+            <div class="version-pill" id="version-pill">
+                <span class="version-dot"></span>
+                <span id="version-text">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Desktop Downloads -->
+        <div class="section">
+            <h2 class="section-title">
+                <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                Desktop Downloads
+            </h2>
+            <div class="dl-grid" id="dl-grid">
+                <div class="loading"><span class="spinner"></span> Fetching latest release...</div>
+            </div>
+        </div>
+
+        <!-- Mobile Apps -->
+        <div class="section">
+            <h2 class="section-title">
+                <svg viewBox="0 0 24 24"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+                Mobile Apps
+            </h2>
+            <div class="mobile-grid">
+                <a class="mobile-card disabled" href="#" title="Coming soon">
+                    <div class="dl-icon">
+                        <svg viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                    </div>
+                    <div class="dl-info">
+                        <div class="dl-title">iOS (App Store)</div>
+                        <div class="dl-meta">Coming soon</div>
+                    </div>
+                </a>
+                <a class="mobile-card disabled" href="#" title="Coming soon">
+                    <div class="dl-icon">
+                        <svg viewBox="0 0 24 24"><path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48A5.84 5.84 0 0012 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31A5.93 5.93 0 006 7h12c0-2.01-1-3.78-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>
+                    </div>
+                    <div class="dl-info">
+                        <div class="dl-title">Android (Google Play)</div>
+                        <div class="dl-meta">Coming soon</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- Source Code -->
+        <div class="section">
+            <h2 class="section-title">
+                <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+                Source Code
+            </h2>
+            <a class="source-card" href="https://github.com/viktorvishyn369/PhotoLynk-Solana-Mobile" target="_blank" rel="noopener">
+                <div class="dl-icon">
+                    <svg viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+                </div>
+                <div class="source-info">
+                    <div class="source-title">PhotoLynk Mobile — Source Code</div>
+                    <div class="source-desc">React Native · Expo · Solana · iOS &amp; Android</div>
+                </div>
+                <span class="source-arrow">→</span>
+            </a>
+        </div>
+
+        <!-- SHA-256 Verification -->
+        <div class="section">
+            <div class="sha-section" id="sha-section">
+                <h3>SHA-256 Integrity Verification</h3>
+                <p>After downloading, verify the file integrity by comparing the checksum below.</p>
+                <div id="hash-container"><div class="loading"><span class="spinner"></span> Loading checksums...</div></div>
+                <div class="cmd-label">macOS / Linux</div>
+                <div class="cmd-block">shasum -a 256 ~/Downloads/PhotoLynk*</div>
+                <div class="cmd-label">Windows (PowerShell)</div>
+                <div class="cmd-block">Get-FileHash "$env:USERPROFILE\Downloads\PhotoLynk*" -Algorithm SHA256 | Format-List</div>
+            </div>
+        </div>
+
+        <!-- Legal -->
+        <div class="section">
+            <h2 class="section-title">Legal</h2>
+            <div class="legal-links">
+                <a class="legal-link" href="privacy-policy.html">Privacy Policy</a>
+                <a class="legal-link" href="terms.html">Terms of Service</a>
+                <a class="legal-link" href="license.html">License</a>
+                <a class="legal-link" href="copyright.html">Copyright</a>
+                <a class="legal-link" href="delete-account.html">Delete Account</a>
+            </div>
+        </div>
+
+        <footer>
+            <p class="footer-text">
+                <strong>StealthLynk</strong> &mdash; Building secure, privacy-respecting infrastructure.<br>
+                <a href="https://github.com/viktorvishyn369" target="_blank" rel="noopener">GitHub</a>
+            </p>
+        </footer>
     </div>
-  </body>
+
+    <script>
+    // Platform config for mapping GitHub release assets to download cards
+    const PLATFORMS = [
+        { key: 'mac-arm', match: 'Apple-Silicon.dmg', label: 'macOS — Apple Silicon', note: 'M1 / M2 / M3 / M4', ext: '.dmg', icon: 'mac' },
+        { key: 'mac-intel', match: 'Intel.dmg', label: 'macOS — Intel', note: 'Intel-based Mac', ext: '.dmg', icon: 'mac' },
+        { key: 'win', match: 'Windows-Setup.exe', label: 'Windows x64', note: 'Windows 10+', ext: '.exe', icon: 'win' },
+        { key: 'linux-appimage', match: 'Linux-x64.AppImage', label: 'Linux — Ubuntu / Debian', note: 'AppImage (x86_64)', ext: '.AppImage', icon: 'linux' },
+    ];
+
+    const ICONS = {
+        mac: '<svg viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>',
+        win: '<svg viewBox="0 0 24 24"><path d="M3 12V6.5l8-1.1V12H3zm0 .5V18l8 1.1V12.5H3zm9 0V19.2l9 1.3V12.5h-9zm0-6.7V12h9V3.5l-9 1.3z"/></svg>',
+        linux: '<svg viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.368 1.884 1.43.777.07 1.543-.29 2.031-.846l.086-.09c.053-.08.082-.114.118-.16l.003-.003c.237-.268.566-.587.883-.727.304-.135.578-.199.818-.332.24-.133.449-.267.612-.535.164-.267.228-.602.228-.869 0-.133-.013-.267-.04-.4a.67.67 0 00-.334-.466c-.146-.073-.294-.06-.434-.065a.38.38 0 01-.14-.031c-.032-.007-.056-.028-.091-.028-.36-.003-.66-.197-.96-.465a6.482 6.482 0 01-.585-.607c-.114-.131-.2-.267-.287-.4a4.14 4.14 0 01-.502-1.467c-.098-.666.035-1.334.287-2 .335-.866.78-1.733 1.008-2.466.186-.6.258-1.2.143-1.7-.158-.667-.5-1.267-1.01-1.834-.502-.533-1.157-.934-1.875-1.2a5.86 5.86 0 00-.225-.067C14.354.232 13.379 0 12.504 0z"/></svg>'
+    };
+
+    function fmtSize(b) { return b < 1048576 ? (b/1024).toFixed(0)+' KB' : (b/1048576).toFixed(1)+' MB'; }
+
+    function copyHash(el) {
+        const h = el.getAttribute('data-hash');
+        if (!h) return;
+        navigator.clipboard.writeText(h).then(() => {
+            const t = el.querySelector('.hash-toast');
+            if (t) { t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1200); }
+        });
+    }
+
+    async function init() {
+        const grid = document.getElementById('dl-grid');
+        const hashC = document.getElementById('hash-container');
+        const vText = document.getElementById('version-text');
+
+        try {
+            const res = await fetch('https://api.github.com/repos/viktorvishyn369/PhotoLynk/releases/latest');
+            if (!res.ok) throw new Error('GitHub API error');
+            const rel = await res.json();
+
+            // Version pill
+            const ver = (rel.tag_name || '').replace(/^v/, '');
+            vText.textContent = 'v' + ver + ' — Latest';
+
+            // Build asset lookup
+            const assets = rel.assets || [];
+
+            // Render download cards
+            let html = '';
+            for (const p of PLATFORMS) {
+                const asset = assets.find(a => a.name.includes(p.match));
+                if (asset) {
+                    html += `<a class="dl-card" href="${asset.browser_download_url}" title="Download ${p.label}">
+                        <div class="dl-icon">${ICONS[p.icon]}</div>
+                        <div class="dl-info">
+                            <div class="dl-title">${p.label}</div>
+                            <div class="dl-meta">${p.ext} · ${fmtSize(asset.size)}</div>
+                        </div>
+                        <span class="dl-badge">Download</span>
+                    </a>`;
+                } else {
+                    html += `<div class="dl-card unavailable">
+                        <div class="dl-icon">${ICONS[p.icon]}</div>
+                        <div class="dl-info">
+                            <div class="dl-title">${p.label}</div>
+                            <div class="dl-meta">${p.note}</div>
+                        </div>
+                        <span class="dl-badge" style="opacity:0.5">Unavailable</span>
+                    </div>`;
+                }
+            }
+            grid.innerHTML = html;
+
+            // SHA-256 table
+            const withHash = assets.filter(a => a.digest && a.digest.startsWith('sha256:'));
+            if (withHash.length === 0) {
+                hashC.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">No checksums available for this release.</div>';
+                return;
+            }
+            let tbl = '<table class="hash-tbl"><thead><tr><th>File</th><th>SHA-256</th></tr></thead><tbody>';
+            for (const a of withHash) {
+                const sha = a.digest.replace('sha256:', '');
+                tbl += `<tr><td style="font-weight:500;white-space:nowrap;">${a.name}</td>
+                    <td><span class="hash-val" data-hash="${sha}" onclick="copyHash(this)" title="Click to copy">${sha}<span class="hash-toast">Copied!</span></span></td></tr>`;
+            }
+            tbl += '</tbody></table>';
+            hashC.innerHTML = tbl;
+
+        } catch (e) {
+            console.error('[PhotoLynk]', e);
+            grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;text-align:center;padding:24px 0;">Could not load releases. <a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" style="color:var(--accent);" target="_blank">Download from GitHub →</a></div>';
+            hashC.innerHTML = '';
+            vText.textContent = 'v2.0.1';
+        }
+    }
+
+    init();
+    </script>
+</body>
 </html>
