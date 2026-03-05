@@ -297,9 +297,29 @@
 
         } catch (e) {
             console.error('[PhotoLynk]', e);
-            grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;text-align:center;padding:24px 0;">Could not load releases. <a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" style="color:var(--accent);" target="_blank">Download from GitHub →</a></div>';
-            hashC.innerHTML = '';
-            vText.textContent = 'v2.0.1';
+            // Static fallback cards when API is rate-limited or unavailable
+            const FALLBACK_VER = '2.0.1';
+            const BASE = 'https://github.com/viktorvishyn369/PhotoLynk/releases/download/v' + FALLBACK_VER + '/PhotoLynk-Desktop-' + FALLBACK_VER;
+            let html = '';
+            const fallbackAssets = [
+                { url: BASE + '-macOS-Apple-Silicon.dmg', label: 'macOS — Apple Silicon', note: 'M1 / M2 / M3 / M4', ext: '.dmg', icon: 'mac' },
+                { url: BASE + '-macOS-Intel.dmg', label: 'macOS — Intel', note: 'Intel-based Mac', ext: '.dmg', icon: 'mac' },
+                { url: BASE + '-Windows-Setup.exe', label: 'Windows x64', note: 'Windows 10+', ext: '.exe', icon: 'win' },
+                { url: BASE + '-Linux-x64.AppImage', label: 'Linux — Ubuntu / Debian', note: 'AppImage (x86_64)', ext: '.AppImage', icon: 'linux' },
+            ];
+            for (const p of fallbackAssets) {
+                html += `<a class="dl-card" href="${p.url}" title="Download ${p.label}">
+                    <div class="dl-icon">${ICONS[p.icon]}</div>
+                    <div class="dl-info">
+                        <div class="dl-title">${p.label}</div>
+                        <div class="dl-meta">${p.ext} · ${p.note}</div>
+                    </div>
+                    <span class="dl-badge">Download</span>
+                </a>`;
+            }
+            grid.innerHTML = html;
+            hashC.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">Checksums available on <a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a>.</div>';
+            vText.textContent = 'v' + FALLBACK_VER;
         }
     }
 
