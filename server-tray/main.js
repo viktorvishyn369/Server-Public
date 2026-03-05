@@ -1931,7 +1931,7 @@ function showMainWindow() {
             <button id="nft-action-right" class="nft-mini-btn" onclick="openNFTStorageView()"></button>
           </div>
 
-          <button class="nft-transfer-main" onclick="openNFTTransfer()">
+          <button id="nft-transfer-main-btn" class="nft-transfer-main" onclick="openNFTTransfer()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             Transfer Original
           </button>
@@ -4905,6 +4905,24 @@ function showMainWindow() {
       configureNFTDetailActions(currentDetailNFT, isCompressed, storageLabel);
       verifyNFTDetailOnOpen(currentDetailNFT);
       
+      // Transfer button — only enabled for PhotoLynk ecosystem cNFTs
+      const transferBtn = document.getElementById('nft-transfer-main-btn');
+      if (transferBtn) {
+        if (isPhotoLynkEcosystem(currentDetailNFT)) {
+          transferBtn.disabled = false;
+          transferBtn.style.background = '';
+          transferBtn.style.cursor = 'pointer';
+          transferBtn.style.opacity = '1';
+          transferBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg> Transfer Original';
+        } else {
+          transferBtn.disabled = true;
+          transferBtn.style.background = 'rgba(255,255,255,0.08)';
+          transferBtn.style.cursor = 'not-allowed';
+          transferBtn.style.opacity = '0.5';
+          transferBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Not Transferrable';
+        }
+      }
+
       // Show overlay
       document.getElementById('nft-detail-overlay').classList.add('active');
     }
@@ -5073,8 +5091,23 @@ function showMainWindow() {
       }
     }
     
+    function isPhotoLynkEcosystem(nft) {
+      if (!nft) return false;
+      if (nft.merkleTree === '7qSKB5q1JMmsGx2cHzAJPxvjzXCbAfpWNDTKDM3tSunS') return true;
+      if (nft.creatorWallet === 'HttTZkUG8xn5A1uJPjRDJqqufdwvHmNQroEGmST8iimU') return true;
+      const attrs = nft.metadata?.attributes || nft.attributes || [];
+      const hasContentHash = attrs.some(a => a.trait_type === 'Content Hash');
+      const hasExifHash = attrs.some(a => a.trait_type === 'EXIF Hash');
+      if (hasContentHash && hasExifHash) return true;
+      const metaCert = nft.metadata?.properties?.certificate;
+      if (metaCert && metaCert.type && metaCert.type.includes('PhotoLynk')) return true;
+      if (nft.name && nft.name.includes('PhotoLynk')) return true;
+      return false;
+    }
+
     async function openNFTTransfer() {
       if (!currentDetailNFT) return;
+      if (!isPhotoLynkEcosystem(currentDetailNFT)) return;
       
       const isCompressed = currentDetailNFT.isCompressed === true;
       const imageUrl = currentDetailNFT.cachedPath ? 'file://' + currentDetailNFT.cachedPath : (currentDetailNFT.image || currentDetailNFT.imageUrl || '');

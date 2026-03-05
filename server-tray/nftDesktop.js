@@ -2034,6 +2034,47 @@ function buildNFTMetadata({
 }
 
 /**
+ * Compute SHA256 hash of camera serial number (device-binding proof — matches solana-seeker)
+ * @param {string} filePath - Path to image file
+ * @returns {Promise<string|null>} SHA256 hex hash of serial or null
+ */
+async function computeCameraSerialHash(filePath) {
+  try {
+    let serial = null;
+    // Try sharp metadata first
+    if (sharp) {
+      try {
+        const meta = await sharp(filePath).metadata();
+        if (meta.exif && meta.exif.length > 0) {
+          let exifReader;
+          try { exifReader = require('exif-reader'); } catch (_) {}
+          if (exifReader) {
+            const parsed = exifReader(meta.exif);
+            const exif = parsed.exif || parsed.Exif || {};
+            serial = exif.BodySerialNumber || null;
+          }
+        }
+      } catch (_) {}
+    }
+    // Fallback: ExifReader
+    if (!serial) {
+      try {
+        const ExifReader = require('exifreader');
+        const tags = await ExifReader.load(filePath);
+        serial = tags.BodySerialNumber?.value || tags.SerialNumber?.value || tags.CameraSerialNumber?.value || null;
+      } catch (_) {}
+    }
+    if (!serial) return null;
+    const cleaned = String(serial).replace(/\0/g, '').trim();
+    if (!cleaned) return null;
+    return crypto.createHash('sha256').update(cleaned).digest('hex');
+  } catch (e) {
+    console.warn('[NFT] Camera serial hash failed:', e?.message);
+    return null;
+  }
+}
+
+/**
  * Compute SHA256 hash of file for integrity proof
  */
 function computeContentHash(filePath) {
@@ -2130,6 +2171,15 @@ async function mintNFT(params, onProgress) {
       console.warn('[NFT] EXIF extraction failed:', exifErr?.message);
     }
     
+    // Compute camera serial hash (device-binding proof — all editions, matches solana-seeker)
+    let camSerialHash = null;
+    try {
+      camSerialHash = await computeCameraSerialHash(filePath);
+      if (camSerialHash) console.log('[NFT] Camera serial hash:', camSerialHash.substring(0, 16) + '...');
+    } catch (camErr) {
+      console.warn('[NFT] Camera serial hash failed (non-blocking):', camErr?.message);
+    }
+    
     // Step 1: Compute content hash of ORIGINAL file for integrity proof
     onProgress?.({ status: 'Computing integrity proof...' });
     const contentHash = computeContentHash(filePath);
@@ -2149,7 +2199,7 @@ async function mintNFT(params, onProgress) {
       c2paManifest = buildC2PAManifest({
         contentHash,
         exifHash,
-        cameraSerialHash: null,
+        cameraSerialHash: camSerialHash,
         creatorWallet: walletAddress,
         fileName: path.basename(filePath),
         fileSize: fs.statSync(filePath).size,
@@ -2378,6 +2428,7 @@ async function mintNFT(params, onProgress) {
       exifRawHash,
       exifHash,
       exifBindingHash,
+      cameraSerialHash: camSerialHash,
       encryptionData: encryptionData || null,
       originalFormat: path.extname(filePath).replace('.', '').toUpperCase() || 'JPEG',
       uploadMimeType: uploadContentType,
@@ -4717,7 +4768,7 @@ function generateCertificate(nftData) {
     certificationMode: nftData.certificationMode || (nftData.edition === 'limited' ? 'private' : nftData.edition === 'open' ? 'public' : null),
     mintAddress: nftData.mintAddress,
     txSignature: nftData.txSignature,
-    creatorWallet: nftData.ownerAddress,
+    creatorWallet: nftData.ownerAddress || nftData.creatorWallet,
     name: nftData.name,
     description: nftData.description,
     contentHash: null,
@@ -4727,27 +4778,32 @@ function generateCertificate(nftData) {
     license: nftData.license || 'arr',
     watermarked: !!nftData.watermarked,
     encrypted: !!nftData.encrypted,
-    storageType: nftData.storageType,
+    storageType: nftData.storageType || 'ipfs',
     imageUrl: nftData.arweaveUrl || nftData.imageUrl,
     metadataUrl: nftData.metadataUrl,
     createdAt: nftData.createdAt || new Date().toISOString(),
     issuedAt: new Date().toISOString(),
   };
-  // Try direct fields first (desktop post-mint), then metadata attributes (mobile)
+  // Extract hashes from attributes (check both metadata.attributes and top-level attributes)
   // Normalize: always include SHA256: prefix for consistency across platforms
   const ensureHashPrefix = (h) => h && !h.startsWith('SHA256:') ? `SHA256:${h}` : h;
+  // Try direct fields first (desktop post-mint)
   if (nftData.contentHash) cert.contentHash = ensureHashPrefix(nftData.contentHash);
   if (nftData.exifRawHash) cert.exifRawHash = ensureHashPrefix(nftData.exifRawHash);
   if (nftData.exifHash) cert.exifHash = ensureHashPrefix(nftData.exifHash);
   if (nftData.exifBindingHash) cert.exifBindingHash = ensureHashPrefix(nftData.exifBindingHash);
-  if (nftData.metadata?.attributes) {
-    for (const attr of nftData.metadata.attributes) {
-      if (attr.trait_type === 'Content Hash' && !cert.contentHash) cert.contentHash = attr.value;
-      if (attr.trait_type === 'EXIF Raw Hash' && !cert.exifRawHash) cert.exifRawHash = attr.value;
-      if (attr.trait_type === 'EXIF Hash' && !cert.exifHash) cert.exifHash = attr.value;
-      if (attr.trait_type === 'EXIF Binding Hash' && !cert.exifBindingHash) cert.exifBindingHash = attr.value;
-    }
+  // Then metadata attributes (matches solana-seeker: check both metadata.attributes and top-level attributes)
+  const attrs = nftData.metadata?.attributes || nftData.attributes || [];
+  for (const attr of attrs) {
+    if (attr.trait_type === 'Content Hash' && !cert.contentHash) cert.contentHash = ensureHashPrefix(attr.value);
+    if (attr.trait_type === 'EXIF Raw Hash' && !cert.exifRawHash) cert.exifRawHash = ensureHashPrefix(attr.value);
+    if (attr.trait_type === 'EXIF Hash' && !cert.exifHash) cert.exifHash = ensureHashPrefix(attr.value);
+    if (attr.trait_type === 'EXIF Binding Hash' && !cert.exifBindingHash) cert.exifBindingHash = ensureHashPrefix(attr.value);
+    if (attr.trait_type === 'Camera Hash' && !cert.cameraHash) cert.cameraHash = ensureHashPrefix(attr.value);
+    if (attr.trait_type === 'License' && !cert.license) cert.license = attr.value;
   }
+  // Fallback: direct cameraHash field from nftData (matches mobile-v2)
+  if (!cert.cameraHash && nftData.cameraHash) cert.cameraHash = ensureHashPrefix(nftData.cameraHash);
   // RFC 3161 + C2PA — from direct fields (desktop) or metadata properties (mobile)
   if (nftData.tsaToken) cert.rfc3161Token = nftData.tsaToken;
   if (nftData.tsaUrl) cert.rfc3161Tsa = nftData.tsaUrl;
@@ -4767,6 +4823,18 @@ function generateCertificate(nftData) {
   // Set flags based on actual token presence (not unconditionally)
   cert.hasRfc3161 = !!cert.rfc3161Token;
   cert.hasC2pa = !!cert.c2paManifest;
+
+  // Also check attributes for RFC3161/C2PA presence (fallback when metadata is stripped)
+  const rfc3161Attr = attrs.find(a => a.trait_type === 'RFC 3161 Timestamp');
+  const c2paAttr = attrs.find(a => a.trait_type === 'C2PA Provenance');
+  if (rfc3161Attr && !cert.hasRfc3161) cert.hasRfc3161 = true;
+  if (c2paAttr && !cert.hasC2pa) cert.hasC2pa = true;
+
+  // Fallback: direct fields from nftData (matches mobile-v2)
+  if (!cert.rfc3161Token && nftData.rfc3161Token) { cert.rfc3161Token = nftData.rfc3161Token; cert.hasRfc3161 = true; }
+  if (!cert.hasRfc3161 && nftData.hasRfc3161) cert.hasRfc3161 = true;
+  if (!cert.hasC2pa && nftData.hasC2pa) cert.hasC2pa = true;
+
   return cert;
 }
 
@@ -4841,6 +4909,18 @@ function formatCertificateForExport(cert) {
   };
   const licenseLabel = LICENSE_MAP[cert.license] || cert.license || 'All Rights Reserved';
 
+  // License URL for legal deed reference
+  const LICENSE_URL_MAP = {
+    'cc-by': 'https://creativecommons.org/licenses/by/4.0/',
+    'cc-by-sa': 'https://creativecommons.org/licenses/by-sa/4.0/',
+    'cc-by-nc': 'https://creativecommons.org/licenses/by-nc/4.0/',
+    'cc-by-nc-sa': 'https://creativecommons.org/licenses/by-nc-sa/4.0/',
+    'cc-by-nd': 'https://creativecommons.org/licenses/by-nd/4.0/',
+    'cc-by-nc-nd': 'https://creativecommons.org/licenses/by-nc-nd/4.0/',
+    'cc0': 'https://creativecommons.org/publicdomain/zero/1.0/',
+  };
+  const licenseUrl = LICENSE_URL_MAP[cert.license] || null;
+
   const formatDate = (iso) => {
     if (!iso) return '—';
     try {
@@ -4856,6 +4936,8 @@ function formatCertificateForExport(cert) {
   const tx = cert.txSignature || '—';
   const contentHash = cert.contentHash || '— not recorded —';
   const exifHash = cert.exifHash || '— not recorded —';
+  const exifRawHash = cert.exifRawHash || '— not recorded —';
+  const exifBindingHash = cert.exifBindingHash || '— not recorded —';
   const storage = cert.storageType === 'cloud' ? 'StealthCloud (Encrypted Private Storage)' : cert.storageType === 'arweave' ? 'Arweave (Permanent Decentralized Storage)' : cert.storageType === 'onchain' ? 'Embedded On-Chain (Original Image in Metadata)' : 'IPFS (Decentralized Public Storage)';
   const hash = cert.contentHash ? cert.contentHash.replace(/^SHA256:/, '') : '<sha256_hash>';
 
@@ -4880,6 +4962,7 @@ function formatCertificateForExport(cert) {
     `  Title:          ${cert.name || 'Untitled'}`,
     `  Certification:  ${cert.certificationMode === 'public' ? 'Public Certified' : cert.certificationMode === 'private' ? 'Private Certified' : cert.edition === 'limited' ? 'Private Certified' : cert.edition === 'open' ? 'Public Certified' : 'Certified Original'}`,
     `  License:        ${licenseLabel}`,
+    ...(licenseUrl ? [`  License Deed:   ${licenseUrl}`] : []),
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
@@ -4893,15 +4976,10 @@ function formatCertificateForExport(cert) {
     '',
     'SECTION 3 — INTEGRITY VERIFICATION',
     '',
-    `  Content Hash:        ${contentHash}`,
-    `  EXIF Raw Hash:       ${cert.exifRawHash || 'N/A'}`,
-    `  EXIF Normalized Hash:${cert.exifHash ? ' ' + cert.exifHash : ' N/A'}`,
-    `  EXIF Binding Hash:   ${cert.exifBindingHash || 'N/A'}`,
-    '',
-    '  Hash Legend:',
-    '    EXIF Raw Hash      — SHA-256 of exact EXIF binary bytes from camera',
-    '    EXIF Normalized    — SHA-256 of parsed+rounded EXIF (cross-platform dedup)',
-    '    EXIF Binding Hash  — SHA-256(RawHash | NormalizedHash) binding proof',
+    `  Content Hash:   ${contentHash}`,
+    `  EXIF Hash:      ${exifHash}`,
+    `  Raw EXIF Hash:  ${exifRawHash}`,
+    `  Binding Hash:   ${exifBindingHash}`,
     '',
     '  The above cryptographic hashes were computed at the',
     '  time of minting and can be used to verify that the',
@@ -4910,9 +4988,13 @@ function formatCertificateForExport(cert) {
     '  HOW TO VERIFY CONTENT HASH:',
     '    sha256sum <original_file>',
     '',
-    '  HOW TO VERIFY EXIF HASHES:',
+    '  HOW TO VERIFY EXIF HASH:',
+    '    The EXIF Hash is SHA-256 of normalized EXIF fields',
+    '    (non-GPS decimals rounded to 4dp, GPS truncated to 4dp,',
+    '    keys sorted alphabetically, then JSON.stringify + SHA-256).',
+    '',
+    '    npm install exifreader',
     '    node verify-exif-hash.js <original_file>',
-    '    Verifies all 3 EXIF hashes (raw, normalized, binding).',
     '',
     '    Script: https://github.com/viktorvishyn369/PhotoLynk/blob/main/server-tray/verify-exif-hash.js',
     '',
@@ -5008,6 +5090,7 @@ module.exports = {
   // NFT metadata and minting
   buildNFTMetadata,
   computeContentHash,
+  computeCameraSerialHash,
   mintNFT,
   
   // NFT fetching (uses DAS API like mobile)
