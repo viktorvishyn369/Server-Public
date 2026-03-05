@@ -243,7 +243,7 @@
         const vText = document.getElementById('version-text');
 
         try {
-            const res = await fetch('https://api.github.com/repos/viktorvishyn369/PhotoLynk/releases/latest');
+            const res = await fetch('https://api.github.com/repos/viktorvishyn369/PhotoLynk-Solana/releases/latest');
             if (!res.ok) throw new Error('GitHub API error');
             const rel = await res.json();
 
@@ -299,7 +299,7 @@
             console.error('[PhotoLynk]', e);
             // Static fallback cards when API is rate-limited or unavailable
             const FALLBACK_VER = '2.0.1';
-            const BASE = 'https://github.com/viktorvishyn369/PhotoLynk/releases/download/v' + FALLBACK_VER + '/PhotoLynk-Desktop-' + FALLBACK_VER;
+            const BASE = 'https://github.com/viktorvishyn369/PhotoLynk-Solana/releases/download/v' + FALLBACK_VER + '/PhotoLynk-Desktop-' + FALLBACK_VER;
             let html = '';
             const fallbackAssets = [
                 { url: BASE + '-macOS-Apple-Silicon.dmg', label: 'macOS — Apple Silicon', note: 'M1 / M2 / M3 / M4', ext: '.dmg', icon: 'mac' },
@@ -318,7 +318,7 @@
                 </a>`;
             }
             grid.innerHTML = html;
-            hashC.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">Checksums available on <a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a>.</div>';
+            hashC.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">Checksums available on <a href="https://github.com/viktorvishyn369/PhotoLynk-Solana/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a>.</div>';
             vText.textContent = 'v' + FALLBACK_VER;
         }
     }
