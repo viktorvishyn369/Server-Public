@@ -1218,26 +1218,15 @@ class DesktopBackupClient {
   }
 
   // Build deduplication sets by decrypting manifests (for cross-device duplicate detection)
-  // Images: use perceptualHash only (ignore fileHash)
-  // Videos: use fileHash only (no perceptualHash)
-  // Also builds baseFilename+size and baseFilename+date maps for fallback matching
+  // Matches solana-seeker: fileHash + perceptualHash only (manifestIds built separately)
   // Uses parallel fetching for speed
   async buildDeduplicationSets(existingManifests) {
     const baseUrl = this.getBaseUrl();
-    const alreadyFilenames = new Set();
-    const alreadyBaseFilenames = new Set(); // For variant deduplication (iOS/Android/Windows/Linux)
     const alreadyFileHashes = new Set();
     const alreadyPerceptualHashes = new Set();
-    const alreadyBaseNameSizes = new Map(); // baseFilename -> Set of sizes (fallback matching)
-    const alreadyBaseNameDates = new Map(); // baseFilename -> Set of date strings (YYYY-MM-DD)
-    const alreadyBaseNameTimestamps = new Map(); // baseFilename -> Set of full timestamps (YYYY-MM-DDTHH:MM:SS) for HEIC
-    // EXIF-based deduplication sets for cross-platform HEIC matching
-    const alreadyExifFull = new Set(); // captureTime|make|model (highest confidence)
-    const alreadyExifTimeModel = new Set(); // captureTime|model
-    const alreadyExifTimeMake = new Set(); // captureTime|make
 
     if (!existingManifests || existingManifests.length === 0) {
-      return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake };
+      return { alreadyFileHashes, alreadyPerceptualHashes };
     }
 
     const total = existingManifests.length;
@@ -1285,73 +1274,22 @@ class DesktopBackupClient {
 
     const results = await Promise.all(tasks);
 
-    // Process results
+    // Process results - only extract fileHash and perceptualHash (matches solana-seeker)
     for (const manifest of results) {
       if (!manifest) continue;
-      if (manifest.filename) {
-        alreadyFilenames.add(this.normalizeFilenameForCompare(manifest.filename));
-        // Extract base filename for variant matching (iOS/Android/Windows/Linux)
-        const baseName = this.extractBaseFilename(manifest.filename);
-        if (baseName) {
-          alreadyBaseFilenames.add(baseName);
-          
-          // Build baseFilename -> sizes map for fallback matching
-          if (manifest.originalSize || manifest.size) {
-            if (!alreadyBaseNameSizes.has(baseName)) {
-              alreadyBaseNameSizes.set(baseName, new Set());
-            }
-            alreadyBaseNameSizes.get(baseName).add(manifest.originalSize || manifest.size);
-          }
-          
-          // Build baseFilename -> dates map for fallback matching
-          // Use creationTime, modificationTime, or takenAt if available
-          const dateVal = manifest.creationTime || manifest.modificationTime || manifest.takenAt;
-          if (dateVal) {
-            const dateStr = this.normalizeDateForCompare(dateVal);
-            if (dateStr) {
-              if (!alreadyBaseNameDates.has(baseName)) {
-                alreadyBaseNameDates.set(baseName, new Set());
-              }
-              alreadyBaseNameDates.get(baseName).add(dateStr);
-            }
-            // Build full timestamp map for HEIC deduplication (second-level precision)
-            const fullTimestamp = this.normalizeFullTimestamp(dateVal);
-            if (fullTimestamp) {
-              if (!alreadyBaseNameTimestamps.has(baseName)) {
-                alreadyBaseNameTimestamps.set(baseName, new Set());
-              }
-              alreadyBaseNameTimestamps.get(baseName).add(fullTimestamp);
-            }
-          }
-        }
-      }
-      // If manifest has perceptualHash, it's an image - use perceptual hash
       if (manifest.perceptualHash) {
         alreadyPerceptualHashes.add(manifest.perceptualHash);
       }
-      // Always add fileHash if present (for both images and videos)
-      // Images need fileHash for byte-identical dedup (AirDrop, copies)
       if (manifest.fileHash) {
         alreadyFileHashes.add(manifest.fileHash);
       }
-      // Build EXIF-based deduplication keys from manifest
-      // These are the real EXIF values extracted from the original file during upload
-      if (manifest.exifCaptureTime) {
-        const ct = manifest.exifCaptureTime;
-        const mk = manifest.exifMake;
-        const md = manifest.exifModel;
-        // Generate dedup keys at different confidence levels
-        if (ct && mk && md) alreadyExifFull.add(`${ct}|${mk}|${md}`);
-        if (ct && md) alreadyExifTimeModel.add(`${ct}|${md}`);
-        if (ct && mk) alreadyExifTimeMake.add(`${ct}|${mk}`);
-      }
     }
 
-    console.log(`Desktop: found ${alreadyFilenames.size} filenames, ${alreadyBaseFilenames.size} base names, ${alreadyBaseNameSizes.size} name+size entries, ${alreadyBaseNameDates.size} name+date entries, ${alreadyBaseNameTimestamps.size} name+timestamp entries, ${alreadyFileHashes.size} file hashes, ${alreadyPerceptualHashes.size} perceptual hashes, ${alreadyExifFull.size} EXIF full keys for deduplication`);
-    return { alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake };
+    console.log(`Desktop: found ${alreadyFileHashes.size} file hashes, ${alreadyPerceptualHashes.size} perceptual hashes for deduplication`);
+    return { alreadyFileHashes, alreadyPerceptualHashes };
   }
 
-  async uploadFile(file, fileIndex, totalFiles, alreadyManifestIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake) {
+  async uploadFile(file, fileIndex, totalFiles, alreadyManifestIds, alreadyFileHashes, alreadyPerceptualHashes, sessionHashes) {
     const filePath = file.path;
     const fileName = file.name;
     const fileSize = file.size;
@@ -1361,77 +1299,17 @@ class DesktopBackupClient {
     const fileIdentity = computeFileIdentity(fileName, fileSize);
     const manifestId = fileIdentity ? crypto.createHash('sha256').update(`file:${fileIdentity}`).digest('hex') : crypto.createHash('sha256').update(`desktop:${filePath}`).digest('hex');
 
-    // Skip if already uploaded (by stable manifestId)
+    // ========== DEDUP: Matches solana-seeker Android (manifestId + fileHash + perceptualHash + session) ==========
+
+    // Check 1: ManifestId (hash of filename+size) - most reliable quick check
     if (alreadyManifestIds && alreadyManifestIds.has(manifestId)) {
       console.log(`Skipping ${fileName} - manifestId already on server`);
       return { skipped: true, reason: 'manifestId' };
     }
 
-    // Skip if exact filename already exists on server
-    const normalizedFilename = this.normalizeFilenameForCompare(fileName);
-    if (normalizedFilename && alreadyFilenames && alreadyFilenames.has(normalizedFilename)) {
-      console.log(`Skipping ${fileName} - filename already on server`);
-      return { skipped: true, reason: 'filename' };
-    }
-
-    // Extract base filename for variant matching
-    const baseName = this.extractBaseFilename(fileName);
-
-    // Skip if base filename + full timestamp matches (HEIC cross-platform dedup)
-    if (baseName && fileModified && alreadyBaseNameTimestamps && alreadyBaseNameTimestamps.has(baseName)) {
-      const fullTimestamp = this.normalizeFullTimestamp(fileModified);
-      if (fullTimestamp && alreadyBaseNameTimestamps.get(baseName).has(fullTimestamp)) {
-        console.log(`Skipping ${fileName} - base filename + timestamp already on server`);
-        return { skipped: true, reason: 'timestamp' };
-      }
-    }
-
-    // Skip if base filename + size matches (within 20% tolerance for transcoding)
-    if (baseName && fileSize && alreadyBaseNameSizes && alreadyBaseNameSizes.has(baseName)) {
-      for (const existingSize of alreadyBaseNameSizes.get(baseName)) {
-        const diff = Math.abs(fileSize - existingSize) / Math.max(fileSize, existingSize);
-        if (diff < 0.20) {
-          console.log(`Skipping ${fileName} - base filename + size already on server (diff=${(diff * 100).toFixed(1)}%)`);
-          return { skipped: true, reason: 'size' };
-        }
-      }
-    }
-
-    // Skip if base filename + date matches
-    if (baseName && fileModified && alreadyBaseNameDates && alreadyBaseNameDates.has(baseName)) {
-      const dateStr = this.normalizeDateForCompare(fileModified);
-      if (dateStr && alreadyBaseNameDates.get(baseName).has(dateStr)) {
-        console.log(`Skipping ${fileName} - base filename + date already on server`);
-        return { skipped: true, reason: 'date' };
-      }
-    }
-
-    // EXIF-based deduplication for cross-platform HEIC matching
-    // Extract EXIF before hash computation to enable early skip
+    // Extract EXIF for storage to server (NOT for dedup skip - matches solana-seeker)
     const ext = path.extname(fileName).toLowerCase();
     const exifData = await this.extractExifForDedup(filePath);
-    
-    if (exifData.captureTime) {
-      const exifKeys = this.generateExifDedupKeys(exifData);
-      
-      // Check EXIF full match (captureTime + make + model) - highest confidence
-      if (exifKeys.full && alreadyExifFull && alreadyExifFull.has(exifKeys.full)) {
-        console.log(`Skipping ${fileName} - EXIF full match (time+make+model) already on server`);
-        return { skipped: true, reason: 'exifFull' };
-      }
-      
-      // Check EXIF time+model match
-      if (exifKeys.timeModel && alreadyExifTimeModel && alreadyExifTimeModel.has(exifKeys.timeModel)) {
-        console.log(`Skipping ${fileName} - EXIF time+model match already on server`);
-        return { skipped: true, reason: 'exifTimeModel' };
-      }
-      
-      // Check EXIF time+make match
-      if (exifKeys.timeMake && alreadyExifTimeMake && alreadyExifTimeMake.has(exifKeys.timeMake)) {
-        console.log(`Skipping ${fileName} - EXIF time+make match already on server`);
-        return { skipped: true, reason: 'exifTimeMake' };
-      }
-    }
 
     // HASH-BASED DEDUPLICATION:
     // - Images: perceptual hash (transcoding-resistant visual matching)
@@ -1457,34 +1335,11 @@ class DesktopBackupClient {
         perceptualHash = null;
       }
 
-      // Skip if perceptual hash already exists on server (catches transcoded duplicates)
-      // Use fuzzy matching with cross-platform threshold to handle decoder differences
-      if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.size > 0) {
-        console.log(`[PerceptualHash-Debug] ${fileName}: Comparing hash ${perceptualHash} against ${alreadyPerceptualHashes.size} server hashes`);
-        const matchResult = findPerceptualHashMatch(perceptualHash, alreadyPerceptualHashes, CROSS_PLATFORM_DHASH_THRESHOLD);
-        if (matchResult.match) {
-          console.log(`Skipping ${fileName} - visually identical image already on server (perceptual match, distance=${matchResult.distance})`);
-          return { skipped: true, reason: 'perceptualHash' };
-        } else if (matchResult.distance > 0 && matchResult.distance <= 20) {
-          // Log near-misses for debugging (distance > threshold but close)
-          console.log(`[NearMiss] ${fileName}: closest match distance=${matchResult.distance} (threshold=${CROSS_PLATFORM_DHASH_THRESHOLD})`);
-        } else {
-          console.log(`[PerceptualHash-Debug] ${fileName}: No match found, closest distance=${matchResult.distance}`);
-        }
-      } else {
-        console.log(`[PerceptualHash-Debug] ${fileName}: No server hashes to compare (set size: ${alreadyPerceptualHashes ? alreadyPerceptualHashes.size : 0})`);
-      }
-
-      // Also compute exact hash for storage in manifest and byte-identical dedup (AirDrop)
+      // Also compute exact hash for storage in manifest and byte-identical dedup
       try {
         exactFileHash = await computeExactFileHash(filePath);
       } catch (e) {
         console.warn(`computeExactFileHash failed for ${fileName}:`, e.message);
-      }
-      // Skip if exact file hash already exists on server (byte-identical, e.g. AirDrop)
-      if (exactFileHash && alreadyFileHashes && alreadyFileHashes.has(exactFileHash)) {
-        console.log(`Skipping ${fileName} - exact file hash already on server (byte-identical)`);
-        return { skipped: true, reason: 'fileHash' };
       }
     } else {
       // Videos: compute exact file hash for byte-for-byte deduplication
@@ -1495,11 +1350,35 @@ class DesktopBackupClient {
         console.warn(`computeExactFileHash failed for ${fileName}:`, e.message);
         exactFileHash = null;
       }
+    }
 
-      // Skip if exact file hash already exists on server
-      if (exactFileHash && alreadyFileHashes && alreadyFileHashes.has(exactFileHash)) {
-        console.log(`Skipping ${fileName} - exact file hash already on server`);
-        return { skipped: true, reason: 'fileHash' };
+    // Check 2: Exact file hash (byte-identical - images and videos)
+    if (exactFileHash && alreadyFileHashes && alreadyFileHashes.has(exactFileHash)) {
+      console.log(`Skipping ${fileName} - exact file hash already on server`);
+      return { skipped: true, reason: 'fileHash' };
+    }
+
+    // Check 3: Perceptual hash (images - 1-bit tolerance, same as solana-seeker)
+    if (perceptualHash && alreadyPerceptualHashes && alreadyPerceptualHashes.size > 0) {
+      const matchResult = findPerceptualHashMatch(perceptualHash, alreadyPerceptualHashes, CROSS_PLATFORM_DHASH_THRESHOLD);
+      if (matchResult.match) {
+        console.log(`Skipping ${fileName} - visually identical image already on server (perceptual match, distance=${matchResult.distance})`);
+        return { skipped: true, reason: 'perceptualHash' };
+      }
+    }
+
+    // Check 4: Session hashes (within current backup batch - same as solana-seeker)
+    if (sessionHashes) {
+      if (exactFileHash && sessionHashes.sessionFileHashes.has(exactFileHash)) {
+        console.log(`Skipping ${fileName} - session fileHash match`);
+        return { skipped: true, reason: 'sessionFileHash' };
+      }
+      if (perceptualHash && sessionHashes.sessionPerceptualHashes.size > 0) {
+        const sessionMatch = findPerceptualHashMatch(perceptualHash, sessionHashes.sessionPerceptualHashes, CROSS_PLATFORM_DHASH_THRESHOLD);
+        if (sessionMatch.match) {
+          console.log(`Skipping ${fileName} - session perceptualHash match`);
+          return { skipped: true, reason: 'sessionPerceptualHash' };
+        }
       }
     }
 
@@ -1781,16 +1660,8 @@ class DesktopBackupClient {
 
     let existingIds = null;
     let existingClassic = null;
-    let alreadyFilenames = null;
-    let alreadyBaseFilenames = null;
     let alreadyFileHashes = null;
     let alreadyPerceptualHashes = null;
-    let alreadyBaseNameSizes = null;
-    let alreadyBaseNameDates = null;
-    let alreadyBaseNameTimestamps = null;
-    let alreadyExifFull = null;
-    let alreadyExifTimeModel = null;
-    let alreadyExifTimeMake = null;
 
     if (isStealthCloud) {
       // Derive master key (same as mobile app)
@@ -1806,17 +1677,9 @@ class DesktopBackupClient {
       
       // Build deduplication sets by decrypting manifests (same as mobile)
       const dedupeSets = await this.buildDeduplicationSets(existingManifests);
-      console.log(`[DEDUP] Built dedup sets: filenames=${dedupeSets.alreadyFilenames.size}, fileHashes=${dedupeSets.alreadyFileHashes.size}, perceptualHashes=${dedupeSets.alreadyPerceptualHashes.size}`);
-      alreadyFilenames = dedupeSets.alreadyFilenames;
-      alreadyBaseFilenames = dedupeSets.alreadyBaseFilenames;
+      console.log(`[DEDUP] Built dedup sets: fileHashes=${dedupeSets.alreadyFileHashes.size}, perceptualHashes=${dedupeSets.alreadyPerceptualHashes.size}`);
       alreadyFileHashes = dedupeSets.alreadyFileHashes;
       alreadyPerceptualHashes = dedupeSets.alreadyPerceptualHashes;
-      alreadyBaseNameSizes = dedupeSets.alreadyBaseNameSizes;
-      alreadyBaseNameDates = dedupeSets.alreadyBaseNameDates;
-      alreadyBaseNameTimestamps = dedupeSets.alreadyBaseNameTimestamps;
-      alreadyExifFull = dedupeSets.alreadyExifFull;
-      alreadyExifTimeModel = dedupeSets.alreadyExifTimeModel;
-      alreadyExifTimeMake = dedupeSets.alreadyExifTimeMake;
     } else {
       this.progressCallback({ message: 'Checking existing backups...', progress: 0.05 });
       existingClassic = await this.getExistingClassicFilenames();
@@ -1891,6 +1754,12 @@ class DesktopBackupClient {
       }
     }
 
+    // Session hash tracking for within-batch dedup (same as solana-seeker)
+    const sessionHashes = {
+      sessionFileHashes: new Set(),
+      sessionPerceptualHashes: new Set(),
+    };
+
     const totalFiles = Math.max(1, toUpload.length);
     const runFileUpload = createConcurrencyLimiter(MAX_PARALLEL_FILE_UPLOADS);
     let processed = 0;
@@ -1899,25 +1768,22 @@ class DesktopBackupClient {
       if (this.cancelled) return;
       try {
         if (isStealthCloud) {
-          const result = await this.uploadFile(file, idx, totalFiles, existingIds, alreadyFilenames, alreadyBaseFilenames, alreadyFileHashes, alreadyPerceptualHashes, alreadyBaseNameSizes, alreadyBaseNameDates, alreadyBaseNameTimestamps, alreadyExifFull, alreadyExifTimeModel, alreadyExifTimeMake);
+          const result = await this.uploadFile(file, idx, totalFiles, existingIds, alreadyFileHashes, alreadyPerceptualHashes, sessionHashes);
           if (result && result.skipped) {
             skipped++;
           } else if (result) {
             uploaded++;
-            // Update in-memory sets to prevent duplicates within same run
+            // Update in-memory sets to prevent duplicates within same run (same as solana-seeker)
             if (result.manifestId) {
               existingIds.add(result.manifestId);
             }
             if (result.fileHash) {
               alreadyFileHashes.add(result.fileHash);
+              sessionHashes.sessionFileHashes.add(result.fileHash);
             }
             if (result.perceptualHash) {
               alreadyPerceptualHashes.add(result.perceptualHash);
-            }
-            // Also add base filename for iOS variant deduplication within same run
-            if (file.name && alreadyBaseFilenames) {
-              const baseName = this.extractBaseFilename(file.name);
-              if (baseName) alreadyBaseFilenames.add(baseName);
+              sessionHashes.sessionPerceptualHashes.add(result.perceptualHash);
             }
           }
         } else {
@@ -1961,4 +1827,4 @@ class DesktopBackupClient {
   }
 }
 
-module.exports = { DesktopBackupClient };
+module.exports = { DesktopBackupClient, computePerceptualHash, computeFileIdentity };

@@ -1,7 +1,7 @@
 /**
  * Desktop Sync Client
  * Downloads files from StealthCloud/Remote server with mobile-grade deduplication
- * Matches the dedup logic from mobile apps (manifestId, filename, fileHash, perceptualHash, EXIF)
+ * Matches solana-seeker Android dedup logic (manifestId, filename, fileHash, perceptualHash 1-bit)
  */
 
 const fs = require('fs');
@@ -11,6 +11,7 @@ const axios = require('axios');
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
 const sharp = require('sharp');
+const { computePerceptualHash } = require('./backup-client');
 
 const STEALTHCLOUD_BASE_URL = 'https://stealthlynk.io';
 const UUID_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -965,15 +966,16 @@ class DesktopSyncClient {
   }
 
   // Build comprehensive local dedup sets from download folder
+  // Matches solana-seeker's buildLocalHashIndex: manifestId, filename, fileHash, perceptualHash
   async buildLocalDedupSets(downloadPath) {
+    const localManifestIds = new Set();
     const localFilenames = new Set();
-    const localBaseFilenames = new Set();
     const localFileHashes = new Set();
-    const localBaseNameSizes = new Map();
+    const localPerceptualHashes = new Set();
     
     try {
       if (!fs.existsSync(downloadPath)) {
-        return { localFilenames, localBaseFilenames, localFileHashes, localBaseNameSizes };
+        return { localManifestIds, localFilenames, localFileHashes, localPerceptualHashes };
       }
       
       const files = fs.readdirSync(downloadPath);
@@ -988,15 +990,11 @@ class DesktopSyncClient {
         const normalized = normalizeFilenameForCompare(file);
         if (normalized) localFilenames.add(normalized);
         
-        // Base filename match
-        const baseName = extractBaseFilename(file);
-        if (baseName) {
-          localBaseFilenames.add(baseName);
-          // Base filename + size
-          if (!localBaseNameSizes.has(baseName)) {
-            localBaseNameSizes.set(baseName, new Set());
-          }
-          localBaseNameSizes.get(baseName).add(stats.size);
+        // ManifestId (hash of filename+size) - matches solana-seeker
+        const fileIdentity = computeFileIdentity(file, stats.size);
+        if (fileIdentity) {
+          const manifestId = crypto.createHash('sha256').update(`file:${fileIdentity}`).digest('hex');
+          localManifestIds.add(manifestId);
         }
         
         // File hash (for exact byte match)
@@ -1006,23 +1004,43 @@ class DesktopSyncClient {
         } catch (e) {
           // Skip hash errors
         }
+        
+        // Perceptual hash (images only - for transcoding-resistant dedup)
+        try {
+          const phashResult = await computePerceptualHash(filePath);
+          if (phashResult && phashResult.hash) localPerceptualHashes.add(phashResult.hash);
+        } catch (e) {
+          // Skip perceptual hash errors (non-image files, etc.)
+        }
       }
     } catch (e) {
       console.warn('Failed to scan local files:', e.message);
     }
     
-    return { localFilenames, localBaseFilenames, localFileHashes, localBaseNameSizes };
+    console.log(`[SYNC] Local dedup sets: manifestIds=${localManifestIds.size}, filenames=${localFilenames.size}, fileHashes=${localFileHashes.size}, perceptualHashes=${localPerceptualHashes.size}`);
+    return { localManifestIds, localFilenames, localFileHashes, localPerceptualHashes };
   }
 
-  // Check if a manifest should be skipped (OR logic - any match = skip)
+  // Check if a server file should be skipped during sync
+  // Matches solana-seeker's shouldSkipServerFile: manifestId → filename → fileHash → perceptualHash (1-bit)
   checkShouldSkip(manifest, localSets) {
-    const { localFilenames, localBaseFilenames, localFileHashes, localBaseNameSizes } = localSets;
+    const { localManifestIds, localFilenames, localFileHashes, localPerceptualHashes } = localSets;
     const filename = manifest.filename;
     const fileSize = manifest.originalSize || manifest.size;
     const fileHash = manifest.fileHash;
     const perceptualHash = manifest.perceptualHash;
     
-    // 1. Exact filename match
+    // 1. ManifestId - use server's stored manifestId directly (same as solana-seeker)
+    // Fallback: recompute from filename+size if server manifestId not available
+    const manifestId = manifest.manifestId || (filename && fileSize ? (() => {
+      const fi = computeFileIdentity(filename, fileSize);
+      return fi ? crypto.createHash('sha256').update(`file:${fi}`).digest('hex') : null;
+    })() : null);
+    if (manifestId && localManifestIds && localManifestIds.has(manifestId)) {
+      return { skip: true, reason: 'manifestId' };
+    }
+    
+    // 2. Exact filename match
     if (filename) {
       const normalized = normalizeFilenameForCompare(filename);
       if (normalized && localFilenames.has(normalized)) {
@@ -1030,27 +1048,17 @@ class DesktopSyncClient {
       }
     }
     
-    // 2. Base filename match (cross-platform variants)
-    if (filename) {
-      const baseName = extractBaseFilename(filename);
-      if (baseName && localBaseFilenames.has(baseName)) {
-        return { skip: true, reason: 'baseFilename' };
-      }
-      
-      // 3. Base filename + size match (within 20% tolerance)
-      if (baseName && fileSize && localBaseNameSizes.has(baseName)) {
-        for (const existingSize of localBaseNameSizes.get(baseName)) {
-          const diff = Math.abs(fileSize - existingSize) / Math.max(fileSize, existingSize);
-          if (diff < 0.20) {
-            return { skip: true, reason: 'baseFilename+size' };
-          }
-        }
-      }
+    // 3. Exact file hash match (byte-identical)
+    if (fileHash && localFileHashes && localFileHashes.has(fileHash)) {
+      return { skip: true, reason: 'fileHash' };
     }
     
-    // 4. Exact file hash match (byte-identical)
-    if (fileHash && localFileHashes.has(fileHash)) {
-      return { skip: true, reason: 'fileHash' };
+    // 4. Perceptual hash match (images - 1-bit tolerance, same as solana-seeker)
+    if (perceptualHash && localPerceptualHashes && localPerceptualHashes.size > 0) {
+      const matchResult = findPerceptualHashMatch(perceptualHash, localPerceptualHashes, CROSS_PLATFORM_DHASH_THRESHOLD);
+      if (matchResult.match) {
+        return { skip: true, reason: 'perceptualHash' };
+      }
     }
     
     return { skip: false, reason: null };
@@ -1093,7 +1101,7 @@ class DesktopSyncClient {
     // Build comprehensive local dedup sets
     this.progressCallback({ message: 'Scanning local files...', progress: 0.08 });
     const localSets = await this.buildLocalDedupSets(this.config.downloadPath);
-    console.log(`[SYNC] Local dedup sets: filenames=${localSets.localFilenames.size}, baseNames=${localSets.localBaseFilenames.size}, hashes=${localSets.localFileHashes.size}`);
+    console.log(`[SYNC] Local dedup sets: manifestIds=${localSets.localManifestIds.size}, filenames=${localSets.localFilenames.size}, fileHashes=${localSets.localFileHashes.size}, perceptualHashes=${localSets.localPerceptualHashes.size}`);
 
     // Filter files to download using OR logic (any match = skip)
     this.progressCallback({ message: 'Checking for duplicates...', progress: 0.12 });
@@ -1180,7 +1188,7 @@ class DesktopSyncClient {
     // Build comprehensive local dedup sets
     this.progressCallback({ message: 'Scanning local files...', progress: 0.08 });
     const localSets = await this.buildLocalDedupSets(this.config.downloadPath);
-    console.log(`[SYNC] Local dedup sets: filenames=${localSets.localFilenames.size}, baseNames=${localSets.localBaseFilenames.size}, hashes=${localSets.localFileHashes.size}`);
+    console.log(`[SYNC] Local dedup sets: manifestIds=${localSets.localManifestIds.size}, filenames=${localSets.localFilenames.size}, fileHashes=${localSets.localFileHashes.size}, perceptualHashes=${localSets.localPerceptualHashes.size}`);
 
     // Decrypt manifests to get full data for dedup
     this.progressCallback({ message: 'Checking for duplicates...', progress: 0.12 });
