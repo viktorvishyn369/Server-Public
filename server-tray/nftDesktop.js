@@ -2213,32 +2213,10 @@ async function mintNFT(params, onProgress) {
     }
 
     // ========== EDITION-SPECIFIC IMAGE PROCESSING ==========
+    // Order: strip (already done above) → watermark → rotation → encrypt
+    // Matches solana-seeker/nftOperations.js mintPhotoNFT order exactly.
     let imageToUploadPath = uploadFilePath;
     let encryptionData = null;
-    
-    // Bake EXIF orientation into pixels so web viewers (Tensor, explorers) display
-    // the image upright. sharp.rotate() with no args reads the EXIF Orientation tag,
-    // rotates/flips the pixel data accordingly, and strips the tag from the output.
-    // This MUST run after EXIF/content hashing (which need the untouched original).
-    if (sharp) {
-      try {
-        const meta = await sharp(imageToUploadPath).metadata();
-        if (meta.orientation && meta.orientation > 1) {
-          const rotatedPath = path.join(os.tmpdir(), `nft_rotated_${Date.now()}.jpg`);
-          await sharp(imageToUploadPath)
-            .rotate()  // auto-rotate based on EXIF orientation
-            .jpeg({ quality: 95, mozjpeg: false })
-            .toFile(rotatedPath);
-          cleanupTempFiles.push(rotatedPath);
-          console.log(`[NFT] Auto-rotated image (EXIF orientation ${meta.orientation}) → ${rotatedPath}`);
-          imageToUploadPath = rotatedPath;
-        } else {
-          console.log('[NFT] Image orientation OK (1 or absent), no rotation needed');
-        }
-      } catch (rotErr) {
-        console.warn('[NFT] EXIF auto-rotation failed (non-blocking, using original):', rotErr?.message);
-      }
-    }
     
     // All editions: upload original image as-is (no resize/recompress)
     // onchain handles its own size budget in generateOnChainImage
@@ -2256,6 +2234,39 @@ async function mintNFT(params, onProgress) {
         cleanupTempFiles.push(wmResult.watermarkedPath);
         imageToUploadPath = wmResult.watermarkedPath;
       }
+    }
+    
+    // Bake EXIF orientation into pixels so web viewers (Tensor, explorers) display
+    // the image upright. sharp.rotate() with no args reads the EXIF Orientation tag,
+    // rotates/flips the pixel data accordingly, and strips the tag from the output.
+    // This MUST run after EXIF/content hashing (which need the untouched original).
+    // ONLY when the image was already processed (stripExif or watermark).
+    // When neither is set: upload original bytes untouched — preserves EXIF,
+    // original format (HEIC, PNG, RAW, etc.), and byte-exact SHA-256 match.
+    const imageAlreadyProcessed = stripExif || watermark;
+    if (sharp && imageAlreadyProcessed) {
+      try {
+        const meta = await sharp(imageToUploadPath).metadata();
+        if (meta.orientation && meta.orientation > 1) {
+          const ext = path.extname(imageToUploadPath).toLowerCase();
+          const outExt = ext === '.png' ? '.png' : '.jpg';
+          const rotatedPath = path.join(os.tmpdir(), `nft_rotated_${Date.now()}${outExt}`);
+          if (ext === '.png') {
+            await sharp(imageToUploadPath).rotate().png().toFile(rotatedPath);
+          } else {
+            await sharp(imageToUploadPath).rotate().jpeg({ quality: 95, mozjpeg: false }).toFile(rotatedPath);
+          }
+          cleanupTempFiles.push(rotatedPath);
+          console.log(`[NFT] Auto-rotated processed image (EXIF orientation ${meta.orientation}) → ${rotatedPath}`);
+          imageToUploadPath = rotatedPath;
+        } else {
+          console.log('[NFT] Image orientation OK (1 or absent), no rotation needed');
+        }
+      } catch (rotErr) {
+        console.warn('[NFT] EXIF auto-rotation failed (non-blocking, using original):', rotErr?.message);
+      }
+    } else if (!imageAlreadyProcessed) {
+      console.log('[NFT] Original bytes preserved for upload (no re-encode)');
     }
     
     // Encrypt image if requested
@@ -2722,6 +2733,8 @@ async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) 
                 const encProps = (metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
                 const storageAttr = getAttr('Storage');
                 const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imgUrl.includes('stealthlynk.io') || imgUrl.includes('stealthcloud')) ? 'cloud' : imgUrl.startsWith('data:') ? 'onchain' : (imgUrl.includes('akrd.net') || imgUrl.includes('arweave.net')) ? 'arweave' : 'ipfs';
+                const certModeRaw = getAttr('Certification Mode');
+                const certificationMode = certModeRaw ? String(certModeRaw).toLowerCase() : (edition === 'limited' ? 'private' : edition === 'open' ? 'public' : null);
                 return {
                   mintAddress,
                   assetId: mintAddress,
@@ -2733,6 +2746,7 @@ async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) 
                   ownerAddress: walletAddress,
                   isCompressed: false,
                   edition,
+                  certificationMode,
                   encrypted,
                   watermarked: getAttr('Watermarked') === 'true',
                   license: getAttr('License') || null,
@@ -3068,6 +3082,8 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
     const encrypted = encryptedFromAttr || encryptedFromFileType || encryptedFromProps || encryptedFromKeys || encryptedFromHeuristic;
     const watermarked = getAttr('Watermarked') === 'true';
     const license = getAttr('License') || null;
+    const certModeRaw = getAttr('Certification Mode');
+    const certificationMode = certModeRaw ? String(certModeRaw).toLowerCase() : (edition === 'limited' ? 'private' : edition === 'open' ? 'public' : null);
 
     // Don't cache encrypted .bin files as images — they can't render
     if (encrypted && cachedImagePath) {
@@ -3104,6 +3120,7 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
       isCompressed: isCompressed,
       merkleTree: item.compression?.tree || null,
       edition: edition,
+      certificationMode: certificationMode,
       encrypted: encrypted,
       watermarked: watermarked,
       license: license,
@@ -4240,6 +4257,7 @@ async function syncNFTsFromServer(serverUrl, authHeaders) {
         if (serverNFT.encryptionData && !local.encryptionData) { local.encryptionData = serverNFT.encryptionData; merged++; }
         if (serverNFT.thumbnailUrl && !local.thumbnailUrl) { local.thumbnailUrl = serverNFT.thumbnailUrl; merged++; }
         if (serverNFT.edition && !local.edition) { local.edition = serverNFT.edition; merged++; }
+        if (serverNFT.certificationMode && !local.certificationMode) { local.certificationMode = serverNFT.certificationMode; merged++; }
         if (serverNFT.encrypted && !local.encrypted) { local.encrypted = serverNFT.encrypted; merged++; }
         if (serverNFT.watermarked && !local.watermarked) { local.watermarked = serverNFT.watermarked; merged++; }
         if (serverNFT.license && !local.license) { local.license = serverNFT.license; merged++; }

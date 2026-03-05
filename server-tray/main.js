@@ -3817,7 +3817,9 @@ function showMainWindow() {
         if (!nft) continue;
         const attrs = nft.metadata?.attributes || nft.attributes || [];
         if (!c.contentHash) { const a = attrs.find(x => x.trait_type === 'Content Hash'); if (a) { c.contentHash = a.value; enriched = true; } }
+        if (!c.exifRawHash) { const a = attrs.find(x => x.trait_type === 'EXIF Raw Hash'); if (a) { c.exifRawHash = a.value; enriched = true; } }
         if (!c.exifHash) { const a = attrs.find(x => x.trait_type === 'EXIF Hash'); if (a) { c.exifHash = a.value; enriched = true; } }
+        if (!c.exifBindingHash) { const a = attrs.find(x => x.trait_type === 'EXIF Binding Hash'); if (a) { c.exifBindingHash = a.value; enriched = true; } }
         if (!c.cameraHash) { const a = attrs.find(x => x.trait_type === 'Camera Hash'); if (a) { c.cameraHash = a.value; enriched = true; } }
         if (!c.license || c.license === 'arr') { const a = attrs.find(x => x.trait_type === 'License'); if (a) { c.license = a.value; enriched = true; } }
         if (!c.storageType && nft.storageType) { c.storageType = nft.storageType; enriched = true; }
@@ -3841,7 +3843,9 @@ function showMainWindow() {
       const now = Date.now();
       let recoveryAttempted = 0;
       for (const c of certs) {
-        if (c.hasRfc3161 && !c.rfc3161Token) {
+        const needsRfc = c.hasRfc3161 && !c.rfc3161Token;
+        const needsC2pa = c.hasC2pa && !c.c2paManifest;
+        if (needsRfc || needsC2pa) {
           if (c._recoveryAttemptedAt && (now - c._recoveryAttemptedAt) < RECOVERY_COOLDOWN_MS) continue;
           const cKey = (c.mintAddress || '').replace(/^cnft_/, '');
           const nft = hasNFTs ? nftMap[cKey] : null;
@@ -3852,8 +3856,16 @@ function showMainWindow() {
               const result = await ipcRenderer.invoke('fetch-rfc3161-token', metaUrl, encData);
               c._recoveryAttemptedAt = Date.now();
               recoveryAttempted++;
-              if (result && result.token) { c.rfc3161Token = result.token; enriched = true; console.log('[Certs] ' + logPrefix + ' got RFC3161 token for', c.name); }
+              if (result && result.token && !c.rfc3161Token) { c.rfc3161Token = result.token; enriched = true; console.log('[Certs] ' + logPrefix + ' got RFC3161 token for', c.name); }
               if (result && result.c2pa && !c.c2paManifest) { c.c2paManifest = result.c2pa; c.hasC2pa = true; enriched = true; }
+              // Enrich hashes from fetched metadata attributes (matches mobile recovery paths)
+              if (result) {
+                if (result.contentHash && !c.contentHash) { c.contentHash = result.contentHash; enriched = true; }
+                if (result.exifRawHash && !c.exifRawHash) { c.exifRawHash = result.exifRawHash; enriched = true; }
+                if (result.exifHash && !c.exifHash) { c.exifHash = result.exifHash; enriched = true; }
+                if (result.exifBindingHash && !c.exifBindingHash) { c.exifBindingHash = result.exifBindingHash; enriched = true; }
+                if (result.cameraHash && !c.cameraHash) { c.cameraHash = result.cameraHash; enriched = true; }
+              }
             } catch (_) { c._recoveryAttemptedAt = Date.now(); recoveryAttempted++; }
           }
           if (recoveryAttempted >= 5) break; // Cap per cycle
@@ -6918,7 +6930,17 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
     if (!json) return { token: null };
     const token = json?.properties?.certificate?.rfc3161?.tsaTokenBase64 || null;
     const c2pa = json?.properties?.c2pa || null;
-    return { token, c2pa };
+    // Also extract hashes from fetched metadata attributes (matches mobile recovery paths)
+    const fAttrs = json?.attributes || [];
+    const getAttrVal = (name) => { const a = fAttrs.find(x => x.trait_type === name); return a ? a.value : null; };
+    return {
+      token, c2pa,
+      contentHash: getAttrVal('Content Hash'),
+      exifRawHash: getAttrVal('EXIF Raw Hash'),
+      exifHash: getAttrVal('EXIF Hash'),
+      exifBindingHash: getAttrVal('EXIF Binding Hash'),
+      cameraHash: getAttrVal('Camera Hash'),
+    };
   } catch (e) {
     safeConsole('log', '[Certs] fetch-rfc3161-token error:', e.message);
     return { token: null };
