@@ -252,8 +252,9 @@
         .dl-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
         .dl-row {
             display: flex; align-items: center; gap: 14px;
-            background: rgba(255,255,255,0.03); border: 1px solid var(--border-color);
-            border-radius: 6px; padding: 14px 16px; transition: border-color 0.2s;
+            background: rgba(22, 22, 22, 0.95); border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 14px 16px; transition: border-color 0.2s;
+            backdrop-filter: blur(8px);
         }
         .dl-row:hover { border-color: #444; }
         .dl-row.unavailable { opacity: 0.4; pointer-events: none; }
@@ -311,31 +312,33 @@
         .dl-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border-color); border-top-color: var(--text-secondary); border-radius: 50%; animation: dlspin 0.8s linear infinite; margin-right: 6px; vertical-align: middle; }
         @keyframes dlspin { to { transform: rotate(360deg); } }
         @media (max-width: 600px) {
+            .app-grid { grid-template-columns: 1fr; }
             .dl-row { flex-wrap: wrap; gap: 10px; }
             .dl-btn { width: 100%; justify-content: center; }
             .sha-table th:first-child, .sha-table td:first-child { display: none; }
         }
 
         /* Mobile App Downloads */
-        .app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 20px; }
+        .app-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
         .app-card {
-            background: rgba(255,255,255,0.03); border: 1px solid var(--border-color);
+            background: rgba(22, 22, 22, 0.95); border: 1px solid var(--border-color);
             border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 10px;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s; backdrop-filter: blur(8px);
         }
         .app-card:hover { border-color: #444; }
         .app-card-header { display: flex; align-items: center; gap: 10px; }
         .app-card-icon { width: 40px; height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border-radius: 10px; }
         .app-card-icon svg { width: 24px; height: 24px; fill: var(--text-secondary); }
-        .app-card-title { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+        .app-card-title { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
         .app-card-subtitle { font-size: 0.78rem; color: var(--text-muted); }
-        .app-card-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; }
+        .app-card-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; flex: 1; }
         .store-btn {
-            display: inline-flex; align-items: center; gap: 8px;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
             background: var(--text-primary); color: var(--bg-primary);
             padding: 10px 18px; border-radius: 6px; border: none;
             font-size: 0.85rem; font-weight: 600; cursor: pointer;
-            text-decoration: none; transition: opacity 0.2s; width: fit-content;
+            text-decoration: none; transition: opacity 0.2s, border-color 0.2s; width: 100%;
+            margin-top: auto;
         }
         .store-btn:hover { opacity: 0.85; }
         .store-btn svg { width: 18px; height: 18px; fill: currentColor; }
@@ -350,6 +353,10 @@
             font-size: 0.7rem; color: var(--text-muted);
             background: rgba(255,255,255,0.04); border: 1px solid var(--border-color);
             padding: 3px 8px; border-radius: 4px;
+        }
+        .desktop-heading {
+            font-size: 1rem; font-weight: 600; color: var(--text-primary);
+            margin-top: 28px; margin-bottom: 4px; letter-spacing: -0.01em;
         }
 
         .uptime-grid {
@@ -492,7 +499,7 @@
                 </div>
 
                 <!-- Desktop Downloads -->
-                <h3 style="margin-top:28px;margin-bottom:4px;">Desktop</h3>
+                <h3 class="desktop-heading">Desktop</h3>
                 <div id="photolynk-downloads">
                     <div class="dl-version-pill" id="dl-version-pill">
                         <span class="dl-version-dot"></span>
