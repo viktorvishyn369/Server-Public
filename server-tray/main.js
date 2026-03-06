@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const http = require('http');
 const Store = require('electron-store');
 const nftDesktop = require('./nftDesktop');
+const { runExifBackfill, cancelExifBackfill, signalBusy: exifBackfillBusy, signalIdle: exifBackfillIdle } = require('./exifBackfill');
 
 let tray = null;
 let mainWindow = null;
@@ -47,6 +48,26 @@ if (!hasSingleInstanceLock) {
       // ignore
     }
   });
+}
+
+// EXIF backfill: trigger after backup/sync completes if StealthCloud credentials available
+function maybeStartExifBackfill() {
+  try {
+    const credentials = store.get('backupCredentials') || {};
+    const backupFolders = store.get('backupFolders') || [];
+    if (!credentials.baseUrl || !credentials.token || backupFolders.length === 0) return;
+    setTimeout(() => {
+      runExifBackfill({
+        serverUrl: credentials.baseUrl,
+        token: credentials.token,
+        deviceUuid: credentials.deviceUuid || '',
+        backupFolders,
+        store,
+      }).catch(e => console.error('[ExifBackfill] Fatal:', e?.message));
+    }, 10000); // 10s delay to let UI settle
+  } catch (e) {
+    console.warn('[ExifBackfill] trigger error:', e?.message);
+  }
 }
 
 function startBackupPowerSaveBlocker() {
@@ -988,6 +1009,7 @@ function startPairingServer() {
                   deviceUuid: authClient.deviceUuid,
                 });
                 safeConsole('log', '[Pairing] StealthCloud authenticated - NFT cloud storage ready');
+                maybeStartExifBackfill();
               }
             } catch (authErr) {
               safeConsole('log', '[Pairing] StealthCloud auth failed (NFT will use IPFS):', authErr.message);
@@ -7802,6 +7824,7 @@ function showBackupWindow() {
 let activeBackupClient = null;
 
 ipcMain.on('start-desktop-backup', async (event, config) => {
+  exifBackfillBusy();
   try {
     // Save credentials for next time (preserve pairing fields: device_uuid, mk_email, mk_password)
     const prevCreds = store.get('backupCredentials') || {};
@@ -7857,6 +7880,7 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
           message: subStatus.reason || 'Subscription required. Open PhotoLynk on your mobile device to subscribe.',
           code: 'SUBSCRIPTION_REQUIRED'
         });
+        exifBackfillIdle();
         return;
       }
       
@@ -7893,6 +7917,7 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
     
     if (mediaFiles.length === 0) {
       event.reply('backup-complete', { message: 'No media files found in selected folders.' });
+      exifBackfillIdle();
       return;
     }
     
@@ -7918,11 +7943,14 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
     
     // Combine skipped + failed into single "Skipped" count for cleaner UI
     const totalSkipped = (result.skipped || 0) + (result.failed || 0);
+    exifBackfillIdle();
     event.reply('backup-complete', { 
       message: `Backup Complete\nUploaded: ${result.uploaded}\nSkipped: ${totalSkipped}`
     });
+    maybeStartExifBackfill();
     
   } catch (error) {
+    exifBackfillIdle();
     safeConsole('error', 'Backup error:', error);
     activeBackupClient = null;
 
@@ -7968,12 +7996,14 @@ ipcMain.on('cancel-desktop-backup', () => {
     activeBackupClient.cancel();
   }
   stopBackupPowerSaveBlocker();
+  exifBackfillIdle();
 });
 
 // IPC handlers for sync
 let activeSyncClient = null;
 
 ipcMain.on('start-desktop-sync', async (event, config) => {
+  exifBackfillBusy();
   try {
     safeConsole('log', `[SYNC] Config received:`, JSON.stringify({ source: config.source, email: config.email, downloadPath: config.downloadPath, hasPassword: !!config.password }));
     
@@ -8039,11 +8069,14 @@ ipcMain.on('start-desktop-sync', async (event, config) => {
     
     stopBackupPowerSaveBlocker();
     
+    exifBackfillIdle();
     event.reply('sync-complete', {
       message: `Sync Complete\nDownloaded: ${result.downloaded}\nSkipped: ${result.skipped}`
     });
+    maybeStartExifBackfill();
     
   } catch (error) {
+    exifBackfillIdle();
     safeConsole('error', 'Sync error:', error);
     activeSyncClient = null;
     stopBackupPowerSaveBlocker();
@@ -8056,6 +8089,7 @@ ipcMain.on('cancel-desktop-sync', () => {
     activeSyncClient.cancel();
   }
   stopBackupPowerSaveBlocker();
+  exifBackfillIdle();
 });
 
 function scanFolder(folderPath, results, extensions, depth = 0) {
