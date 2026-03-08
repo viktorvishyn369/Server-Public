@@ -1949,6 +1949,7 @@ async function decryptNFTImage(encryptedPath, wrappedKeyB64, wrapNonceB64, nonce
  */
 function buildNFTMetadata({
   name, description, imageUrl, ownerAddress, contentHash, fileSize,
+  fileUrl,
   edition = NFT_EDITION.OPEN, license = 'arr', watermarked = false, encrypted = false,
   exifRawHash = null, exifHash = null, exifBindingHash = null,
   cameraSerialHash = null, originalFormat = null, originalResolution = null,
@@ -1993,7 +1994,7 @@ function buildNFTMetadata({
     ],
     properties: {
       category: 'image',
-      files: [{ uri: imageUrl, type: uploadMimeType || 'image/jpeg' }],
+      files: [{ uri: fileUrl || imageUrl, type: uploadMimeType || 'image/jpeg' }],
       creators: [{ address: creatorAddress || ownerAddress, share: 100 }],
       ...(encrypted ? { encryption: { method: 'NaCl-secretbox', encrypted: true, ...(encryptionData ? { wrappedKey: encryptionData.wrappedKey, wrapNonce: encryptionData.wrapNonce, nonce: encryptionData.nonce, ...(encryptionData.thumbnailNonce ? { thumbnailNonce: encryptionData.thumbnailNonce } : {}), ...(encryptionData.thumbnailUrl ? { thumbnailUrl: encryptionData.thumbnailUrl } : {}) } : {}) } } : {}),
       ...((true) ? {
@@ -2427,7 +2428,8 @@ async function mintNFT(params, onProgress) {
     const metadata = buildNFTMetadata({
       name: name || 'Certified Original',
       description,
-      imageUrl,
+      imageUrl: (!(encrypt && encryptionData) && (ipfsThumbnailUrl || thumbnailUrl)) || imageUrl,
+      fileUrl: imageUrl,
       ownerAddress: walletAddress,
       creatorAddress: walletAddress,
       contentHash,
