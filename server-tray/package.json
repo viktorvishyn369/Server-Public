@@ -27,6 +27,7 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "main.js",
+      "exifBackfill.js",
       "nftDesktop.js",
       "nft-payment.html",
       "wallet-connect.html",
