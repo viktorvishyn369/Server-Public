@@ -2357,10 +2357,8 @@ async function mintNFT(params, onProgress) {
         try {
           let nacl; try { nacl = require('tweetnacl'); } catch (_) {}
           if (nacl && sharp) {
-            const meta = await sharp(filePath).metadata();
-            const halfWidth = Math.round((meta.width || 800) / 2);
-            const thumbBuf = await sharp(filePath).resize(halfWidth, null, { withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer();
-            console.log('[NFT] Encrypted thumbnail generated:', halfWidth, 'px wide,', thumbBuf.length, 'bytes');
+            const thumbBuf = await sharp(filePath).resize(800, null, { withoutEnlargement: true }).jpeg({ quality: 75 }).toBuffer();
+            console.log('[NFT] Encrypted thumbnail generated: 800px wide,', thumbBuf.length, 'bytes');
             const nftKey = Buffer.from(nftKeyB64, 'base64');
             const thumbNonce = nacl.randomBytes(24);
             const thumbEnc = nacl.secretbox(new Uint8Array(thumbBuf), thumbNonce, nftKey);
@@ -2375,6 +2373,20 @@ async function mintNFT(params, onProgress) {
               encryptionData.thumbnailUrl = thumbnailUrl;
               console.log('[NFT] Encrypted thumbnail stored:', thumbnailUrl);
             }
+            
+            // Also upload encrypted thumbnail to IPFS as redundancy fallback (if SC offline, album can still decrypt)
+            if (PINATA_JWT) {
+              try {
+                const thumbIpfs = await uploadToPinata(encThumbPath, 'application/octet-stream');
+                if (thumbIpfs.success) {
+                  ipfsThumbnailUrl = thumbIpfs.arweaveUrl;
+                  console.log('[NFT] Encrypted thumbnail uploaded to IPFS (fallback):', ipfsThumbnailUrl);
+                }
+              } catch (ipfsErr) {
+                console.log('[NFT] Encrypted thumbnail IPFS upload failed (non-critical):', ipfsErr.message);
+              }
+            }
+            if (!thumbnailUrl) thumbnailUrl = ipfsThumbnailUrl;
           }
         } catch (encThumbErr) {
           console.log('[NFT] Encrypted thumbnail failed (non-critical):', encThumbErr.message);
@@ -2382,7 +2394,7 @@ async function mintNFT(params, onProgress) {
       } else if (!encryptionData) {
         try {
           if (sharp) {
-            const thumbBuf = await sharp(filePath).resize(400, null, { withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer();
+            const thumbBuf = await sharp(filePath).resize(800, null, { withoutEnlargement: true }).jpeg({ quality: 75 }).toBuffer();
             const thumbPath = path.join(os.tmpdir(), `nft_thumb_${Date.now()}.jpg`);
             fs.writeFileSync(thumbPath, thumbBuf);
             cleanupTempFiles.push(thumbPath);
@@ -2428,7 +2440,7 @@ async function mintNFT(params, onProgress) {
     const metadata = buildNFTMetadata({
       name: name || 'Certified Original',
       description,
-      imageUrl: (!(encrypt && encryptionData) && (ipfsThumbnailUrl || thumbnailUrl)) || imageUrl,
+      imageUrl: (!(encrypt && encryptionData) && ipfsThumbnailUrl) || imageUrl,
       fileUrl: imageUrl,
       ownerAddress: walletAddress,
       creatorAddress: walletAddress,
