@@ -4872,7 +4872,10 @@ async function removeCertificateLocal(mintAddress) {
     if (!fs.existsSync(filePath)) return { success: true };
     let certs = [];
     try { certs = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) {}
-    const filtered = certs.filter(c => c.mintAddress !== mintAddress);
+    // Normalize cnft_ prefix so both forms are removed
+    const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
+    const target = normMint(mintAddress);
+    const filtered = certs.filter(c => normMint(c.mintAddress) !== target);
     fs.writeFileSync(filePath, JSON.stringify(filtered, null, 2));
     console.log('[NFT] Certificate removed for mint:', mintAddress);
     return { success: true };
