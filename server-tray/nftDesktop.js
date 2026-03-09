@@ -1905,15 +1905,22 @@ function decryptMetadataJSON(encryptedData, encryptionData, masterKey) {
 /**
  * Decrypt an encrypted NFT image (matches mobile decryptNFTImage)
  */
-async function decryptNFTImage(encryptedPath, wrappedKeyB64, wrapNonceB64, nonceB64, masterKey) {
+async function decryptNFTImage(encryptedPath, wrappedKeyB64, wrapNonceB64, nonceB64, masterKey, transferNftKeyB64 = null) {
   try {
     let nacl;
     try { nacl = require('tweetnacl'); } catch (_) {
       return { success: false, error: 'tweetnacl not available' };
     }
-    const wrappedKey = Buffer.from(wrappedKeyB64, 'base64');
-    const wrapNonce = Buffer.from(wrapNonceB64, 'base64');
-    const nftKey = nacl.secretbox.open(wrappedKey, wrapNonce, masterKey);
+    let nftKey = null;
+    if (masterKey) {
+      const wrappedKey = Buffer.from(wrappedKeyB64, 'base64');
+      const wrapNonce = Buffer.from(wrapNonceB64, 'base64');
+      nftKey = nacl.secretbox.open(wrappedKey, wrapNonce, masterKey);
+    }
+    // Fallback: use transferNftKey (raw per-NFT key included in transferred encrypted NFTs)
+    if (!nftKey && transferNftKeyB64) {
+      try { nftKey = new Uint8Array(Buffer.from(transferNftKeyB64, 'base64')); console.log('[NFT] Using transferNftKey for decryption'); } catch (_) {}
+    }
     if (!nftKey) return { success: false, error: 'Key unwrap failed' };
     const encData = fs.readFileSync(encryptedPath);
     const nonce = Buffer.from(nonceB64, 'base64');

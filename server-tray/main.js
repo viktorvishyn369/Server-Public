@@ -4411,6 +4411,14 @@ function showMainWindow() {
       return String(id).startsWith('cnft_') ? String(id).slice(5) : String(id);
     }
 
+    // Check if an NFT belongs to the currently connected wallet.
+    // NFTs without ownerAddress are kept (legacy data / safe default).
+    function nftBelongsToCurrentWallet(nft) {
+      if (!nftWalletAddress) return true; // no wallet connected — show all
+      if (!nft || !nft.ownerAddress) return true; // no owner info — keep it
+      return nft.ownerAddress === nftWalletAddress;
+    }
+
     function appendNewNFTs(fetchedNFTs) {
       if (!Array.isArray(fetchedNFTs) || fetchedNFTs.length === 0) return 0;
       const existingMap = {};
@@ -4422,6 +4430,7 @@ function showMainWindow() {
       });
       let added = 0;
       for (const nft of fetchedNFTs) {
+        if (!nftBelongsToCurrentWallet(nft)) continue; // skip NFTs from other wallets
         const id = nft && normalizeNFTId(nft.mintAddress || nft.assetId);
         if (!id) continue;
         if (id in existingMap) {
@@ -4569,7 +4578,7 @@ function showMainWindow() {
         // Show persisted local NFTs instantly (survives app restart/update)
         if (allNFTs.length === 0) {
           try {
-            const persistedNFTs = await ipcRenderer.invoke('get-stored-nfts') || [];
+            const persistedNFTs = (await ipcRenderer.invoke('get-stored-nfts') || []).filter(nftBelongsToCurrentWallet);
             if (persistedNFTs.length > 0) {
               allNFTs = persistedNFTs;
               loading.style.display = 'none';
@@ -4638,6 +4647,7 @@ function showMainWindow() {
             // Append NFTs from server/local that DAS missed (skip tx_ entries if real cnft_ exists by metadataUrl)
             let appended = 0;
             localStoredNFTs.forEach(s => {
+              if (!nftBelongsToCurrentWallet(s)) return; // skip NFTs from other wallets
               if (s.mintAddress && !dasIdSet.has(normalizeNFTId(s.mintAddress))) {
                 // Skip tx_ temp entries if DAS already has the real cnft_ with same metadataUrl
                 if (String(s.mintAddress).startsWith('tx_') && s.metadataUrl && dasMetaSet.has(s.metadataUrl)) return;
@@ -5267,14 +5277,14 @@ function showMainWindow() {
                 const transferredMintStored = mintAddr;
                 const transferredMintStripped = actualMint;
                 try {
-                  // Remove both forms to handle cNFT ids stored as 'cnft_<assetId>'
-                  await ipcRenderer.invoke('remove-stored-nft', transferredMintStored);
-                  await ipcRenderer.invoke('remove-stored-nft', transferredMintStripped);
-                  // Transfer cert to new owner via server, then remove locally
+                  // Transfer cert FIRST (before NFT removal) so encryptionData is still readable for nftKey unwrap
                   await ipcRenderer.invoke('transfer-certificate', transferredMintStored, recipient);
                   if (transferredMintStripped !== transferredMintStored) {
                     await ipcRenderer.invoke('transfer-certificate', transferredMintStripped, recipient);
                   }
+                  // Now remove both forms to handle cNFT ids stored as 'cnft_<assetId>'
+                  await ipcRenderer.invoke('remove-stored-nft', transferredMintStored);
+                  await ipcRenderer.invoke('remove-stored-nft', transferredMintStripped);
                   // Also remove from in-memory caches
                   const norm = (transferredMintStripped || '').replace('cnft_', '');
                   if (window.allNFTs) window.allNFTs = window.allNFTs.filter(n => (n.mintAddress || '').replace('cnft_', '') !== norm);
@@ -6609,13 +6619,39 @@ ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddres
     const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
     const target = normMint(mintAddress);
     const toTransfer = certs.filter(c => normMint(c.mintAddress) === target);
+    // For encrypted NFTs: unwrap the per-NFT key so new owner can decrypt
+    let transferNftKey = null;
+    try {
+      const nft = await nftDesktop.getNFTByMintAddress(mintAddress) || await nftDesktop.getNFTByMintAddress(`cnft_${target}`);
+      const encData = nft?.encryptionData;
+      if (encData?.wrappedKey && encData?.wrapNonce) {
+        const mkEmail = (credentials.mk_email || credentials.email || '').toLowerCase().trim();
+        const mkPassword = credentials.mk_password || credentials.password || '';
+        if (mkEmail && mkPassword) {
+          const masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword, mkEmail, 30000, 32, 'sha256'));
+          const nacl = require('tweetnacl');
+          const naclUtil = require('tweetnacl-util');
+          const wk = naclUtil.decodeBase64(encData.wrappedKey);
+          const wn = naclUtil.decodeBase64(encData.wrapNonce);
+          const nftKey = nacl.secretbox.open(wk, wn, masterKey);
+          if (nftKey) {
+            transferNftKey = naclUtil.encodeBase64(nftKey);
+            safeConsole('log', '[Transfer] Unwrapped nftKey for encrypted NFT transfer');
+          }
+        }
+      }
+    } catch (unwrapErr) {
+      safeConsole('log', '[Transfer] Could not unwrap nftKey:', unwrapErr.message);
+    }
     let transferred = 0;
     for (const cert of toTransfer) {
       try {
+        const fullCert = { ...cert };
+        if (transferNftKey) fullCert.transferNftKey = transferNftKey;
         const axios = require('axios');
         await axios.post(`${serverUrl}/api/nft/certificates`, {
           action: 'transfer',
-          certificate: cert,
+          certificate: fullCert,
           newOwnerAddress,
         }, { headers: authHeaders, timeout: 15000 });
         transferred++;
@@ -6624,13 +6660,13 @@ ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddres
         safeConsole('log', '[Transfer] Cert transfer sync failed:', syncErr.message);
       }
     }
-    // Remove locally (server already moved it)
-    await nftDesktop.removeCertificateLocal(mintAddress);
+    // Remove locally only if at least one cert was successfully transferred (prevents cert loss on server failure)
+    if (transferred > 0) {
+      await nftDesktop.removeCertificateLocal(mintAddress);
+    }
     return { success: true, transferred };
   } catch (e) {
     safeConsole('log', '[NFT] Transfer cert failed:', e.message);
-    // Fallback: at least remove locally
-    try { await nftDesktop.removeCertificateLocal(mintAddress); } catch (_) {}
     return { success: false, error: e.message };
   }
 });
@@ -6725,13 +6761,15 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     }
     // Derive master key from credentials (same PBKDF2 as mobile + backup-client)
     const credentials = store.get('backupCredentials') || {};
-    if (!credentials.email || !credentials.password) {
+    let masterKey = null;
+    if (credentials.email && credentials.password) {
+      // Use legacy MK creds for migrated wallet users (encryption key = original email+password)
+      const mkEmail2 = (credentials.mk_email || credentials.email).toLowerCase().trim();
+      const mkPassword2 = credentials.mk_password || credentials.password;
+      masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword2, mkEmail2, 30000, 32, 'sha256'));
+    } else if (!encryptionData.transferNftKey) {
       return { success: false, error: 'Login credentials not available — log in first' };
     }
-    // Use legacy MK creds for migrated wallet users (encryption key = original email+password)
-    const mkEmail2 = (credentials.mk_email || credentials.email).toLowerCase().trim();
-    const mkPassword2 = credentials.mk_password || credentials.password;
-    const masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword2, mkEmail2, 30000, 32, 'sha256'));
 
     // Prefer encrypted thumbnail (small, fast) over full image (may be data URI or multi-MB)
     const useThumb = !!(thumbnailUrl && encryptionData.thumbnailNonce);
@@ -6823,7 +6861,8 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
       encryptionData.wrappedKey,
       encryptionData.wrapNonce,
       decryptNonce,
-      masterKey
+      masterKey,
+      encryptionData.transferNftKey || null
     );
 
     // Clean up temp encrypted file
