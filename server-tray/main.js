@@ -5270,13 +5270,16 @@ function showMainWindow() {
                   // Remove both forms to handle cNFT ids stored as 'cnft_<assetId>'
                   await ipcRenderer.invoke('remove-stored-nft', transferredMintStored);
                   await ipcRenderer.invoke('remove-stored-nft', transferredMintStripped);
-                  await ipcRenderer.invoke('remove-certificate', transferredMintStored);
-                  await ipcRenderer.invoke('remove-certificate', transferredMintStripped);
+                  // Transfer cert to new owner via server, then remove locally
+                  await ipcRenderer.invoke('transfer-certificate', transferredMintStored, recipient);
+                  if (transferredMintStripped !== transferredMintStored) {
+                    await ipcRenderer.invoke('transfer-certificate', transferredMintStripped, recipient);
+                  }
                   // Also remove from in-memory caches
                   const norm = (transferredMintStripped || '').replace('cnft_', '');
                   if (window.allNFTs) window.allNFTs = window.allNFTs.filter(n => (n.mintAddress || '').replace('cnft_', '') !== norm);
                   cachedCerts = cachedCerts.filter(c => (c.mintAddress || '').replace('cnft_', '') !== norm);
-                  console.log('[Transfer] Removed NFT + cert from local storage:', transferredMintStored);
+                  console.log('[Transfer] Transferred cert + removed NFT from local storage:', transferredMintStored);
                 } catch (removeErr) {
                   console.log('[Transfer] Local removal error:', removeErr.message);
                 }
@@ -6583,6 +6586,51 @@ ipcMain.handle('remove-certificate', async (event, mintAddress) => {
     return { success: true };
   } catch (e) {
     safeConsole('log', '[NFT] Remove cert failed:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddress) => {
+  try {
+    const credentials = store.get('backupCredentials') || {};
+    const serverUrl = credentials.baseUrl || null;
+    const authHeader = credentials.token ? (String(credentials.token).startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`) : null;
+    const authHeaders = authHeader ? { Authorization: authHeader, ...(credentials.deviceUuid ? { 'X-Device-UUID': credentials.deviceUuid } : {}) } : null;
+    if (!serverUrl || !authHeaders || !newOwnerAddress) {
+      await nftDesktop.removeCertificateLocal(mintAddress);
+      return { success: true, transferred: false, reason: 'no server/auth/recipient' };
+    }
+    // Read full cert from local storage before removing
+    const certsPath = nftDesktop.getCertsFilePath();
+    let certs = [];
+    if (fs.existsSync(certsPath)) {
+      try { certs = JSON.parse(fs.readFileSync(certsPath, 'utf8')); } catch (_) {}
+    }
+    const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
+    const target = normMint(mintAddress);
+    const toTransfer = certs.filter(c => normMint(c.mintAddress) === target);
+    let transferred = 0;
+    for (const cert of toTransfer) {
+      try {
+        const axios = require('axios');
+        await axios.post(`${serverUrl}/api/nft/certificates`, {
+          action: 'transfer',
+          certificate: cert,
+          newOwnerAddress,
+        }, { headers: authHeaders, timeout: 15000 });
+        transferred++;
+        safeConsole('log', `[Transfer] Cert transferred to ${newOwnerAddress.slice(0, 8)}...: ${cert.id || cert.mintAddress}`);
+      } catch (syncErr) {
+        safeConsole('log', '[Transfer] Cert transfer sync failed:', syncErr.message);
+      }
+    }
+    // Remove locally (server already moved it)
+    await nftDesktop.removeCertificateLocal(mintAddress);
+    return { success: true, transferred };
+  } catch (e) {
+    safeConsole('log', '[NFT] Transfer cert failed:', e.message);
+    // Fallback: at least remove locally
+    try { await nftDesktop.removeCertificateLocal(mintAddress); } catch (_) {}
     return { success: false, error: e.message };
   }
 });
