@@ -1572,53 +1572,42 @@ function computeExifHash(exifBuffer) {
 /**
  * Request an RFC 3161 trusted timestamp from FreeTSA.org.
  * Builds a minimal DER-encoded TimeStampReq, POSTs to TSA, returns base64 TSR.
- * Verifiable with: openssl ts -verify -in token.tsr -digest <hash> -CAfile cacert.pem
+ * Tries FreeTSA first, then DigiCert, then Sectigo. Returns first success.
  * @param {string} hexHash - SHA-256 hex hash of the content to timestamp
  * @returns {Promise<{success:boolean, tsaToken:string|null, tsaUrl:string, tsaPolicy:string, error:string|null}>}
  */
 async function requestRFC3161Timestamp(hexHash) {
-  const TSA_URL = 'https://freetsa.org/tsr';
-  const TSA_POLICY = '1.2.840.113549.1.9.16.1.4'; // FreeTSA policy OID
-  const MAX_RETRIES = 3;
-  const TIMEOUT_MS = 20000;
+  const TSA_SERVERS = [
+    { url: 'https://freetsa.org/tsr', policy: '1.2.840.113549.1.9.16.1.4', name: 'FreeTSA' },
+    { url: 'http://timestamp.digicert.com', policy: '2.16.840.1.101.3.4.2.1', name: 'DigiCert' },
+    { url: 'http://timestamp.sectigo.com', policy: '1.3.6.1.4.1.6449.2.1.1', name: 'Sectigo' },
+  ];
+  const TIMEOUT_MS = 10000;
   
-  const hashBytes = Buffer.from(hexHash, 'hex'); // 32 bytes for SHA-256
+  const hashBytes = Buffer.from(hexHash, 'hex');
 
-  // Build DER-encoded TimeStampReq manually (no asn1 library needed)
-  // SHA-256 OID: 2.16.840.1.101.3.4.2.1
+  // Build DER-encoded TimeStampReq manually
   const sha256OidBytes = Buffer.from([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01]);
   const nullBytes = Buffer.from([0x05, 0x00]);
-
-  // AlgorithmIdentifier SEQUENCE { OID, NULL }
   const algIdContent = Buffer.concat([sha256OidBytes, nullBytes]);
   const algId = Buffer.concat([Buffer.from([0x30, algIdContent.length]), algIdContent]);
-
-  // hashedMessage OCTET STRING
   const hashedMsg = Buffer.concat([Buffer.from([0x04, hashBytes.length]), hashBytes]);
-
-  // MessageImprint SEQUENCE { AlgorithmIdentifier, hashedMessage }
   const msgImprintContent = Buffer.concat([algId, hashedMsg]);
   const msgImprint = Buffer.concat([Buffer.from([0x30, msgImprintContent.length]), msgImprintContent]);
-
-  // version INTEGER 1
   const version = Buffer.from([0x02, 0x01, 0x01]);
-
-  // certReq BOOLEAN TRUE
   const certReq = Buffer.from([0x01, 0x01, 0xff]);
-
-  // TimeStampReq SEQUENCE { version, messageImprint, certReq }
   const tsqContent = Buffer.concat([version, msgImprint, certReq]);
   const tsq = Buffer.concat([Buffer.from([0x30, tsqContent.length]), tsqContent]);
 
   let lastError = null;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (const tsa of TSA_SERVERS) {
     try {
-      // POST to FreeTSA
-      const { statusCode, contentType, body } = await new Promise((resolve, reject) => {
-        const url = new URL(TSA_URL);
+      const { statusCode, body } = await new Promise((resolve, reject) => {
+        const url = new URL(tsa.url);
+        const httpMod = url.protocol === 'https:' ? https : http;
         const options = {
           hostname: url.hostname,
-          port: 443,
+          port: url.port || (url.protocol === 'https:' ? 443 : 80),
           path: url.pathname,
           method: 'POST',
           headers: {
@@ -1627,10 +1616,10 @@ async function requestRFC3161Timestamp(hexHash) {
           },
           timeout: TIMEOUT_MS,
         };
-        const req = https.request(options, (res) => {
+        const req = httpMod.request(options, (res) => {
           const chunks = [];
           res.on('data', c => chunks.push(c));
-          res.on('end', () => resolve({ statusCode: res.statusCode, contentType: res.headers['content-type'] || '', body: Buffer.concat(chunks) }));
+          res.on('end', () => resolve({ statusCode: res.statusCode, body: Buffer.concat(chunks) }));
         });
         req.on('error', reject);
         req.on('timeout', () => { req.destroy(); reject(new Error('TSA request timed out')); });
@@ -1639,28 +1628,22 @@ async function requestRFC3161Timestamp(hexHash) {
       });
 
       if (statusCode !== 200) {
-        throw new Error(`TSA returned HTTP ${statusCode} (${contentType})`);
-      }
-      if (!contentType.includes('timestamp-reply')) {
-        throw new Error(`TSA returned unexpected content-type: ${contentType}`);
+        throw new Error(`${tsa.name} returned HTTP ${statusCode}`);
       }
       if (!body || body.length < 10) {
-        throw new Error(`Empty TSA response (${body ? body.length : 0} bytes)`);
+        throw new Error(`Empty response from ${tsa.name} (${body ? body.length : 0} bytes)`);
       }
 
       const tsaToken = body.toString('base64');
-      console.log('[RFC3161] Timestamp obtained from FreeTSA, token size:', body.length, 'bytes (attempt', attempt + ')');
-      return { success: true, tsaToken, tsaUrl: TSA_URL, tsaPolicy: TSA_POLICY, error: null };
+      console.log(`[RFC3161] Timestamp obtained from ${tsa.name}, token size: ${body.length} bytes`);
+      return { success: true, tsaToken, tsaUrl: tsa.url, tsaPolicy: tsa.policy, error: null };
     } catch (e) {
       lastError = e.message;
-      console.warn(`[RFC3161] Attempt ${attempt}/${MAX_RETRIES} failed:`, e.message);
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 2000 * attempt)); // 2s, 4s backoff
-      }
+      console.warn(`[RFC3161] ${tsa.name} failed: ${e.message}, trying next...`);
     }
   }
-  console.warn('[RFC3161] All', MAX_RETRIES, 'attempts failed:', lastError);
-  return { success: false, tsaToken: null, tsaUrl: TSA_URL, tsaPolicy: TSA_POLICY, error: lastError };
+  console.warn('[RFC3161] All TSA servers failed, last error:', lastError);
+  return { success: false, tsaToken: null, tsaUrl: TSA_SERVERS[0].url, tsaPolicy: TSA_SERVERS[0].policy, error: lastError };
 }
 
 /**
