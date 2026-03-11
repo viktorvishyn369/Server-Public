@@ -6939,6 +6939,10 @@ ipcMain.handle('sync-nfts-from-server', async () => {
       const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, headers);
       // Push local NFTs back to server (ensures encryptionData etc. reach other devices)
       pushLocalNFTsToServer(credentials.baseUrl, headers).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
+      // Remove locally-cached NFTs that were transferred out (matches mobile apps)
+      if (connectedWalletAddress) {
+        nftDesktop.removeTransferredNFTs(connectedWalletAddress, credentials.baseUrl, headers).catch(e => safeConsole('log', '[NFT Sync] removeTransferredNFTs failed:', e.message));
+      }
       return result;
     }
   } catch (loginErr) {
@@ -6948,6 +6952,10 @@ ipcMain.handle('sync-nfts-from-server', async () => {
   const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
   const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: authHeader });
   pushLocalNFTsToServer(credentials.baseUrl, { Authorization: authHeader }).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
+  // Remove locally-cached NFTs that were transferred out (matches mobile apps)
+  if (connectedWalletAddress) {
+    nftDesktop.removeTransferredNFTs(connectedWalletAddress, credentials.baseUrl, { Authorization: authHeader }).catch(e => safeConsole('log', '[NFT Sync] removeTransferredNFTs failed:', e.message));
+  }
   return result;
 });
 

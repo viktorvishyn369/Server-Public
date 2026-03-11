@@ -4140,6 +4140,9 @@ async function removeNFTFromStorage(mintAddress, serverUrl = null, authHeaders =
     fs.writeFileSync(nftStorageFile, JSON.stringify(filtered, null, 2));
     console.log('[NFT Storage] Removed:', mintAddress);
     
+    // Clean up associated certificates (prevents orphan certs — matches mobile apps)
+    try { await removeCertificateLocal(mintAddress); } catch (_) {}
+    
     if (serverUrl && authHeaders) {
       try {
         const axios = require('axios');
@@ -4153,6 +4156,46 @@ async function removeNFTFromStorage(mintAddress, serverUrl = null, authHeaders =
   } catch (e) {
     console.error('[NFT Storage] Remove failed:', e.message);
   }
+}
+
+/**
+ * Remove locally-stored NFTs that were transferred out (no longer on server for this wallet).
+ * Compares local set vs server set to find transferred items.
+ * Matches solana-seeker/nftOperations.js removeTransferredNFTs.
+ */
+async function removeTransferredNFTs(walletAddress, serverUrl, authHeaders) {
+  try {
+    if (!serverUrl || !authHeaders || !walletAddress) return;
+    const normMint = (m) => m ? String(m).replace(/^cnft_/, '').trim() : '';
+    const normWallet = (w) => w ? String(w).trim() : '';
+    const axios = require('axios');
+    const resp = await axios.post(`${serverUrl}/api/nft/sync`, {
+      action: 'list-mints', walletAddress,
+    }, { headers: authHeaders, timeout: 15000 });
+    const serverMints = new Set((resp.data?.mints || []).map(m => normMint(m)));
+    if (serverMints.size === 0) return; // Empty = server has no data — don't wipe local
+
+    const localNFTs = await getStoredNFTs();
+    const walletNorm = normWallet(walletAddress);
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    let removed = 0;
+    const kept = [];
+    for (const nft of localNFTs) {
+      if (normWallet(nft.ownerAddress) !== walletNorm) { kept.push(nft); continue; }
+      const mint = normMint(nft.mintAddress);
+      // Skip recently minted (< 5 min) — server may not have synced yet
+      if (nft.createdAt && new Date(nft.createdAt).getTime() > fiveMinAgo) { kept.push(nft); continue; }
+      if (nft.source === 'das') { kept.push(nft); continue; }
+      if (serverMints.has(mint)) { kept.push(nft); continue; }
+      console.log(`[NFT] Removing transferred NFT: ${nft.name || mint}`);
+      try { await removeCertificateLocal(nft.mintAddress); } catch (_) {}
+      removed++;
+    }
+    if (removed > 0) {
+      fs.writeFileSync(nftStorageFile, JSON.stringify(kept, null, 2));
+      console.log(`[NFT] Removed ${removed} transferred NFTs from local cache`);
+    }
+  } catch (e) { console.log('[NFT] removeTransferredNFTs failed (non-critical):', e.message); }
 }
 
 async function bulkSaveNFTs(nfts) {
@@ -5126,6 +5169,7 @@ module.exports = {
   getStoredNFTs,
   saveNFTToStorage,
   removeNFTFromStorage,
+  removeTransferredNFTs,
   bulkSaveNFTs,
   getNFTByMintAddress,
   syncNFTsFromServer,
