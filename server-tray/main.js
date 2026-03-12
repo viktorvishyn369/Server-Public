@@ -1457,6 +1457,12 @@ function showMainWindow() {
     .nft-search-clear { width: 24px; height: 24px; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; display: none; padding: 0; }
     .nft-search-clear:hover { color: var(--text-primary); }
     .nft-search-results { font-size: 11px; color: var(--text-muted); padding: 4px 16px 0; display: none; }
+    .nft-filter-bar { display: flex; gap: 8px; padding: 10px 16px 0; flex-shrink: 0; }
+    .nft-filter-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px; font-weight: 600; }
+    .nft-filter-btn:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+    .nft-filter-btn.active-all { background: rgba(153,69,255,0.24); border-color: rgba(153,69,255,0.5); color: #fff; }
+    .nft-filter-btn.active-public { background: rgba(34,197,94,0.2); border-color: rgba(34,197,94,0.45); color: #22c55e; }
+    .nft-filter-btn.active-private { background: rgba(99,102,241,0.22); border-color: rgba(99,102,241,0.45); color: #818cf8; }
     .nft-close-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
     .nft-close-btn:hover { background: rgba(255,255,255,0.05); color: #ff4444; border-color: #ff4444; }
     .nft-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; flex: 1; overflow-y: auto; align-content: start; }
@@ -1893,6 +1899,11 @@ function showMainWindow() {
           <button id="nft-search-clear" class="nft-search-clear" onclick="clearNFTSearch()">✕</button>
         </div>
         <div id="nft-search-results" class="nft-search-results"></div>
+        <div class="nft-filter-bar">
+          <button id="nft-filter-all" class="nft-filter-btn active-all" onclick="setNFTFilter('all')">⬡ All</button>
+          <button id="nft-filter-public" class="nft-filter-btn" onclick="setNFTFilter('public')">🌍 Public</button>
+          <button id="nft-filter-private" class="nft-filter-btn" onclick="setNFTFilter('private')">🔐 Private</button>
+        </div>
         <div class="nft-album-content">
           <div id="nft-grid" class="nft-grid"></div>
           <div id="nft-loading" class="nft-loading" style="display: none;">
@@ -3806,6 +3817,8 @@ function showMainWindow() {
       if (overlay) {
         overlay.classList.add('active');
       }
+      syncNFTFilterButtons();
+      updateNFTResultsSummary();
       if (allNFTs.length > 0) {
         renderNFTPage();
         checkForNewNFTsOnce();
@@ -4145,8 +4158,8 @@ function showMainWindow() {
         card.onmouseleave = () => card.style.borderColor = '#333';
         
         const dateStr = cert.issuedAt ? new Date(cert.issuedAt).toLocaleString('en', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : 'N/A';
-        const _isPrivate = cert.certificationMode === 'private' || (!cert.certificationMode && cert.edition === 'limited');
-        const _isPublic = cert.certificationMode === 'public' || (!cert.certificationMode && cert.edition === 'open');
+        const _isPrivate = isPrivateNFTClassification(cert);
+        const _isPublic = isPublicNFTClassification(cert);
         const tags = [_isPublic
           ? '<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(16,185,129,0.3);border-radius:4px;color:#10b981;">🌍 Public Certified</span>'
           : '<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(139,92,246,0.3);border-radius:4px;color:#8b5cf6;">🔐 Private Certified</span>'];
@@ -4193,7 +4206,7 @@ function showMainWindow() {
             <span style="font-size:15px;font-weight:700;color:#f59e0b;">Certificate of Authenticity</span>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;">
-            <span style="font-size:10px;padding:2px 6px;border:1px solid rgba(99,102,241,0.3);border-radius:4px;color:#818cf8;">\${cert.certificationMode === 'public' ? '🌍 Public' : '🔐 Private'}</span>
+            <span style="font-size:10px;padding:2px 6px;border:1px solid rgba(99,102,241,0.3);border-radius:4px;color:#818cf8;">\${isPublicNFTClassification(cert) ? '🌍 Public' : '🔐 Private'}</span>
             \${cert.encrypted ? '<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(153,69,255,0.3);border-radius:4px;color:#9945FF;">🔒 Encrypted</span>' : ''}
             \${cert.watermarked ? '<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(34,197,94,0.3);border-radius:4px;color:#22c55e;">Watermarked</span>' : ''}
             \${(cert.rfc3161Token || cert.hasRfc3161) ? '<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(16,185,129,0.4);border-radius:4px;color:#10b981;background:rgba(16,185,129,0.08);">⏱ RFC 3161</span>' : ''}
@@ -4202,7 +4215,7 @@ function showMainWindow() {
             \${cert.storageType === 'cloud' ? '<span style="font-size:10px;padding:2px 6px;border:1px solid rgba(59,130,246,0.3);border-radius:4px;color:#3b82f6;background:rgba(59,130,246,0.08);">Encrypted Cloud</span>' : ''}
           </div>
           <div style="height:1px;background:#333;margin:12px 0;"></div>
-          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Certification</span><span style="color:#fff;font-size:12px;">\${cert.certificationMode === 'public' ? 'Public Certified' : 'Private Certified'}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Certification</span><span style="color:#fff;font-size:12px;">\${isPublicNFTClassification(cert) ? 'Public Certified' : 'Private Certified'}</span></div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">License</span><span style="color:#fff;font-size:12px;">\${({'arr':'All Rights Reserved','cc-by':'CC BY 4.0','cc-by-sa':'CC BY-SA 4.0','cc-by-nc':'CC BY-NC 4.0','cc-by-nc-sa':'CC BY-NC-SA 4.0','cc-by-nd':'CC BY-ND 4.0','cc-by-nc-nd':'CC BY-NC-ND 4.0','cc0':'CC0 1.0 (Public Domain)','commercial':'Commercial License'})[cert.license] || cert.license || 'All Rights Reserved'}</span></div>
           <div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:#888;font-size:12px;">Issued</span><span style="color:#fff;font-size:12px;">\${dateStr}</span></div>
           <div style="height:1px;background:#333;margin:12px 0;"></div>
@@ -4332,16 +4345,49 @@ function showMainWindow() {
     
     let allNFTs = [];
     let nftSearchQuery = '';
+    let nftFilter = 'all';
     let nftPageIndex = 0;
     const NFT_PAGE_SIZE = 12; // 3x4 grid
     let nftAutoRefreshInterval = null;
     const NFT_AUTO_REFRESH_MS = 300000; // Check for new NFTs every 5 minutes (matches mobile)
 
+    function isPhotoLynkEcosystemNFT(nft) {
+      if (!nft) return false;
+      if (nft.merkleTree === '7qSKB5q1JMmsGx2cHzAJPxvjzXCbAfpWNDTKDM3tSunS') return true;
+      if (nft.creatorWallet === 'HttTZkUG8xn5A1uJPjRDJqqufdwvHmNQroEGmST8iimU') return true;
+      const attrs = nft.metadata?.attributes || nft.attributes || [];
+      const hasContentHash = attrs.some(a => a.trait_type === 'Content Hash');
+      const hasExifHash = attrs.some(a => a.trait_type === 'EXIF Hash');
+      if (hasContentHash && hasExifHash) return true;
+      const metaCert = nft.metadata?.properties?.certificate;
+      if (metaCert && metaCert.type && metaCert.type.includes('PhotoLynk')) return true;
+      if (nft.name && nft.name.includes('PhotoLynk')) return true;
+      return false;
+    }
+
+    function isPrivateNFTClassification(nft) {
+      return nft?.certificationMode === 'private'
+        || (nft?.edition === 'limited' && nft?.certificationMode !== 'public')
+        || nft?.encrypted === true;
+    }
+
+    function isPublicNFTClassification(nft) {
+      return (nft?.certificationMode === 'public' || (nft?.edition === 'open' && !nft?.certificationMode))
+        && nft?.encrypted !== true;
+    }
+
+    function getNFTEffectiveDateValue(nft) {
+      const timestamps = [nft?.createdAt, nft?.mintedAt, nft?.transferredAt, nft?.discoveredAt]
+        .filter(Boolean)
+        .map(value => new Date(value).getTime())
+        .filter(ts => Number.isFinite(ts) && ts > 0);
+      return timestamps.length ? Math.max(...timestamps) : 0;
+    }
+
     function getNFTBadgeTags(nft) {
       const tags = [];
-      // Certification mode (private/public) — replaces edition badges in search
-      if (nft.certificationMode === 'private') tags.push('private', 'certified');
-      else if (nft.certificationMode === 'public') tags.push('public', 'certified');
+      if (isPrivateNFTClassification(nft)) tags.push('private', 'certified');
+      else if (isPublicNFTClassification(nft)) tags.push('public', 'certified');
       // Legacy edition tags kept for backward compat search
       if (nft.edition === 'limited') tags.push('limited', 'limited edition');
       else if (nft.edition === 'open') tags.push('open', 'open edition');
@@ -4364,30 +4410,56 @@ function showMainWindow() {
     }
 
     function getFilteredNFTs() {
-      if (!nftSearchQuery.trim()) return allNFTs;
+      let result = allNFTs;
+      if (nftFilter === 'private') {
+        result = result.filter(nft => isPhotoLynkEcosystemNFT(nft) && isPrivateNFTClassification(nft));
+      } else if (nftFilter === 'public') {
+        result = result.filter(nft => isPhotoLynkEcosystemNFT(nft) && isPublicNFTClassification(nft));
+      }
+      if (!nftSearchQuery.trim()) return result;
       const q = nftSearchQuery.toLowerCase();
-      return allNFTs.filter(nft =>
+      return result.filter(nft =>
         (nft.name || '').toLowerCase().includes(q) ||
         (nft.description || '').toLowerCase().includes(q) ||
         getNFTBadgeTags(nft).includes(q)
       );
     }
 
+    function updateNFTResultsSummary() {
+      const resultsEl = document.getElementById('nft-search-results');
+      if (!resultsEl) return;
+      if (nftSearchQuery.trim()) {
+        const filtered = getFilteredNFTs();
+        resultsEl.textContent = filtered.length + ' result' + (filtered.length !== 1 ? 's' : '') + ' found';
+        resultsEl.style.display = 'block';
+      } else {
+        resultsEl.style.display = 'none';
+      }
+    }
+
+    function syncNFTFilterButtons() {
+      const allBtn = document.getElementById('nft-filter-all');
+      const publicBtn = document.getElementById('nft-filter-public');
+      const privateBtn = document.getElementById('nft-filter-private');
+      if (allBtn) allBtn.className = 'nft-filter-btn' + (nftFilter === 'all' ? ' active-all' : '');
+      if (publicBtn) publicBtn.className = 'nft-filter-btn' + (nftFilter === 'public' ? ' active-public' : '');
+      if (privateBtn) privateBtn.className = 'nft-filter-btn' + (nftFilter === 'private' ? ' active-private' : '');
+    }
+
+    function setNFTFilter(nextFilter) {
+      nftFilter = nextFilter;
+      nftPageIndex = 0;
+      syncNFTFilterButtons();
+      updateNFTResultsSummary();
+      renderNFTPage();
+    }
+
     function onNFTSearchInput(value) {
       nftSearchQuery = value;
       nftPageIndex = 0;
       const clearBtn = document.getElementById('nft-search-clear');
-      const resultsEl = document.getElementById('nft-search-results');
       if (clearBtn) clearBtn.style.display = value.length > 0 ? 'block' : 'none';
-      if (resultsEl) {
-        if (value.length > 0) {
-          const filtered = getFilteredNFTs();
-          resultsEl.textContent = filtered.length + ' result' + (filtered.length !== 1 ? 's' : '') + ' found';
-          resultsEl.style.display = 'block';
-        } else {
-          resultsEl.style.display = 'none';
-        }
-      }
+      updateNFTResultsSummary();
       renderNFTPage();
     }
     window.onNFTSearchInput = onNFTSearchInput;
@@ -4397,13 +4469,13 @@ function showMainWindow() {
       nftPageIndex = 0;
       const input = document.getElementById('nft-search-input');
       const clearBtn = document.getElementById('nft-search-clear');
-      const resultsEl = document.getElementById('nft-search-results');
       if (input) input.value = '';
       if (clearBtn) clearBtn.style.display = 'none';
-      if (resultsEl) resultsEl.style.display = 'none';
+      updateNFTResultsSummary();
       renderNFTPage();
     }
     window.clearNFTSearch = clearNFTSearch;
+    window.setNFTFilter = setNFTFilter;
 
     function normalizeNFTId(id) {
       if (!id) return id;
@@ -4873,13 +4945,9 @@ function showMainWindow() {
       if (badgeRow) {
         badgeRow.innerHTML = '';
         // Certification mode badge (Private/Public) — replaces legacy Open/Limited
-        if (nft.certificationMode === 'private') {
+        if (isPrivateNFTClassification(nft)) {
           badgeRow.innerHTML += '<div class="nft-chip cert-private">🔐 Private</div>';
-        } else if (nft.certificationMode === 'public') {
-          badgeRow.innerHTML += '<div class="nft-chip cert-public">🌍 Public</div>';
-        } else if (nft.edition === 'limited') {
-          badgeRow.innerHTML += '<div class="nft-chip cert-private">🔐 Private</div>';
-        } else if (nft.edition === 'open') {
+        } else if (isPublicNFTClassification(nft)) {
           badgeRow.innerHTML += '<div class="nft-chip cert-public">🌍 Public</div>';
         } else {
           badgeRow.innerHTML += '<div class="nft-chip ' + (isCompressed ? 'cnft' : 'standard') + '">' + (isCompressed ? 'Public' : 'Private') + '</div>';
@@ -5158,7 +5226,7 @@ function showMainWindow() {
       
       document.getElementById('nft-transfer-img').src = imageUrl;
       document.getElementById('nft-transfer-name').textContent = currentDetailNFT.name || 'Unnamed Original';
-      document.getElementById('nft-transfer-type').textContent = (currentDetailNFT.certificationMode === 'private' || currentDetailNFT.edition === 'limited') ? 'Private' : (currentDetailNFT.certificationMode === 'public' || currentDetailNFT.edition === 'open') ? 'Public' : isCompressed ? 'Public' : 'Private';
+      document.getElementById('nft-transfer-type').textContent = isPrivateNFTClassification(currentDetailNFT) ? 'Private' : isPublicNFTClassification(currentDetailNFT) ? 'Public' : isCompressed ? 'Public' : 'Private';
       
       const recipientInput = document.getElementById('nft-transfer-recipient');
       const confirmBtn = document.querySelector('.nft-transfer-actions .nft-action-btn.primary');
@@ -5199,6 +5267,23 @@ function showMainWindow() {
     function closeNFTTransfer() {
       document.getElementById('nft-transfer-modal').classList.remove('active');
     }
+
+    function isRetryableCompressedTransferErrorMessage(error) {
+      const text = String(error || '').toLowerCase();
+      if (!text) return false;
+      return (
+        text.includes('failed to verify the merkle proof') ||
+        text.includes('proof verification failed') ||
+        text.includes('concurrent merkle tree') ||
+        text.includes('leaf contents') ||
+        text.includes('invalid root') ||
+        text.includes('hashing mismatch') ||
+        text.includes('stale proof') ||
+        text.includes('root mismatch') ||
+        text.includes('proof mismatch') ||
+        (text.includes('proof') && (text.includes('merkle') || text.includes('root') || text.includes('hash') || text.includes('verify') || text.includes('canopy')))
+      );
+    }
     
     async function confirmNFTTransfer() {
       const recipient = document.getElementById('nft-transfer-recipient').value.trim();
@@ -5233,40 +5318,46 @@ function showMainWindow() {
         const mintAddr = currentDetailNFT.mintAddress || currentDetailNFT.assetId || currentDetailNFT.mint;
         const isCompressed = currentDetailNFT.isCompressed === true;
         const actualMint = isCompressed ? mintAddr.replace('cnft_', '') : mintAddr;
-        
-        // Build the transaction in the renderer using web3.js from window
-        confirmBtn.textContent = 'Preparing TX...';
-        
-        // Request transaction building from main process
-        const txResult = await ipcRenderer.invoke('build-nft-transfer-tx', {
-          mint: actualMint,
-          from: nftWalletAddress,
-          to: recipient,
-          isCompressed: isCompressed
-        });
-        
-        if (!txResult.success) {
-          throw new Error(txResult.error || 'Failed to build transaction');
-        }
-        
-        confirmBtn.textContent = 'Opening Phantom...';
-        
-        // Open browser to sign the transaction via Phantom
-        // The transaction is base64 encoded and will be signed in browser
-        ipcRenderer.send('open-nft-transfer', {
-          transaction: txResult.transaction,
-          mint: actualMint,
-          recipient: recipient,
-          isVersioned: txResult.isVersioned || false
-        });
-        
-        // Poll for transfer completion
-        let transferPollInterval = setInterval(async () => {
+        let retriedFreshProof = false;
+        let transferPollInterval = null;
+        let transferPollTimeout = null;
+        const resetTransferPolling = () => {
+          if (transferPollInterval) {
+            clearInterval(transferPollInterval);
+            transferPollInterval = null;
+          }
+          if (transferPollTimeout) {
+            clearTimeout(transferPollTimeout);
+            transferPollTimeout = null;
+          }
+        };
+        const openTransferForSignature = async (buttonText) => {
+          confirmBtn.textContent = buttonText;
+          const txResult = await ipcRenderer.invoke('build-nft-transfer-tx', {
+            mint: actualMint,
+            from: nftWalletAddress,
+            to: recipient,
+            isCompressed: isCompressed
+          });
+          if (!txResult.success) {
+            throw new Error(txResult.error || 'Failed to build transaction');
+          }
+          confirmBtn.textContent = 'Opening Phantom...';
+          ipcRenderer.send('open-nft-transfer', {
+            transaction: txResult.transaction,
+            mint: actualMint,
+            recipient: recipient,
+            isVersioned: txResult.isVersioned || false
+          });
+        };
+        const startTransferPolling = () => {
+          resetTransferPolling();
+          transferPollInterval = setInterval(async () => {
           try {
             const res = await fetch('http://localhost:3000/nft-transfer-status');
             const data = await res.json();
             if (data.completed) {
-              clearInterval(transferPollInterval);
+              resetTransferPolling();
               // Bring app window to front
               ipcRenderer.send('focus-window');
               if (data.success) {
@@ -5302,21 +5393,37 @@ function showMainWindow() {
                 } catch (_) {}
                 refreshNFTAlbum();
               } else {
-                const isCancelled = (data.error || '').toLowerCase().includes('cancel') || (data.error || '').toLowerCase().includes('rejected');
-                showTransferCancelledModal(isCancelled);
+                const errorText = String(data.error || '');
+                const isCancelled = errorText.toLowerCase().includes('cancel') || errorText.toLowerCase().includes('rejected');
+                if (isCompressed && !retriedFreshProof && isRetryableCompressedTransferErrorMessage(errorText)) {
+                  retriedFreshProof = true;
+                  try {
+                    await openTransferForSignature('Refreshing Proof...');
+                    startTransferPolling();
+                    return;
+                  } catch (retryErr) {
+                    console.error('[NFT Transfer] Fresh-proof retry failed:', retryErr);
+                    showTransferCancelledModal(false);
+                  }
+                } else {
+                  showTransferCancelledModal(isCancelled);
+                }
               }
               confirmBtn.innerHTML = 'Confirm Transfer';
               confirmBtn.disabled = false;
             }
           } catch (e) { /* Server not ready */ }
-        }, 1000);
-        
-        // Stop polling after 3 minutes
-        setTimeout(() => {
-          clearInterval(transferPollInterval);
-          confirmBtn.innerHTML = 'Confirm Transfer';
-          confirmBtn.disabled = false;
-        }, 180000);
+          }, 1000);
+          
+          transferPollTimeout = setTimeout(() => {
+            resetTransferPolling();
+            confirmBtn.innerHTML = 'Confirm Transfer';
+            confirmBtn.disabled = false;
+          }, 180000);
+        };
+
+        await openTransferForSignature('Preparing TX...');
+        startTransferPolling();
         
         return; // Don't run finally block yet
         
@@ -5618,8 +5725,8 @@ function showMainWindow() {
 
     function sortNFTsNewestFirst() {
       allNFTs.sort((a, b) => {
-        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        const da = getNFTEffectiveDateValue(a);
+        const db = getNFTEffectiveDateValue(b);
         if (da && db) return db - da;
         if (da) return -1;
         if (db) return 1;
@@ -5629,7 +5736,6 @@ function showMainWindow() {
 
     function renderNFTPage() {
       sortNFTsNewestFirst();
-      updateQsNfts(allNFTs.length);
       const grid = document.getElementById('nft-grid');
       grid.innerHTML = '';
       // Clear any pending tasks from previous page
@@ -5637,6 +5743,9 @@ function showMainWindow() {
       _ipfsQueue.length = 0;
       
       const filtered = getFilteredNFTs();
+      const visibleCount = filtered.length;
+      const totalPages = visibleCount > 0 ? Math.ceil(visibleCount / NFT_PAGE_SIZE) : 0;
+      if (nftPageIndex > totalPages - 1) nftPageIndex = Math.max(0, totalPages - 1);
       // Pre-build index map for O(1) lookup instead of O(n) indexOf per card
       const _nftIndexMap = new Map();
       for (let k = 0; k < allNFTs.length; k++) _nftIndexMap.set(allNFTs[k], k);
@@ -5706,13 +5815,9 @@ function showMainWindow() {
         const stType = nft.storageType || (rawImg.startsWith('data:') ? 'onchain' : (rawImg.includes('stealthlynk.io') || rawImg.includes('stealthcloud')) ? 'cloud' : (rawImg.includes('akrd.net') || rawImg.includes('arweave.net')) ? 'arweave' : 'ipfs');
         let badgeRow = '<div class="nft-badge-row">';
         // Certification mode badge (Private/Public) — replaces legacy Open/Limited
-        if (nft.certificationMode === 'private') {
+        if (isPrivateNFTClassification(nft)) {
           badgeRow += '<span class="nft-badge-pill" style="background:rgba(99,102,241,0.3);color:#818cf8;">🔐 Private</span>';
-        } else if (nft.certificationMode === 'public') {
-          badgeRow += '<span class="nft-badge-pill" style="background:rgba(34,197,94,0.3);color:#22c55e;">🌍 Public</span>';
-        } else if (nft.edition === 'limited') {
-          badgeRow += '<span class="nft-badge-pill" style="background:rgba(99,102,241,0.3);color:#818cf8;">🔐 Private</span>';
-        } else if (nft.edition === 'open') {
+        } else if (isPublicNFTClassification(nft)) {
           badgeRow += '<span class="nft-badge-pill" style="background:rgba(34,197,94,0.3);color:#22c55e;">🌍 Public</span>';
         } else if (isCompressed) {
           badgeRow += '<span class="nft-badge-pill" style="background:rgba(34,197,94,0.3);color:#22c55e;">cNFT</span>';
@@ -5827,7 +5932,13 @@ function showMainWindow() {
       if (!navContainer) return;
       
       const filtered = getFilteredNFTs();
-      const totalPages = Math.ceil(filtered.length / NFT_PAGE_SIZE);
+      const visibleCount = filtered.length;
+      const totalPages = visibleCount > 0 ? Math.ceil(visibleCount / NFT_PAGE_SIZE) : 0;
+      if (nftPageIndex > totalPages - 1) nftPageIndex = Math.max(0, totalPages - 1);
+      if (visibleCount === 0) {
+        navContainer.innerHTML = '';
+        return;
+      }
       const currentPage = nftPageIndex + 1;
       const hasPrev = nftPageIndex > 0;
       const hasNext = nftPageIndex < totalPages - 1;
@@ -6885,13 +6996,19 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
 });
 
 // Push local NFTs to server so encryptionData/thumbnailUrl reach other devices
-async function pushLocalNFTsToServer(serverUrl, headers) {
+async function pushLocalNFTsToServer(serverUrl, headers, walletAddress = null) {
   try {
     const axios = require('axios');
+    const normalizeWallet = (value) => value ? String(value).trim() : '';
+    const walletNorm = normalizeWallet(walletAddress);
     const localNFTs = await nftDesktop.getStoredNFTs();
     if (!localNFTs || localNFTs.length === 0) return;
+    const eligibleNFTs = walletNorm
+      ? localNFTs.filter(n => normalizeWallet(n.ownerAddress) === walletNorm)
+      : localNFTs;
+    if (eligibleNFTs.length === 0) return;
     // Only push NFTs that have encryptionData or thumbnailUrl (the critical fields)
-    const toSync = localNFTs.filter(n => n.mintAddress && (n.encryptionData || n.thumbnailUrl)).map(n => {
+    const toSync = eligibleNFTs.filter(n => n.mintAddress && (n.encryptionData || n.thumbnailUrl)).map(n => {
       const copy = { ...n };
       delete copy.exifData;
       delete copy.metadata;
@@ -6936,13 +7053,18 @@ ipcMain.handle('sync-nfts-from-server', async () => {
       const authHeader = `Bearer ${loginResp.data.token}`;
       const headers = { Authorization: authHeader };
       if (credentials.deviceUuid) headers['X-Device-UUID'] = credentials.deviceUuid;
-      const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, headers);
-      // Push local NFTs back to server (ensures encryptionData etc. reach other devices)
-      pushLocalNFTsToServer(credentials.baseUrl, headers).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
+      const walletAddress = connectedWalletAddress || null;
+      const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, headers, walletAddress);
       // Remove locally-cached NFTs that were transferred out (matches mobile apps)
-      if (connectedWalletAddress) {
-        nftDesktop.removeTransferredNFTs(connectedWalletAddress, credentials.baseUrl, headers).catch(e => safeConsole('log', '[NFT Sync] removeTransferredNFTs failed:', e.message));
+      if (walletAddress) {
+        try {
+          await nftDesktop.removeTransferredNFTs(walletAddress, credentials.baseUrl, headers);
+        } catch (e) {
+          safeConsole('log', '[NFT Sync] removeTransferredNFTs failed:', e.message);
+        }
       }
+      // Push the pruned wallet-scoped local NFTs back to server
+      pushLocalNFTsToServer(credentials.baseUrl, headers, walletAddress).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
       return result;
     }
   } catch (loginErr) {
@@ -6950,12 +7072,19 @@ ipcMain.handle('sync-nfts-from-server', async () => {
   }
   // Fallback: try with existing token
   const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
-  const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, { Authorization: authHeader });
-  pushLocalNFTsToServer(credentials.baseUrl, { Authorization: authHeader }).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
+  const fallbackHeaders = { Authorization: authHeader };
+  if (credentials.deviceUuid) fallbackHeaders['X-Device-UUID'] = credentials.deviceUuid;
+  const walletAddress = connectedWalletAddress || null;
+  const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, fallbackHeaders, walletAddress);
   // Remove locally-cached NFTs that were transferred out (matches mobile apps)
-  if (connectedWalletAddress) {
-    nftDesktop.removeTransferredNFTs(connectedWalletAddress, credentials.baseUrl, { Authorization: authHeader }).catch(e => safeConsole('log', '[NFT Sync] removeTransferredNFTs failed:', e.message));
+  if (walletAddress) {
+    try {
+      await nftDesktop.removeTransferredNFTs(walletAddress, credentials.baseUrl, fallbackHeaders);
+    } catch (e) {
+      safeConsole('log', '[NFT Sync] removeTransferredNFTs failed:', e.message);
+    }
   }
+  pushLocalNFTsToServer(credentials.baseUrl, fallbackHeaders, walletAddress).catch(e => safeConsole('log', '[NFT Sync] Background push failed:', e.message));
   return result;
 });
 

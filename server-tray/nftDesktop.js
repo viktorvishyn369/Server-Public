@@ -4260,10 +4260,14 @@ async function getNFTByMintAddress(mintAddress) {
   return nfts.find(nft => nft.mintAddress === mintAddress);
 }
 
-async function syncNFTsFromServer(serverUrl, authHeaders) {
+async function syncNFTsFromServer(serverUrl, authHeaders, walletAddress = null) {
   try {
     const axios = require('axios');
-    const response = await axios.get(`${serverUrl}/api/nft/list`, { headers: authHeaders, timeout: 15000 });
+    const response = await axios.get(`${serverUrl}/api/nft/list`, {
+      headers: authHeaders,
+      params: walletAddress ? { walletAddress } : undefined,
+      timeout: 15000,
+    });
     const serverNFTs = response.data?.nfts || [];
     
     if (serverNFTs.length === 0) return { success: true, nfts: await getStoredNFTs(), merged: 0 };
@@ -4563,137 +4567,169 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
       // Build compressed NFT (cNFT) transfer using Bubblegum program
       console.log('[Build cNFT Transfer] Building compressed NFT transfer...');
       
-      const assetId = mint; // Already cleaned of cnft_ prefix
-      const DAS_RPC_URL = SOLANA_RPC_ENDPOINTS[0];
-      
-      // Fetch asset data from DAS API
-      const assetResponse = await fetch(DAS_RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'get-asset',
-          method: 'getAsset',
-          params: { id: assetId },
-        }),
-      });
-      const assetData = await assetResponse.json();
-      
-      if (assetData.error || !assetData.result) {
-        console.error('[Build cNFT Transfer] Failed to fetch asset:', assetData.error);
-        return { success: false, error: 'Failed to fetch cNFT data. Asset may not exist.' };
-      }
-      
-      const asset = assetData.result;
-      console.log('[Build cNFT Transfer] Asset owner:', asset.ownership?.owner);
-      
-      // Verify ownership
-      if (asset.ownership?.owner !== from) {
-        return { success: false, error: 'You do not own this NFT' };
-      }
-      
-      // Fetch asset proof from DAS API
-      const proofResponse = await fetch(DAS_RPC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'get-asset-proof',
-          method: 'getAssetProof',
-          params: { id: assetId },
-        }),
-      });
-      const proofData = await proofResponse.json();
-      
-      if (proofData.error || !proofData.result) {
-        console.error('[Build cNFT Transfer] Failed to fetch proof:', proofData.error);
-        return { success: false, error: 'Failed to fetch cNFT proof.' };
-      }
-      
-      const proof = proofData.result;
-      console.log('[Build cNFT Transfer] Proof fetched, tree:', proof.tree_id);
-      
-      // Bubblegum program IDs
-      const BUBBLEGUM_PROGRAM_ID = new PublicKey('BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY');
-      const SPL_NOOP_PROGRAM_ID = new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV');
-      const SPL_ACCOUNT_COMPRESSION_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
-      
-      const merkleTree = new PublicKey(proof.tree_id);
-      
-      // Decode hash helper - DAS returns base58 strings
-      const decodeHash = (hash) => {
-        if (!hash) return Buffer.alloc(32);
-        try {
-          return new PublicKey(hash).toBuffer();
-        } catch {
-          return Buffer.from(hash);
+      const assetId = String(mint).replace(/^cnft_/, '');
+      const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+      const isRetryableCompressedTransferError = (error) => {
+        const message = String(error?.message || error || '').toLowerCase();
+        if (!message) return false;
+        return (
+          message.includes('failed to verify the merkle proof')
+          || message.includes('proof verification failed')
+          || message.includes('concurrent merkle tree')
+          || message.includes('leaf contents')
+          || message.includes('invalid root')
+          || message.includes('hashing mismatch')
+          || (message.includes('proof') && (message.includes('merkle') || message.includes('root') || message.includes('hash') || message.includes('verify') || message.includes('canopy')))
+        );
+      };
+      const describeSimulationFailure = (simulation) => {
+        const parts = [];
+        if (simulation?.value?.err) parts.push(JSON.stringify(simulation.value.err));
+        if (Array.isArray(simulation?.value?.logs) && simulation.value.logs.length > 0) {
+          parts.push(simulation.value.logs.join(' | '));
         }
+        return parts.join(' | ');
+      };
+      const dasEndpoints = [
+        { url: 'http://localhost:3000/api/nft-service/das-proxy', isProxy: true },
+        { url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***', isProxy: false },
+        { url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***', isProxy: false },
+      ];
+      const callDAS = async (method, params) => {
+        let lastError = null;
+        for (const endpoint of dasEndpoints) {
+          try {
+            const response = await fetch(endpoint.url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: endpoint.isProxy
+                ? JSON.stringify({ method, params })
+                : JSON.stringify({ jsonrpc: '2.0', id: `desktop-${method}`, method, params }),
+            });
+            const json = await response.json();
+            if (json?.result) return json;
+            lastError = new Error(json?.error?.message || `DAS ${method} failed`);
+          } catch (e) {
+            lastError = e;
+          }
+        }
+        throw lastError || new Error(`DAS ${method} failed`);
       };
       
-      const root = decodeHash(proof.root);
-      const dataHash = decodeHash(asset.compression.data_hash);
-      const creatorHash = decodeHash(asset.compression.creator_hash);
-      const leafIndex = asset.compression.leaf_id;
-      const nonce = BigInt(leafIndex);
-      
-      // Derive tree config PDA
-      const [treeConfig] = PublicKey.findProgramAddressSync(
-        [merkleTree.toBuffer()],
-        BUBBLEGUM_PROGRAM_ID
-      );
-      
-      // Build proof path (remaining accounts)
-      const proofPath = proof.proof.map(p => ({
-        pubkey: new PublicKey(p),
-        isSigner: false,
-        isWritable: false,
-      }));
-      
-      // Build transfer instruction data
-      const discriminator = Buffer.from([163, 52, 200, 231, 140, 3, 69, 186]);
-      const nonceBuffer = Buffer.alloc(8);
-      nonceBuffer.writeBigUInt64LE(nonce, 0);
-      const indexBuffer = Buffer.alloc(4);
-      indexBuffer.writeUInt32LE(leafIndex, 0);
-      
-      const instructionData = Buffer.concat([
-        discriminator, root, dataHash, creatorHash, nonceBuffer, indexBuffer,
-      ]);
-      
-      const transferAccounts = [
-        { pubkey: treeConfig, isSigner: false, isWritable: false },
-        { pubkey: fromPubkey, isSigner: true, isWritable: false },
-        { pubkey: fromPubkey, isSigner: false, isWritable: false },
-        { pubkey: toPubkey, isSigner: false, isWritable: false },
-        { pubkey: merkleTree, isSigner: false, isWritable: true },
-        { pubkey: SPL_NOOP_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        ...proofPath,
-      ];
-      
-      const transferInstruction = new TransactionInstruction({
-        programId: BUBBLEGUM_PROGRAM_ID,
-        keys: transferAccounts,
-        data: instructionData,
-      });
-      
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      
-      // Build versioned transaction for cNFT
-      const messageV0 = new TransactionMessage({
-        payerKey: fromPubkey,
-        recentBlockhash: blockhash,
-        instructions: [transferInstruction],
-      }).compileToV0Message();
-      
-      const transaction = new VersionedTransaction(messageV0);
-      
-      // Serialize versioned transaction
-      const serialized = Buffer.from(transaction.serialize()).toString('base64');
-      
-      console.log('[Build cNFT Transfer] Transaction built successfully');
-      return { success: true, transaction: serialized, isVersioned: true };
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const assetData = await callDAS('getAsset', { id: assetId });
+          if (!assetData.result) {
+            console.error('[Build cNFT Transfer] Failed to fetch asset:', assetData.error);
+            return { success: false, error: 'Failed to fetch cNFT data. Asset may not exist.' };
+          }
+          
+          const asset = assetData.result;
+          console.log('[Build cNFT Transfer] Asset owner:', asset.ownership?.owner);
+          
+          if (asset.ownership?.owner !== from) {
+            return { success: false, error: 'You do not own this NFT' };
+          }
+          
+          const proofData = await callDAS('getAssetProof', { id: assetId });
+          if (!proofData.result) {
+            console.error('[Build cNFT Transfer] Failed to fetch proof:', proofData.error);
+            return { success: false, error: 'Failed to fetch cNFT proof.' };
+          }
+          
+          const proof = proofData.result;
+          console.log('[Build cNFT Transfer] Proof fetched, tree:', proof.tree_id);
+          
+          const BUBBLEGUM_PROGRAM_ID = new PublicKey('BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY');
+          const SPL_NOOP_PROGRAM_ID = new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV');
+          const SPL_ACCOUNT_COMPRESSION_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
+          
+          const merkleTree = new PublicKey(proof.tree_id);
+          
+          const decodeHash = (hash) => {
+            if (!hash) return Buffer.alloc(32);
+            if (hash.startsWith?.('0x')) return Buffer.from(hash.slice(2), 'hex');
+            try {
+              return new PublicKey(hash).toBuffer();
+            } catch {
+              return Buffer.from(hash);
+            }
+          };
+          
+          const root = decodeHash(proof.root);
+          const dataHash = decodeHash(asset.compression.data_hash);
+          const creatorHash = decodeHash(asset.compression.creator_hash);
+          const leafIndex = asset.compression.leaf_id;
+          const nonce = BigInt(leafIndex);
+          
+          const [treeConfig] = PublicKey.findProgramAddressSync(
+            [merkleTree.toBuffer()],
+            BUBBLEGUM_PROGRAM_ID
+          );
+          
+          const proofPath = proof.proof.map(p => ({
+            pubkey: new PublicKey(p),
+            isSigner: false,
+            isWritable: false,
+          }));
+          
+          const discriminator = Buffer.from([163, 52, 200, 231, 140, 3, 69, 186]);
+          const nonceBuffer = Buffer.alloc(8);
+          nonceBuffer.writeBigUInt64LE(nonce, 0);
+          const indexBuffer = Buffer.alloc(4);
+          indexBuffer.writeUInt32LE(leafIndex, 0);
+          
+          const instructionData = Buffer.concat([
+            discriminator, root, dataHash, creatorHash, nonceBuffer, indexBuffer,
+          ]);
+          
+          const transferAccounts = [
+            { pubkey: treeConfig, isSigner: false, isWritable: false },
+            { pubkey: fromPubkey, isSigner: true, isWritable: false },
+            { pubkey: fromPubkey, isSigner: false, isWritable: false },
+            { pubkey: toPubkey, isSigner: false, isWritable: false },
+            { pubkey: merkleTree, isSigner: false, isWritable: true },
+            { pubkey: SPL_NOOP_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            ...proofPath,
+          ];
+          
+          const transferInstruction = new TransactionInstruction({
+            programId: BUBBLEGUM_PROGRAM_ID,
+            keys: transferAccounts,
+            data: instructionData,
+          });
+          
+          const { blockhash } = await connection.getLatestBlockhash('confirmed');
+          
+          const messageV0 = new TransactionMessage({
+            payerKey: fromPubkey,
+            recentBlockhash: blockhash,
+            instructions: [transferInstruction],
+          }).compileToV0Message();
+          
+          const transaction = new VersionedTransaction(messageV0);
+          const simulation = await connection.simulateTransaction(transaction, {
+            sigVerify: false,
+            replaceRecentBlockhash: true,
+          });
+          if (simulation?.value?.err) {
+            throw new Error(describeSimulationFailure(simulation) || 'Transaction simulation failed');
+          }
+          const serialized = Buffer.from(transaction.serialize()).toString('base64');
+          
+          console.log('[Build cNFT Transfer] Transaction built successfully');
+          return { success: true, transaction: serialized, isVersioned: true };
+        } catch (e) {
+          if (attempt < 2 && isRetryableCompressedTransferError(e)) {
+            console.warn(`[Build cNFT Transfer] Re-fetching fresh proof after build attempt ${attempt} failed:`, e.message);
+            await wait(900 * attempt);
+            continue;
+          }
+          throw e;
+        }
+      }
     }
     
     // Build standard NFT transfer transaction
