@@ -5207,6 +5207,9 @@ function showMainWindow() {
       if (!nft) return false;
       if (nft.merkleTree === '7qSKB5q1JMmsGx2cHzAJPxvjzXCbAfpWNDTKDM3tSunS') return true;
       if (nft.creatorWallet === 'HttTZkUG8xn5A1uJPjRDJqqufdwvHmNQroEGmST8iimU') return true;
+      const mintPlatform = String(nft.mintPlatform || '').toLowerCase();
+      if (mintPlatform.includes('photolynk') || mintPlatform === 'nft-service') return true;
+      if (nft.contentHash && nft.exifHash) return true;
       const attrs = nft.metadata?.attributes || nft.attributes || [];
       const hasContentHash = attrs.some(a => a.trait_type === 'Content Hash');
       const hasExifHash = attrs.some(a => a.trait_type === 'EXIF Hash');
@@ -6732,9 +6735,10 @@ ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddres
     const toTransfer = certs.filter(c => normMint(c.mintAddress) === target);
     // For encrypted NFTs: unwrap the per-NFT key so new owner can decrypt
     let transferNftKey = null;
+    let encData = null;
     try {
       const nft = await nftDesktop.getNFTByMintAddress(mintAddress) || await nftDesktop.getNFTByMintAddress(`cnft_${target}`);
-      const encData = nft?.encryptionData;
+      encData = nft?.encryptionData;
       if (encData?.wrappedKey && encData?.wrapNonce) {
         const mkEmail = (credentials.mk_email || credentials.email || '').toLowerCase().trim();
         const mkPassword = credentials.mk_password || credentials.password || '';
@@ -6759,6 +6763,8 @@ ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddres
       try {
         const fullCert = { ...cert };
         if (transferNftKey) fullCert.transferNftKey = transferNftKey;
+        if (encData?.nonce) fullCert.transferNonce = encData.nonce;
+        if (encData?.thumbnailNonce) fullCert.transferThumbnailNonce = encData.thumbnailNonce;
         const axios = require('axios');
         await axios.post(`${serverUrl}/api/nft/certificates`, {
           action: 'transfer',

@@ -192,6 +192,9 @@ function isPhotoLynkEcosystem(nft) {
   if (!nft) return false;
   if (nft.merkleTree === PHOTOLYNK_MERKLE_TREE) return true;
   if (nft.creatorWallet === NFT_COMMISSION_WALLET) return true;
+  const mintPlatform = String(nft.mintPlatform || '').toLowerCase();
+  if (mintPlatform.includes('photolynk') || mintPlatform === 'nft-service') return true;
+  if (nft.contentHash && nft.exifHash) return true;
   const attrs = nft.metadata?.attributes || nft.attributes || [];
   const hasContentHash = attrs.some(a => a.trait_type === 'Content Hash');
   const hasExifHash = attrs.some(a => a.trait_type === 'EXIF Hash');
