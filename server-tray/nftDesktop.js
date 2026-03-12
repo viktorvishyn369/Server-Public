@@ -1662,11 +1662,11 @@ function buildC2PAManifest({ contentHash, exifHash, cameraSerialHash, creatorWal
   return {
     '@context': 'https://c2pa.org/statements/v1',
     'claim_generator': `PhotoLynk/${APP_VERSION}`,
-    'title': fileName || 'PhotoLynk Certified Original',
+    'title': fileName || 'PhotoLynk Certified Photo',
     'format': originalFormat || 'image/jpeg',
     'instance_id': `urn:photolynk:${contentHash}`,
     'claim': {
-      'dc:title': fileName || 'PhotoLynk Certified Original',
+      'dc:title': fileName || 'PhotoLynk Certified Photo',
       'dc:format': originalFormat || 'image/jpeg',
       'created': mintTimestamp || new Date().toISOString(),
       'claim_generator': `PhotoLynk/${APP_VERSION} (Desktop)`,
@@ -1723,7 +1723,7 @@ function buildC2PAManifest({ contentHash, exifHash, cameraSerialHash, creatorWal
       },
     },
     'ingredients': [{
-      'title': fileName || 'original',
+      'title': fileName || 'photo',
       'format': originalFormat || 'image/jpeg',
       'instance_id': `urn:photolynk:original:${contentHash}`,
       'relationship': 'parentOf',
@@ -1956,10 +1956,10 @@ function buildNFTMetadata({
   const bps = EDITION_ROYALTY_BPS[edition] || 500;
   const licenseEntry = NFT_LICENSE_OPTIONS.find(l => l.id === license);
   const licenseLabel = licenseEntry ? licenseEntry.label : 'All Rights Reserved';
-  const defaultDesc = 'Certified Original — certificate of authenticity with RFC 3161 trusted timestamp and C2PA provenance';
+  const defaultDesc = 'Certified Photo — certificate of authenticity with RFC 3161 trusted timestamp and C2PA provenance';
 
   const metadata = {
-    name: name || ('Certified Original — ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })),
+    name: name || ('Certified Photo — ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })),
     symbol: 'PLNK',
     description: description || defaultDesc,
     image: imageUrl,
@@ -1971,8 +1971,8 @@ function buildNFTMetadata({
       ...(exifHash ? [{ trait_type: 'EXIF Hash', value: `SHA256:${exifHash}` }] : []),
       ...(exifBindingHash ? [{ trait_type: 'EXIF Binding Hash', value: `SHA256:${exifBindingHash}` }] : []),
       ...(cameraSerialHash ? [{ trait_type: 'Camera Hash', value: `SHA256:${cameraSerialHash}` }] : []),
-      ...(fileSize ? [{ trait_type: 'Original Size', value: `${fileSize} bytes` }] : []),
-      ...(originalFormat ? [{ trait_type: 'Original Format', value: originalFormat }] : []),
+      ...(fileSize ? [{ trait_type: 'Photo Size', value: `${fileSize} bytes` }] : []),
+      ...(originalFormat ? [{ trait_type: 'Photo Format', value: originalFormat }] : []),
       ...(originalResolution ? [{ trait_type: 'Resolution', value: originalResolution }] : []),
       { trait_type: 'License', value: licenseLabel },
       { trait_type: 'Watermarked', value: watermarked ? 'true' : 'false' },
@@ -2431,7 +2431,7 @@ async function mintNFT(params, onProgress) {
     // Step 3: Build and upload metadata with edition support
     onProgress?.({ status: 'Uploading metadata...' });
     const metadata = buildNFTMetadata({
-      name: name || 'Certified Original',
+      name: name || 'Certified Photo',
       description,
       imageUrl: (!(encrypt && encryptionData) && ipfsThumbnailUrl) || imageUrl,
       fileUrl: imageUrl,
@@ -2542,7 +2542,7 @@ async function mintNFT(params, onProgress) {
       amount: feeSol.toFixed(9),
       feeUsd: feeUsd.toFixed(2),
       reference: reference,
-      name: name || 'Certified Original',
+      name: name || 'Certified Photo',
       imageUrl: imageUrlForParam,
       ...(imageTokenForParam ? { imageToken: imageTokenForParam } : {}),
       metadataUrl: metadataUpload.arweaveUrl || metadataUpload.gatewayUrl,
@@ -3417,7 +3417,7 @@ function openNFTMintWindow(appDataPath, credentials) {
   mintWindow = new BrowserWindow({
     width: 480,
     height: 700,
-    title: 'Certify Original',
+    title: 'Certify Photo',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -3475,7 +3475,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Certify Original</title>
+  <title>Certify Photo</title>
   <style>
     :root {
       --bg: #0a0a0a;
@@ -3544,7 +3544,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
 </head>
 <body>
   <div class="header">
-    <h1><span>🛡️</span> Certify Original</h1>
+    <h1><span>🛡️</span> Certify Photo</h1>
     <button class="close-btn" onclick="window.close()">✕</button>
   </div>
   
@@ -3614,11 +3614,11 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
     <div class="card">
       <div class="input-group">
         <label>Name</label>
-        <input type="text" id="nft-name" placeholder="Certified Original">
+        <input type="text" id="nft-name" placeholder="Certified Photo">
       </div>
       <div class="input-group">
         <label>Description (optional)</label>
-        <textarea id="nft-description" placeholder="Description of the certified original..."></textarea>
+        <textarea id="nft-description" placeholder="Description of the certified photo..."></textarea>
       </div>
       <div class="privacy-toggle" onclick="toggleStripExif()" style="display: flex; align-items: center; padding: 12px 0; cursor: pointer; border-top: 1px solid var(--border); margin-top: 12px;">
         <div style="flex: 1;">
@@ -3641,7 +3641,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   </div>
   
   <button class="mint-btn" id="mint-btn" disabled onclick="mintNFT()">
-    <span>🛡️</span> Certify Original
+    <span>🛡️</span> Certify Photo
   </button>
   
   <script>
@@ -3841,7 +3841,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       
       if (selectedPhoto && walletAddress && !isMinting) {
         const price = getCurrentPrice();
-        btn.innerHTML = '<span>🛡️</span> Certify Original ($' + parseFloat(price).toFixed(2) + ')';
+        btn.innerHTML = '<span>🛡️</span> Certify Photo ($' + parseFloat(price).toFixed(2) + ')';
       }
     }
     
@@ -3853,7 +3853,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
       btn.disabled = true;
       btn.innerHTML = '<span>⏳</span> Certifying...';
       
-      const name = document.getElementById('nft-name').value || 'Certified Original';
+      const name = document.getElementById('nft-name').value || 'Certified Photo';
       const description = document.getElementById('nft-description').value || '';
       
       try {
@@ -5067,7 +5067,7 @@ function formatCertificateForExport(cert) {
     'SECTION 1 — WORK IDENTIFICATION',
     '',
     `  Title:          ${cert.name || 'Untitled'}`,
-    `  Certification:  ${cert.certificationMode === 'public' ? 'Public Certified' : cert.certificationMode === 'private' ? 'Private Certified' : cert.edition === 'limited' ? 'Private Certified' : cert.edition === 'open' ? 'Public Certified' : 'Certified Original'}`,
+    `  Certification:  ${cert.certificationMode === 'public' ? 'Public Certified' : cert.certificationMode === 'private' ? 'Private Certified' : cert.edition === 'limited' ? 'Private Certified' : cert.edition === 'open' ? 'Public Certified' : 'Certified Photo'}`,
     `  License:        ${licenseLabel}`,
     ...(licenseUrl ? [`  License Deed:   ${licenseUrl}`] : []),
     '',

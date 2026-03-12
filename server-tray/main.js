@@ -1782,7 +1782,7 @@ function showMainWindow() {
         <div class="qs-cell">
           <div class="qs-icon" style="background:rgba(153,69,255,0.12);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9945FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
           <div class="qs-text">
-            <div class="qs-label">Originals</div>
+            <div class="qs-label">Photos</div>
             <div class="qs-value" id="qs-nfts">—</div>
           </div>
         </div>
@@ -1830,13 +1830,13 @@ function showMainWindow() {
 
         <div class="section-header-row">
           <div class="section-dot" style="background:#9945FF;"></div>
-          <div><div class="section-header-label" style="color:#9945FF;">AUTHENTICITY</div><div class="section-header-sub">Tamper-proof certified originals</div></div>
+          <div><div class="section-header-label" style="color:#9945FF;">AUTHENTICITY</div><div class="section-header-sub">Tamper-proof certified photos</div></div>
         </div>
         <div class="action-row">
           <div class="action-btn nft" onclick="openNFTMint()">
             <div class="action-btn-icon nft-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
             <div class="action-btn-text">
-              <div class="action-btn-title nft-title">Certify Original</div>
+              <div class="action-btn-title nft-title">Certify Photo</div>
               <div class="action-btn-subtitle nft-subtitle">Create a permanent authenticity record</div>
             </div>
             <div class="action-btn-arrow nft-arrow">›</div>
@@ -1845,8 +1845,8 @@ function showMainWindow() {
         <div class="feature-card-row">
           <div class="feature-card album" onclick="openNFTAlbum()">
             <div class="feature-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
-            <div class="feature-card-title">Originals</div>
-            <div class="feature-card-sub">Verified originals</div>
+            <div class="feature-card-title">Photos</div>
+            <div class="feature-card-sub">Verified photos</div>
           </div>
           <div class="feature-card certs" onclick="openCertificates()">
             <div class="feature-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg></div>
@@ -1895,7 +1895,7 @@ function showMainWindow() {
         </div>
         <div class="nft-search-bar">
           <span style="color:var(--text-secondary);font-size:14px;">🔍</span>
-          <input id="nft-search-input" class="nft-search-input" type="text" placeholder="Search originals..." oninput="onNFTSearchInput(this.value)">
+          <input id="nft-search-input" class="nft-search-input" type="text" placeholder="Search photos..." oninput="onNFTSearchInput(this.value)">
           <button id="nft-search-clear" class="nft-search-clear" onclick="clearNFTSearch()">✕</button>
         </div>
         <div id="nft-search-results" class="nft-search-results"></div>
@@ -1908,10 +1908,10 @@ function showMainWindow() {
           <div id="nft-grid" class="nft-grid"></div>
           <div id="nft-loading" class="nft-loading" style="display: none;">
             <div class="nft-spinner"></div>
-            <span>Loading originals...</span>
+            <span>Loading photos...</span>
           </div>
           <div id="nft-empty" class="nft-empty" style="display: none;">
-            <span>No certified originals yet. Certify your first photo!</span>
+            <span>No certified photos yet. Certify your first photo!</span>
           </div>
           <div id="nft-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-shrink:0;"></div>
         </div>
@@ -1932,7 +1932,7 @@ function showMainWindow() {
           <div id="certs-empty" style="display:none;text-align:center;padding:40px;color:#888;">
             <div style="font-size:32px;margin-bottom:8px;">🏆</div>
             <div style="font-weight:600;color:#fff;margin-bottom:4px;">No Proof Records Yet</div>
-            <div style="font-size:12px;">Certify an original to receive a Certificate of Authenticity</div>
+            <div style="font-size:12px;">Certify a photo to receive a Certificate of Authenticity</div>
           </div>
           <div id="certs-list" style="display:flex;flex-direction:column;gap:10px;"></div>
         </div>
@@ -1966,7 +1966,7 @@ function showMainWindow() {
 
           <button id="nft-transfer-main-btn" class="nft-transfer-main" onclick="openNFTTransfer()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            Transfer Original
+            Transfer Photo
           </button>
         </div>
       </div>
@@ -1975,7 +1975,7 @@ function showMainWindow() {
       <div id="nft-transfer-modal" class="nft-transfer-modal">
         <div class="nft-transfer-content">
           <div class="nft-transfer-header">
-            <span class="nft-transfer-title">Transfer Original</span>
+            <span class="nft-transfer-title">Transfer Photo</span>
             <button class="nft-transfer-close" onclick="closeNFTTransfer()">✕</button>
           </div>
           <div class="nft-transfer-body">
@@ -2005,7 +2005,7 @@ function showMainWindow() {
       <!-- NFT Mint Panel (full-screen overlay) -->
       <div id="nft-mint-section" class="nft-mint-section" style="display: none;">
         <div class="nft-mint-header">
-          <div class="nft-mint-title">Certify Original</div>
+          <div class="nft-mint-title">Certify Photo</div>
           <button class="nft-mint-close" onclick="closeNFTMint()">✕</button>
         </div>
         
@@ -2027,7 +2027,7 @@ function showMainWindow() {
         
         <!-- 2. Name -->
         <div class="nft-option-group">
-          <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Original)">
+          <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Photo)">
           <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)" style="display:none">
         </div>
         
@@ -2041,7 +2041,7 @@ function showMainWindow() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 <span class="nft-cert-card-name">Private Certified</span>
               </div>
-              <div class="nft-cert-card-desc">Encrypted on your device before upload. Only you can decrypt and view the original.</div>
+              <div class="nft-cert-card-desc">Encrypted on your device before upload. Only you can decrypt and view the photo.</div>
               <div class="nft-cert-card-chips">
                 <span class="cert-chip green">Full quality</span>
                 <span class="cert-chip green">Zero-knowledge</span>
@@ -2072,7 +2072,7 @@ function showMainWindow() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
               <div>
                 <div class="nft-toggle-title">Add Watermark</div>
-                <div class="nft-toggle-desc">Protect your public original with a visible watermark</div>
+                <div class="nft-toggle-desc">Protect your public photo with a visible watermark</div>
               </div>
             </div>
             <input type="checkbox" id="nft-watermark-public" class="nft-toggle-check">
@@ -2125,7 +2125,7 @@ function showMainWindow() {
         
         <!-- Certify Button -->
         <button class="nft-mint-btn" id="nft-mint-btn" disabled onclick="doMintNFT()">
-          Certify Original
+          Certify Photo
         </button>
         
         <!-- HIDDEN: Internal state checkboxes read by JS — not shown to user -->
@@ -2222,7 +2222,7 @@ function showMainWindow() {
   <!-- NFT Welcome/Guide Modal -->
   <div id="nft-guide-overlay" class="nft-guide-overlay" style="display: none !important;">
     <div class="nft-guide-header">
-      <div style="font-size:14px;font-weight:700;color:#fff;">Certifying Your Originals</div>
+      <div style="font-size:14px;font-weight:700;color:#fff;">Certifying Your Photos</div>
       <button class="nft-mint-close" onclick="closeNFTGuide()">✕</button>
       <div class="nft-guide-scroll">
 
@@ -2245,7 +2245,7 @@ function showMainWindow() {
             <div class="nft-guide-detail-toggle"><span>Details</span><span class="arrow">›</span></div>
             <div class="nft-guide-detail-body"><div class="nft-guide-detail-inner">
               <div class="nft-guide-pro">Viewable in any compatible app, marketplace, or browser</div>
-              <div class="nft-guide-pro">Original quality — no compression, no re-encoding</div>
+              <div class="nft-guide-pro">Photo quality — no compression, no re-encoding</div>
               <div class="nft-guide-pro">Optional watermark to protect your work</div>
               <div class="nft-guide-pro">Transferable and sellable on any compatible marketplace</div>
               <div class="nft-guide-con">Image is publicly accessible via storage gateway</div>
@@ -2285,7 +2285,7 @@ function showMainWindow() {
             <span class="nft-guide-ex-tag" style="background:rgba(245,158,11,0.15);color:#fbbf24;">Certificate</span>
             <span class="nft-guide-ex-name">Copyright proof with legal timestamps</span>
           </div>
-          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Limited Edition + Embedded in Record + Encrypted.</span> Your original photo and metadata are stored directly inside the authenticity record (not in a separate location — think of it as a permanent file attached to your certificate). No external storage, no links that can break. Includes SHA-256 hashes of image + EXIF + camera serial, an <span class="nft-guide-hl">RFC 3161 trusted timestamp</span> (court-admissible), and a <span class="nft-guide-hl">C2PA provenance manifest</span> (Adobe/Microsoft standard).</div>
+          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Limited Edition + Embedded in Record + Encrypted.</span> Your photo and metadata are stored directly inside the authenticity record (not in a separate location — think of it as a permanent file attached to your certificate). No external storage, no links that can break. Includes SHA-256 hashes of image + EXIF + camera serial, an <span class="nft-guide-hl">RFC 3161 trusted timestamp</span> (court-admissible), and a <span class="nft-guide-hl">C2PA provenance manifest</span> (Adobe/Microsoft standard).</div>
           <div class="nft-guide-ex-row">
             <span class="nft-guide-chip green">Image embedded in record</span>
             <span class="nft-guide-chip green">Encrypted</span>
@@ -2317,7 +2317,7 @@ function showMainWindow() {
         </div>
 
         <div class="nft-guide-note" style="margin-top:4px;">
-          <strong>Encryption:</strong> Done on your device with AES-256-GCM before anything is uploaded. The decryption key is sealed to your credentials via a signature request — your private key never leaves your device. No server ever sees the original.
+          <strong>Encryption:</strong> Done on your device with AES-256-GCM before anything is uploaded. The decryption key is sealed to your credentials via a signature request — your private key never leaves your device. No server ever sees the photo.
         </div>
 
         <div class="nft-guide-note" style="margin-top:4px;">
@@ -3400,9 +3400,9 @@ function showMainWindow() {
       const btn = document.getElementById('nft-mint-btn');
       btn.disabled = !selectedNFTPhoto || !nftWalletAddress || isMinting;
       if (!btn.disabled && lastNftEstimate && lastNftEstimate.total) {
-        btn.innerHTML = 'Certify Original (~$' + (lastNftEstimate.total.usd || 0).toFixed(2) + ')';
+        btn.innerHTML = 'Certify Photo (~$' + (lastNftEstimate.total.usd || 0).toFixed(2) + ')';
       } else if (!isMinting) {
-        btn.innerHTML = 'Certify Original';
+        btn.innerHTML = 'Certify Photo';
       }
     }
     
@@ -3429,7 +3429,7 @@ function showMainWindow() {
         : (selectedNFTPhoto && typeof selectedNFTPhoto.path === 'string')
           ? selectedNFTPhoto.path
           : String(selectedNFTPhoto || '');
-      const name = nameInputVal || (selectedPath ? selectedPath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() : '') || 'My Original';
+      const name = nameInputVal || (selectedPath ? selectedPath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() : '') || 'My Photo';
       const description = document.getElementById('nft-desc-input').value || '';
       
       const license = document.getElementById('nft-license-select').value || 'arr';
@@ -3490,7 +3490,7 @@ function showMainWindow() {
         setTimeout(() => {
           isMinting = false;
           btn.style.background = '';
-          btn.innerHTML = 'Certify Original';
+          btn.innerHTML = 'Certify Photo';
           updateMintButton();
           // Restore quick-stats grid after certification failure
           hero.classList.remove('active-op');
@@ -3555,7 +3555,7 @@ function showMainWindow() {
       var paymentTxHtml = isRealPaymentTx ? '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="color:#888;font-size:12px;">Payment</span><a href="https://solscan.io/tx/' + data.paymentTx + '" target="_blank" style="color:#9945FF;font-size:12px;text-decoration:none;">' + data.paymentTx.slice(0,8) + '...' + data.paymentTx.slice(-4) + ' ↗</a></div>' : '';
       
       popup.innerHTML = '<div style="font-size:64px;margin-bottom:16px;">🎉</div>' +
-        '<h2 style="color:#14F195;font-size:24px;margin-bottom:8px;">Original Certified!</h2>' +
+        '<h2 style="color:#14F195;font-size:24px;margin-bottom:8px;">Photo Certified!</h2>' +
         '<p style="color:#888;font-size:14px;margin-bottom:20px;">' + nftTypeLabel + '</p>' +
         imageHtml +
         '<div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;margin-bottom:20px;text-align:left;">' +
@@ -3600,7 +3600,7 @@ function showMainWindow() {
             mintAddress: tempMintAddress,
             assetId: isCNFT ? (initialId || null) : null,
             ownerAddress: data.wallet || nftWalletAddress,
-            name: data.name || 'Photo Original',
+            name: data.name || 'Certified Photo',
             imageUrl: displayImageUrl,
             metadataUrl: data.metadataUrl || null,
             txSignature: data.mintTx || data.paymentTx || null,
@@ -3636,7 +3636,7 @@ function showMainWindow() {
             mintAddress: tempMintAddress,
             assetId: isCNFT ? (initialId || null) : null,
             ownerAddress: data.wallet || nftWalletAddress,
-            name: data.name || 'Photo Original',
+            name: data.name || 'Certified Photo',
             imageUrl: displayImageUrl,
             image: displayImageUrl,
             metadataUrl: data.metadataUrl || null,
@@ -3674,7 +3674,7 @@ function showMainWindow() {
             mintAddress: tempMintAddress,
             txSignature: data.mintTx || data.paymentTx || null,
             ownerAddress: data.wallet || nftWalletAddress,
-            name: data.name || 'Photo Original',
+            name: data.name || 'Certified Photo',
             edition: data.edition || 'open',
             license: data.license || 'arr',
             watermarked: data.watermark === 'true',
@@ -3723,7 +3723,7 @@ function showMainWindow() {
                       mintAddress: resolvedMintAddress,
                       assetId: realId,
                       ownerAddress: data.wallet || nftWalletAddress,
-                      name: data.name || 'Photo Original',
+                      name: data.name || 'Certified Photo',
                       imageUrl: displayImageUrl,
                       metadataUrl: data.metadataUrl || null,
                       txSignature: data.mintTx || data.paymentTx || null,
@@ -3790,7 +3790,7 @@ function showMainWindow() {
                     const newMint = 'cnft_' + realId;
                     console.log('[NFT] Background DAS resolved:', newMint);
                     _fetchNFTsInFlight = null;
-                    try { await ipcRenderer.invoke('save-minted-nft', { mintAddress: newMint, assetId: realId, ownerAddress: data.wallet || nftWalletAddress, name: data.name || 'Photo Original', imageUrl: displayImageUrl, metadataUrl: data.metadataUrl || null, txSignature: data.mintTx || data.paymentTx || null, storageType: data.storageOption || 'ipfs', isCompressed: true, nftType: 'compressed', edition: data.edition || 'open', license: data.license || 'arr', watermarked: data.watermark === 'true', encrypted: data.encrypt === 'true', encryptionData: pendingEncData, thumbnailUrl: savedThumbUrl, ipfsThumbnailUrl: window._pendingMintIpfsThumbnailUrl || null, createdAt: new Date().toISOString(), contentHash: data.contentHash || null, exifHash: data.exifHash || null, exifRawHash: data.exifRawHash || null, exifBindingHash: data.exifBindingHash || null, certificationMode: data.certificationMode || null }); } catch (_) {}
+                    try { await ipcRenderer.invoke('save-minted-nft', { mintAddress: newMint, assetId: realId, ownerAddress: data.wallet || nftWalletAddress, name: data.name || 'Certified Photo', imageUrl: displayImageUrl, metadataUrl: data.metadataUrl || null, txSignature: data.mintTx || data.paymentTx || null, storageType: data.storageOption || 'ipfs', isCompressed: true, nftType: 'compressed', edition: data.edition || 'open', license: data.license || 'arr', watermarked: data.watermark === 'true', encrypted: data.encrypt === 'true', encryptionData: pendingEncData, thumbnailUrl: savedThumbUrl, ipfsThumbnailUrl: window._pendingMintIpfsThumbnailUrl || null, createdAt: new Date().toISOString(), contentHash: data.contentHash || null, exifHash: data.exifHash || null, exifRawHash: data.exifRawHash || null, exifBindingHash: data.exifBindingHash || null, certificationMode: data.certificationMode || null }); } catch (_) {}
                     try { await ipcRenderer.invoke('remove-stored-nft', tempMintAddress); } catch (_) {}
                     try { await ipcRenderer.invoke('update-certificate-mint', tempMintAddress, newMint); console.log('[NFT] Background: cert updated to', newMint); } catch (_) {}
                     checkForNewNFTsOnce();
@@ -4639,7 +4639,7 @@ function showMainWindow() {
           grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#888;">' +
             '<div style="font-size:32px;margin-bottom:8px;">🖼️</div>' +
             '<div style="font-weight:600;color:#fff;margin-bottom:4px;">Connect Credentials</div>' +
-            '<div style="font-size:12px;margin-bottom:16px;">Connect your credentials to view your certified originals</div>' +
+            '<div style="font-size:12px;margin-bottom:16px;">Connect your credentials to view your certified photos</div>' +
             '<button onclick="connectNFTWallet()" style="padding:10px 20px;border-radius:8px;border:1px solid #9945FF;background:transparent;color:#9945FF;cursor:pointer;font-size:13px;font-weight:600;">Connect</button>' +
             '</div>';
           loading.style.display = 'none';
@@ -4755,7 +4755,7 @@ function showMainWindow() {
           startNFTAutoRefresh();
         } else {
           if (allNFTs.length === 0) {
-            empty.innerHTML = '<span>No originals yet. Certify your first photo!</span>';
+            empty.innerHTML = '<span>No certified photos yet. Certify your first photo!</span>';
             empty.style.display = 'flex';
           }
           // Still start auto-refresh to detect when first NFT is minted
@@ -5025,7 +5025,7 @@ function showMainWindow() {
           transferBtn.style.background = '';
           transferBtn.style.cursor = 'pointer';
           transferBtn.style.opacity = '1';
-          transferBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg> Transfer Original';
+          transferBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg> Transfer Photo';
         } else {
           transferBtn.disabled = true;
           transferBtn.style.background = 'rgba(255,255,255,0.08)';
@@ -5612,7 +5612,7 @@ function showMainWindow() {
         <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:20px;padding:32px;max-width:360px;width:100%;text-align:center;border:1px solid rgba(20,241,149,0.3);box-shadow:0 20px 60px rgba(20,241,149,0.2);">
           <div style="font-size:56px;margin-bottom:16px;">✅</div>
           <h2 style="color:#14F195;font-size:22px;margin-bottom:8px;">Transfer Successful!</h2>
-          <p style="color:#888;font-size:13px;margin-bottom:20px;">Your original has been transferred to the new owner.</p>
+          <p style="color:#888;font-size:13px;margin-bottom:20px;">Your photo has been transferred to the new owner.</p>
           
           <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:16px;margin-bottom:20px;text-align:left;">
             <div style="color:#888;font-size:11px;text-transform:uppercase;margin-bottom:6px;">Transaction Signature</div>
