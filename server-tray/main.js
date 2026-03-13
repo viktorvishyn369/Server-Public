@@ -4811,7 +4811,7 @@ function showMainWindow() {
       if (!nft) return;
       
       const metadataUrl = nft.metadataUrl || '';
-      const nftName = nft.name || 'Original #' + (nftIndex + 1);
+      const nftName = nft.name || 'Photo #' + (nftIndex + 1);
       const isCompressed = nft.isCompressed === true;
       
       // Find the item element in the grid
@@ -4938,7 +4938,7 @@ function showMainWindow() {
       currentDetailNFT.mintAddress = mintAddr;
 
       const titleEl = document.getElementById('nft-detail-title');
-      if (titleEl) titleEl.textContent = nft.name || 'Original';
+      if (titleEl) titleEl.textContent = nft.name || 'Photo';
 
       // Rebuild badge row: certification mode + storage + encrypted + watermarked + license
       const badgeRow = document.getElementById('nft-detail-badge-row');
@@ -5228,7 +5228,7 @@ function showMainWindow() {
       const imageUrl = currentDetailNFT.cachedPath ? 'file://' + currentDetailNFT.cachedPath : (currentDetailNFT.image || currentDetailNFT.imageUrl || '');
       
       document.getElementById('nft-transfer-img').src = imageUrl;
-      document.getElementById('nft-transfer-name').textContent = currentDetailNFT.name || 'Unnamed Original';
+      document.getElementById('nft-transfer-name').textContent = currentDetailNFT.name || 'Unnamed Photo';
       document.getElementById('nft-transfer-type').textContent = isPrivateNFTClassification(currentDetailNFT) ? 'Private' : isPublicNFTClassification(currentDetailNFT) ? 'Public' : isCompressed ? 'Public' : 'Private';
       
       const recipientInput = document.getElementById('nft-transfer-recipient');
@@ -5767,7 +5767,7 @@ function showMainWindow() {
         const isCached = !!nft.cachedPath && !hasEncKeys;
         const imageUrl = isCached ? nft.cachedPath : (nft.image || nft.imageUrl || '');
         const originalUrl = nft.ipfsThumbnailUrl || nft.imageUrl || nft.image || '';  // Prefer IPFS thumb as fallback (tiny ~30KB)
-        const nftName = nft.name || 'Original #' + (globalIdx + 1);
+        const nftName = nft.name || 'Photo #' + (globalIdx + 1);
         const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
         // Limited Edition — fall through to normal image loading (app has auth/keys for all storage types)
