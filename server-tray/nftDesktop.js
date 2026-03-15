@@ -15,7 +15,7 @@ const os = require('os');
 const userDataPath = app.getPath('userData');
 
 // App version for C2PA claim_generator — read from package.json so it stays in sync
-let APP_VERSION = '2.0.0';
+let APP_VERSION = '2.1.1';
 try { APP_VERSION = require('./package.json').version || APP_VERSION; } catch (_) {}
 
 // Format-agnostic MIME type detection from file extension
