@@ -2722,6 +2722,10 @@ function showMainWindow() {
       if (el) el.textContent = count != null ? String(count) : '—';
     }
 
+    function syncQuickInfoNfts() {
+      updateQsNfts(nftWalletAddress ? allNFTs.length : null);
+    }
+
     async function startBackup() {
       const config = await getConfig();
       if (!config.email || !config.password) { alert('Please enter email and password'); return; }
@@ -3346,6 +3350,7 @@ function showMainWindow() {
               cachedCerts = [];
               nftPageIndex = 0;
               stopNFTAutoRefresh();
+              syncQuickInfoNfts();
               try { await ipcRenderer.invoke('purge-nft-storage'); } catch (_) {}
               try { await ipcRenderer.invoke('clear-nft-cache'); } catch (_) {}
             }
@@ -3393,6 +3398,7 @@ function showMainWindow() {
         dot.classList.add('disconnected');
         text.textContent = 'No credentials connected';
       }
+      syncQuickInfoNfts();
       updateMintButton();
     }
     
@@ -4655,6 +4661,7 @@ function showMainWindow() {
               updateNFTNavigation();
             }
           }
+          syncQuickInfoNfts();
           return added;
         }
       } catch (e) {
@@ -4691,6 +4698,7 @@ function showMainWindow() {
         const empty = document.getElementById('nft-empty');
 
         if (!nftWalletAddress) {
+          syncQuickInfoNfts();
           grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#888;">' +
             '<div style="font-size:32px;margin-bottom:8px;">🖼️</div>' +
             '<div style="font-weight:600;color:#fff;margin-bottom:4px;">Connect Credentials</div>' +
@@ -4710,6 +4718,7 @@ function showMainWindow() {
               allNFTs = persistedNFTs;
               loading.style.display = 'none';
               empty.style.display = 'none';
+              syncQuickInfoNfts();
               renderNFTPage();
             }
           } catch (persistErr) {
@@ -4798,6 +4807,7 @@ function showMainWindow() {
           if (allNFTs.length === 0) {
             allNFTs = result.nfts;
             console.log('[NFT Album] Total NFTs:', allNFTs.length);
+            syncQuickInfoNfts();
             renderNFTPage();
           } else {
             const added = appendNewNFTs(result.nfts);
@@ -4805,10 +4815,12 @@ function showMainWindow() {
               console.log('[NFT Album] Appended', added, 'new NFT(s). Total:', allNFTs.length);
               updateNFTNavigation();
             }
+            syncQuickInfoNfts();
           }
           // Start auto-refresh to detect new NFTs
           startNFTAutoRefresh();
         } else {
+          syncQuickInfoNfts();
           if (allNFTs.length === 0) {
             empty.innerHTML = '<span>No certified photos yet. Certify your first photo!</span>';
             empty.style.display = 'flex';
@@ -6086,6 +6098,7 @@ function showMainWindow() {
         cachedCerts = [];
         nftPageIndex = 0;
         stopNFTAutoRefresh();
+        syncQuickInfoNfts();
         // Immediately clear certs UI so old wallet's certs don't flash
         const cl = document.getElementById('certs-list');
         const cld = document.getElementById('certs-loading');
