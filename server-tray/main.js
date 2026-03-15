@@ -4034,7 +4034,10 @@ function showMainWindow() {
         if (p.rfc3161Token && !c.rfc3161Token) c.rfc3161Token = p.rfc3161Token;
         if (p.c2paManifest && !c.c2paManifest) c.c2paManifest = p.c2paManifest;
         if (p.contentHash && !c.contentHash) c.contentHash = p.contentHash;
+        if (p.exifRawHash && !c.exifRawHash) c.exifRawHash = p.exifRawHash;
         if (p.exifHash && !c.exifHash) c.exifHash = p.exifHash;
+        if (p.exifBindingHash && !c.exifBindingHash) c.exifBindingHash = p.exifBindingHash;
+        if (p.cameraHash && !c.cameraHash) c.cameraHash = p.cameraHash;
         if (p.storageType && !c.storageType) c.storageType = p.storageType;
         if (p.encrypted && !c.encrypted) c.encrypted = true;
         if (p.watermarked && !c.watermarked) c.watermarked = true;
@@ -7468,7 +7471,9 @@ ipcMain.handle('get-certificates', async () => {
         if (sc.license && !lc.license) lc.license = sc.license;
         if (sc.storageType && !lc.storageType) lc.storageType = sc.storageType;
         if (sc.contentHash && !lc.contentHash) lc.contentHash = sc.contentHash;
+        if (sc.exifRawHash && !lc.exifRawHash) lc.exifRawHash = sc.exifRawHash;
         if (sc.exifHash && !lc.exifHash) lc.exifHash = sc.exifHash;
+        if (sc.exifBindingHash && !lc.exifBindingHash) lc.exifBindingHash = sc.exifBindingHash;
         if (sc.cameraHash && !lc.cameraHash) lc.cameraHash = sc.cameraHash;
         // If local has hasRfc3161 flag but server doesn't have it (and local has no token), clear the stale flag
         // This prevents the permanent "Recovering..." state when the flag was set but token is unrecoverable
