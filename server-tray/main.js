@@ -8539,27 +8539,83 @@ app.whenReady().then(() => {
   const macVersion = isMac ? parseInt(require('os').release().split('.')[0], 10) : 0;
   const supportsDarkMode = isMac && macVersion >= 18; // macOS 10.14 Mojave = Darwin 18
   
-  if (supportsDarkMode) {
-    // Template icon - macOS will auto-invert for dark/light mode
-    const templatePath = path.join(__dirname, 'iconTemplate.png');
-    const templateIcon = nativeImage.createFromPath(templatePath);
-    trayIcon = templateIcon.resize({ width: 22, height: 22 });
-    trayIcon.setTemplateImage(true);
-  } else if (isWin) {
-    const iconPath = path.join(__dirname, 'icon.png');
-    const icon = nativeImage.createFromPath(iconPath);
-    trayIcon = icon.resize({ width: 16, height: 16 });
-  } else if (isLinux) {
-    const iconPath = path.join(__dirname, 'icon.png');
-    const icon = nativeImage.createFromPath(iconPath);
-    trayIcon = icon.resize({ width: 24, height: 24 });
-  } else {
-    const iconPath = path.join(__dirname, 'icon.png');
-    const icon = nativeImage.createFromPath(iconPath);
-    trayIcon = icon.resize({ width: 22, height: 22 });
+  try {
+    if (supportsDarkMode) {
+      // Template icon - macOS will auto-invert for dark/light mode
+      const templatePath = path.join(__dirname, 'iconTemplate.png');
+      safeConsole('log', '[Tray] Loading template icon from:', templatePath);
+      
+      if (!fs.existsSync(templatePath)) {
+        throw new Error(`Template icon not found at ${templatePath}`);
+      }
+      
+      const templateIcon = nativeImage.createFromPath(templatePath);
+      if (templateIcon.isEmpty()) {
+        throw new Error('Template icon loaded but is empty - file may be corrupted');
+      }
+      
+      trayIcon = templateIcon.resize({ width: 22, height: 22 });
+      if (!trayIcon || trayIcon.isEmpty()) {
+        throw new Error('Failed to resize template icon');
+      }
+      
+      trayIcon.setTemplateImage(true);
+      safeConsole('log', '[Tray] Template icon created successfully');
+    } else if (isWin) {
+      const iconPath = path.join(__dirname, 'icon.png');
+      const icon = nativeImage.createFromPath(iconPath);
+      trayIcon = icon.resize({ width: 16, height: 16 });
+    } else if (isLinux) {
+      const iconPath = path.join(__dirname, 'icon.png');
+      const icon = nativeImage.createFromPath(iconPath);
+      trayIcon = icon.resize({ width: 24, height: 24 });
+    } else {
+      const iconPath = path.join(__dirname, 'icon.png');
+      const icon = nativeImage.createFromPath(iconPath);
+      trayIcon = icon.resize({ width: 22, height: 22 });
+    }
+    
+    if (!trayIcon || trayIcon.isEmpty()) {
+      throw new Error('Tray icon is null or empty after creation');
+    }
+  } catch (err) {
+    safeConsole('error', '[Tray] Failed to create tray icon:', err.message);
+    // Fallback: create a simple colored icon from icon.png
+    try {
+      const fallbackPath = path.join(__dirname, 'icon.png');
+      safeConsole('log', '[Tray] Attempting fallback icon:', fallbackPath);
+      const fallbackIcon = nativeImage.createFromPath(fallbackPath);
+      trayIcon = fallbackIcon.resize({ width: 22, height: 22 });
+      if (trayIcon && !trayIcon.isEmpty()) {
+        safeConsole('log', '[Tray] Fallback icon loaded successfully');
+      } else {
+        throw new Error('Fallback icon also failed');
+      }
+    } catch (fallbackErr) {
+      safeConsole('error', '[Tray] Fallback icon failed:', fallbackErr.message);
+      // Last resort: show alert to user
+      dialog.showErrorBox('Tray Icon Error', 
+        `Failed to create tray icon: ${err.message}\n\n` +
+        `Fallback also failed: ${fallbackErr.message}\n\n` +
+        'The app will continue running but may not show in the menu bar.'
+      );
+    }
   }
   
-  tray = new Tray(trayIcon);
+  try {
+    tray = new Tray(trayIcon);
+    safeConsole('log', '[Tray] Tray created successfully');
+  } catch (err) {
+    safeConsole('error', '[Tray] Failed to create Tray instance:', err.message);
+    dialog.showErrorBox('System Tray Error', 
+      `Failed to create system tray: ${err.message}\n\n` +
+      'On macOS, this can happen if:\n' +
+      '1. The icon file is corrupted\n' +
+      '2. macOS accessibility permissions are denied\n' +
+      '3. Another app is using the same menu bar space'
+    );
+    // Continue without tray - app will still run
+  }
   tray.setToolTip('PhotoLynk Server');
   
   // Build context menu for tray
