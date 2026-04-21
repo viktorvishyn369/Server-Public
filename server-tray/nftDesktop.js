@@ -16,7 +16,7 @@ const userDataPath = app.getPath('userData');
 
 // App version for C2PA claim_generator — read from package.json so it stays in sync
 let APP_VERSION = '2.1.1';
-try { APP_VERSION = require('./package.json').version || APP_VERSION; } catch (_) {}
+try { APP_VERSION = require('./package.json').version || APP_VERSION; } catch (_) { }
 
 // Format-agnostic MIME type detection from file extension
 // Supports all professional camera formats for byte-exact archival upload
@@ -32,6 +32,19 @@ const MIME_TYPES = {
 function detectMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   return MIME_TYPES[ext] || 'application/octet-stream';
+}
+
+function isExplicitlyTrue(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+  return false;
+}
+
+function hasWrappedEncryptionPayload(encryption = {}) {
+  return !!(encryption?.wrappedKey && encryption?.wrapNonce && (encryption?.nonce || encryption?.thumbnailNonce));
 }
 
 // Sharp for EXIF stripping (optional - best effort)
@@ -55,24 +68,24 @@ async function stripExifFromImage(filePath) {
       console.log('[NFT] sharp not available, skipping EXIF strip');
       return null;
     }
-    
+
     if (!filePath || !fs.existsSync(filePath)) {
       console.log('[NFT] File not found for EXIF stripping:', filePath);
       return null;
     }
-    
+
     // Create temp file path — use OUTPUT format extension so detectMimeType works correctly
     const ext = path.extname(filePath).toLowerCase();
     const outExt = ext === '.png' ? '.png' : ext === '.webp' ? '.webp' : '.jpg';
     const tempPath = path.join(os.tmpdir(), `nft_stripped_${Date.now()}${outExt}`);
-    
+
     console.log('[NFT] Stripping EXIF from:', filePath);
-    
+
     // Use sharp to re-encode without EXIF
     // sharp automatically strips EXIF when re-encoding
     const image = sharp(filePath);
     const metadata = await image.metadata();
-    
+
     if (ext === '.png') {
       await image.png().toFile(tempPath);
     } else if (ext === '.webp') {
@@ -81,7 +94,7 @@ async function stripExifFromImage(filePath) {
       // Default to JPEG for all other formats
       await image.jpeg({ quality: 95 }).toFile(tempPath);
     }
-    
+
     console.log('[NFT] EXIF stripped successfully:', tempPath);
     return tempPath;
   } catch (e) {
@@ -115,7 +128,7 @@ try {
   Keypair = web3.Keypair;
   solanaAvailable = true;
   console.log('[NFT Desktop] @solana/web3.js loaded');
-  
+
   try {
     const splToken = require('@solana/spl-token');
     TOKEN_PROGRAM_ID = splToken.TOKEN_PROGRAM_ID;
@@ -137,7 +150,7 @@ try {
 // Metaplex Token Metadata Program ID (for fetching standard NFT metadata)
 let TOKEN_METADATA_PROGRAM_ID = null;
 if (solanaAvailable) {
-  try { TOKEN_METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s'); } catch (_) {}
+  try { TOKEN_METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s'); } catch (_) { }
 }
 
 // Solana connection instance
@@ -191,7 +204,6 @@ const PHOTOLYNK_MERKLE_TREE = '7qSKB5q1JMmsGx2cHzAJPxvjzXCbAfpWNDTKDM3tSunS';
 function isPhotoLynkEcosystem(nft) {
   if (!nft) return false;
   if (nft.merkleTree === PHOTOLYNK_MERKLE_TREE) return true;
-  if (nft.creatorWallet === NFT_COMMISSION_WALLET) return true;
   const mintPlatform = String(nft.mintPlatform || '').toLowerCase();
   if (mintPlatform.includes('photolynk') || mintPlatform === 'nft-service') return true;
   if (nft.contentHash && nft.exifHash) return true;
@@ -201,7 +213,6 @@ function isPhotoLynkEcosystem(nft) {
   if (hasContentHash && hasExifHash) return true;
   const metaCert = nft.metadata?.properties?.certificate;
   if (metaCert && metaCert.type && metaCert.type.includes('PhotoLynk')) return true;
-  if (nft.name && nft.name.includes('PhotoLynk')) return true;
   return false;
 }
 
@@ -329,7 +340,7 @@ function initCache(appDataPath) {
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
   }
-  
+
   // Load cache index
   const indexPath = path.join(cacheDir, 'index.json');
   if (fs.existsSync(indexPath)) {
@@ -341,7 +352,7 @@ function initCache(appDataPath) {
       console.log('[NFT Cache] Failed to load index:', e.message);
     }
   }
-  
+
   // Load metadata-to-image mapping (allows skipping metadata fetch on restart)
   const metaIndexPath = path.join(cacheDir, 'meta_index.json');
   if (fs.existsSync(metaIndexPath)) {
@@ -379,13 +390,13 @@ function saveMetaIndex() {
 
 function clearCache() {
   if (!cacheDir) return;
-  
+
   console.log('[NFT Cache] Clearing all cached images and mappings...');
-  
+
   // Clear in-memory caches
   nftImageCache.clear();
   metadataToImageCache.clear();
-  
+
   // Delete cache files
   try {
     const files = fs.readdirSync(cacheDir);
@@ -442,19 +453,19 @@ function getCachedImagePath(cid) {
 
 async function cacheImage(url, cid, headers = {}) {
   if (!cid || !cacheDir) return null;
-  
+
   const cachedPath = path.join(cacheDir, `${cid}.jpg`);
   if (fs.existsSync(cachedPath)) {
     nftImageCache.set(cid, cachedPath);
     saveCacheIndex();
     return cachedPath;
   }
-  
+
   return new Promise((resolve) => {
     const protocol = url.startsWith('https') ? https : http;
     const file = fs.createWriteStream(cachedPath);
     const opts = { timeout: 30000, headers: headers || {} };
-    
+
     protocol.get(url, opts, (response) => {
       // Follow redirects (301/302/307/308)
       if ([301, 302, 307, 308].includes(response.statusCode) && response.headers.location) {
@@ -629,7 +640,7 @@ async function getRecentPriorityMicroLamports() {
 }
 
 async function prewarmPriorityFee() {
-  try { await getRecentPriorityMicroLamports(); } catch (_) {}
+  try { await getRecentPriorityMicroLamports(); } catch (_) { }
 }
 
 function estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes, edition }) {
@@ -702,15 +713,21 @@ const PINATA_JWT = process.env.PINATA_JWT || '';
  */
 async function uploadToPinata(filePath, contentType = 'image/jpeg') {
   return new Promise((resolve) => {
+    if (!PINATA_JWT) {
+      console.log('[IPFS] PINATA_JWT not configured, cannot upload to Pinata');
+      resolve({ success: false, error: 'Pinata JWT not configured. Please set PINATA_JWT environment variable.' });
+      return;
+    }
     try {
+      console.log('[IPFS] Reading file for upload:', filePath);
       const fileData = fs.readFileSync(filePath);
       const fileName = path.basename(filePath);
       const boundary = '----FormBoundary' + crypto.randomBytes(16).toString('hex');
-      
+
       const headerStr = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${contentType}\r\n\r\n`;
       const footerStr = `\r\n--${boundary}--\r\n`;
       const body = Buffer.concat([Buffer.from(headerStr), fileData, Buffer.from(footerStr)]);
-      
+
       const req = https.request({
         hostname: 'api.pinata.cloud',
         port: 443,
@@ -724,6 +741,7 @@ async function uploadToPinata(filePath, contentType = 'image/jpeg') {
         timeout: 60000,
       }, (res) => {
         let data = '';
+        console.log('[IPFS] Upload response status:', res.statusCode);
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
           try {
@@ -738,9 +756,13 @@ async function uploadToPinata(filePath, contentType = 'image/jpeg') {
                 pinataUrl: `https://gateway.pinata.cloud/ipfs/${json.IpfsHash}`,
               });
             } else {
-              resolve({ success: false, error: json.error?.message || 'Upload failed' });
+              console.log('[IPFS] Upload failed:', json.error || json.message || 'Unknown error');
+              resolve({ success: false, error: json.error?.message || json.message || 'Upload failed' });
             }
-          } catch (e) { resolve({ success: false, error: e.message }); }
+          } catch (e) {
+            console.log('[IPFS] Upload response parse error:', e.message, 'raw data:', data.substring(0, 200));
+            resolve({ success: false, error: 'Upload failed: ' + e.message });
+          }
         });
       });
       req.on('error', (e) => resolve({ success: false, error: e.message }));
@@ -759,7 +781,7 @@ async function uploadMetadataToPinata(metadata, nftKeyB64 = null) {
     try {
       const jsonStr = JSON.stringify(metadata, null, 2);
       let fileContent, contentType, fileName, metadataNonce = null;
-      
+
       if (nftKeyB64) {
         // Encrypt metadata JSON with per-NFT key before uploading
         let nacl;
@@ -781,12 +803,12 @@ async function uploadMetadataToPinata(metadata, nftKeyB64 = null) {
         contentType = 'application/json';
         fileName = `metadata_${Date.now()}.json`;
       }
-      
+
       const boundary = '----FormBoundary' + crypto.randomBytes(16).toString('hex');
       const headerStr = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${contentType}\r\n\r\n`;
       const footerStr = `\r\n--${boundary}--\r\n`;
       const body = Buffer.concat([Buffer.from(headerStr), fileContent, Buffer.from(footerStr)]);
-      
+
       const req = https.request({
         hostname: 'api.pinata.cloud',
         port: 443,
@@ -895,7 +917,7 @@ async function uploadMetadataToAkordArweave(metadata, nftKeyB64 = null) {
     try {
       const jsonStr = JSON.stringify(metadata, null, 2);
       let uploadBuf, contentType, metadataNonce = null;
-      
+
       if (nftKeyB64) {
         // Encrypt metadata JSON with per-NFT key before uploading
         let nacl;
@@ -977,11 +999,11 @@ async function uploadToStealthCloud(filePath, credentials) {
       const fileName = isEncrypted ? `nft_${Date.now()}.bin` : `nft_${Date.now()}.jpg`;
       const fileContentType = isEncrypted ? 'application/octet-stream' : 'image/jpeg';
       const boundary = '----FormBoundary' + crypto.randomBytes(16).toString('hex');
-      
+
       const headerStr = `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${fileName}"\r\nContent-Type: ${fileContentType}\r\n\r\n`;
       const footerStr = `\r\n--${boundary}--\r\n`;
       const body = Buffer.concat([Buffer.from(headerStr), fileData, Buffer.from(footerStr)]);
-      
+
       const url = new URL(credentials.baseUrl);
       const req = https.request({
         hostname: url.hostname,
@@ -1073,8 +1095,8 @@ async function extractRawExifBytes(filePath) {
         const segLen = (scanBuf[pos + 2] << 8) | scanBuf[pos + 3];
         if (marker === 0xE1 && segLen > 8) {
           if (scanBuf[pos + 4] === 0x45 && scanBuf[pos + 5] === 0x78 &&
-              scanBuf[pos + 6] === 0x69 && scanBuf[pos + 7] === 0x66 &&
-              scanBuf[pos + 8] === 0x00 && scanBuf[pos + 9] === 0x00) {
+            scanBuf[pos + 6] === 0x69 && scanBuf[pos + 7] === 0x66 &&
+            scanBuf[pos + 8] === 0x00 && scanBuf[pos + 9] === 0x00) {
             // Return entire APP1 Exif segment: "Exif\0\0" + TIFF header + all IFDs
             return scanBuf.slice(pos + 4, pos + 2 + segLen);
           }
@@ -1087,7 +1109,7 @@ async function extractRawExifBytes(filePath) {
 
     // === PNG: Find eXIf chunk ===
     if (headerBuf[0] === 0x89 && headerBuf[1] === 0x50 &&
-        headerBuf[2] === 0x4E && headerBuf[3] === 0x47) {
+      headerBuf[2] === 0x4E && headerBuf[3] === 0x47) {
       const stat = fs.fstatSync(fd);
       const scanLen = Math.min(stat.size, 512 * 1024);
       const scanBuf = Buffer.alloc(scanLen);
@@ -1109,7 +1131,7 @@ async function extractRawExifBytes(filePath) {
 
     // === WebP: Find EXIF chunk in RIFF container ===
     if (headerBuf.slice(0, 4).toString('ascii') === 'RIFF' &&
-        headerBuf.slice(8, 12).toString('ascii') === 'WEBP') {
+      headerBuf.slice(8, 12).toString('ascii') === 'WEBP') {
       const stat = fs.fstatSync(fd);
       const scanLen = Math.min(stat.size, 512 * 1024);
       const scanBuf = Buffer.alloc(scanLen);
@@ -1140,7 +1162,7 @@ async function extractRawExifBytes(filePath) {
       if (meta.exif && meta.exif.length > 0) {
         return meta.exif;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     return null;
   } catch (e) {
@@ -1175,7 +1197,7 @@ function stripThumbnailFromTiff(raw) {
   // Determine TIFF start offset: "Exif\0\0" prefix means TIFF starts at byte 6
   let tiffOff = 0;
   if (buf[0] === 0x45 && buf[1] === 0x78 && buf[2] === 0x69 && buf[3] === 0x66 &&
-      buf[4] === 0x00 && buf[5] === 0x00) {
+    buf[4] === 0x00 && buf[5] === 0x00) {
     tiffOff = 6;
   }
 
@@ -1586,7 +1608,7 @@ async function requestRFC3161Timestamp(hexHash) {
     { url: 'http://timestamp.sectigo.com', policy: '1.3.6.1.4.1.6449.2.1.1', name: 'Sectigo' },
   ];
   const TIMEOUT_MS = 10000;
-  
+
   const hashBytes = Buffer.from(hexHash, 'hex');
 
   // Build DER-encoded TimeStampReq manually
@@ -1922,7 +1944,7 @@ async function decryptNFTImage(encryptedPath, wrappedKeyB64, wrapNonceB64, nonce
     }
     // Fallback: use transferNftKey (raw per-NFT key included in transferred encrypted NFTs)
     if (!nftKey && transferNftKeyB64) {
-      try { nftKey = new Uint8Array(Buffer.from(transferNftKeyB64, 'base64')); console.log('[NFT] Using transferNftKey for decryption'); } catch (_) {}
+      try { nftKey = new Uint8Array(Buffer.from(transferNftKeyB64, 'base64')); console.log('[NFT] Using transferNftKey for decryption'); } catch (_) { }
     }
     if (!nftKey) return { success: false, error: 'Key unwrap failed' };
     const encData = fs.readFileSync(encryptedPath);
@@ -2041,14 +2063,14 @@ async function computeCameraSerialHash(filePath) {
         const meta = await sharp(filePath).metadata();
         if (meta.exif && meta.exif.length > 0) {
           let exifReader;
-          try { exifReader = require('exif-reader'); } catch (_) {}
+          try { exifReader = require('exif-reader'); } catch (_) { }
           if (exifReader) {
             const parsed = exifReader(meta.exif);
             const exif = parsed.exif || parsed.Exif || {};
             serial = exif.BodySerialNumber || null;
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     // Fallback: ExifReader
     if (!serial) {
@@ -2056,7 +2078,7 @@ async function computeCameraSerialHash(filePath) {
         const ExifReader = require('exifreader');
         const tags = await ExifReader.load(filePath);
         serial = tags.BodySerialNumber?.value || tags.SerialNumber?.value || tags.CameraSerialNumber?.value || null;
-      } catch (_) {}
+      } catch (_) { }
     }
     if (!serial) return null;
     const cleaned = String(serial).replace(/\0/g, '').trim();
@@ -2098,26 +2120,32 @@ async function mintNFT(params, onProgress) {
     masterKey = null,
     certificationMode = null,
   } = params;
-  
+
   const isLimited = edition === NFT_EDITION.LIMITED;
   console.log('[NFT] Edition:', isLimited ? 'Limited' : 'Open', '| License:', license, '| Watermark:', watermark, '| Encrypt:', encrypt);
-  
+
   if (encrypt && !masterKey) {
     return { success: false, error: 'Master key required for encryption' };
   }
-  
+
   try {
     onProgress?.({ status: 'Preparing...' });
-    
+
     // Validate file
-    if (!fs.existsSync(filePath)) {
-      return { success: false, error: 'Image file not found' };
+    console.log('[NFT] Validating file path:', filePath, 'type:', typeof filePath);
+    if (!filePath || typeof filePath !== 'string') {
+      return { success: false, error: 'Invalid file path: path is empty or not a string' };
     }
-    
+    if (!fs.existsSync(filePath)) {
+      console.log('[NFT] File not found at path:', filePath);
+      return { success: false, error: 'Image file not found: ' + filePath };
+    }
+    console.log('[NFT] File exists, size:', fs.statSync(filePath).size, 'bytes');
+
     // Handle EXIF stripping if requested
     let uploadFilePath = filePath;
     let cleanupTempFiles = [];
-    
+
     if (stripExif) {
       onProgress?.({ status: 'Removing private data...' });
       try {
@@ -2131,9 +2159,9 @@ async function mintNFT(params, onProgress) {
         console.warn('[NFT] EXIF stripping failed, using original:', stripErr?.message);
       }
     }
-    
+
     const fileSize = fs.statSync(filePath).size;
-    
+
     // Extract EXIF and compute normalized cross-platform hash.
     // Uses parsed fields (not raw binary) so iOS/Android/desktop produce identical hashes.
     // Hash1: Raw EXIF binary hash (exact camera bytes, no parsing/rounding)
@@ -2145,7 +2173,7 @@ async function mintNFT(params, onProgress) {
     try {
       // Hash1 — exact raw binary
       exifRawHash = await computeExifRawHash(filePath);
-      
+
       // Hash2 — normalized/rounded for cross-platform dedup
       if (sharp) {
         const imgMeta = await sharp(filePath).metadata();
@@ -2157,14 +2185,14 @@ async function mintNFT(params, onProgress) {
       if (!exifHash) {
         exifHash = await computeExifHashFromFile(filePath);
       }
-      
+
       // Hash3 — binding proof
       exifBindingHash = computeExifBindingHash(exifRawHash, exifHash);
       console.log(`[NFT] EXIF 3-hash proof: raw=${exifRawHash?.substring(0, 12)}... norm=${exifHash?.substring(0, 12)}... bind=${exifBindingHash?.substring(0, 12)}...`);
     } catch (exifErr) {
       console.warn('[NFT] EXIF extraction failed:', exifErr?.message);
     }
-    
+
     // Compute camera serial hash (device-binding proof — all editions, matches solana-seeker)
     let camSerialHash = null;
     try {
@@ -2173,7 +2201,7 @@ async function mintNFT(params, onProgress) {
     } catch (camErr) {
       console.warn('[NFT] Camera serial hash failed (non-blocking):', camErr?.message);
     }
-    
+
     // Step 1: Compute content hash of ORIGINAL file for integrity proof
     onProgress?.({ status: 'Computing integrity proof...' });
     const contentHash = computeContentHash(filePath);
@@ -2211,7 +2239,7 @@ async function mintNFT(params, onProgress) {
     // Matches solana-seeker/nftOperations.js mintPhotoNFT order exactly.
     let imageToUploadPath = uploadFilePath;
     let encryptionData = null;
-    
+
     // All editions: upload original image as-is (no resize/recompress)
     // onchain handles its own size budget in generateOnChainImage
     if (isLimited) {
@@ -2219,7 +2247,7 @@ async function mintNFT(params, onProgress) {
     } else {
       console.log('[NFT] Open Edition: using original image for upload');
     }
-    
+
     // Apply watermark if requested
     if (watermark) {
       onProgress?.({ status: 'Applying watermark...' });
@@ -2229,7 +2257,7 @@ async function mintNFT(params, onProgress) {
         imageToUploadPath = wmResult.watermarkedPath;
       }
     }
-    
+
     // Bake EXIF orientation into pixels so web viewers (Tensor, explorers) display
     // the image upright. sharp.rotate() with no args reads the EXIF Orientation tag,
     // rotates/flips the pixel data accordingly, and strips the tag from the output.
@@ -2262,7 +2290,7 @@ async function mintNFT(params, onProgress) {
     } else if (!imageAlreadyProcessed) {
       console.log('[NFT] Original bytes preserved for upload (no re-encode)');
     }
-    
+
     // Encrypt image if requested
     let nftKeyB64 = null; // Raw per-NFT key for metadata encryption (memory only, never persisted)
     if (encrypt && masterKey) {
@@ -2287,7 +2315,7 @@ async function mintNFT(params, onProgress) {
         return { success: false, error: 'Encryption failed: ' + encResult.error };
       }
     }
-    
+
     // Step 2: Upload image
     onProgress?.({ status: 'Uploading image...' });
     // Detect MIME from the actual file being uploaded (may be a stripped .jpg, not the original .heic/.nef)
@@ -2329,15 +2357,15 @@ async function mintNFT(params, onProgress) {
       console.log('[NFT] Using IPFS storage (Pinata)');
       imageUpload = await uploadToPinata(imageToUploadPath, uploadContentType);
     }
-    
+
     if (!imageUpload.success) {
-      for (const tmp of cleanupTempFiles) { try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {} }
+      for (const tmp of cleanupTempFiles) { try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) { } }
       return { success: false, error: 'Image upload failed: ' + imageUpload.error };
     }
-    
+
     let imageUrl = imageUpload.imageUrl || imageUpload.arweaveUrl || imageUpload.gatewayUrl;
     console.log('[NFT] Image uploaded:', imageUrl);
-    
+
     // Generate and upload gallery thumbnail
     // Encrypted: 50%-width encrypted thumbnail (.bin) — desktop album decrypts it for display
     // Unencrypted: plain JPEG thumbnail (matches mobile flow)
@@ -2348,7 +2376,7 @@ async function mintNFT(params, onProgress) {
       onProgress?.({ status: 'Creating thumbnail...' });
       if (encryptionData && nftKeyB64) {
         try {
-          let nacl; try { nacl = require('tweetnacl'); } catch (_) {}
+          let nacl; try { nacl = require('tweetnacl'); } catch (_) { }
           if (nacl && sharp) {
             const thumbBuf = await sharp(filePath).resize(800, null, { withoutEnlargement: true }).jpeg({ quality: 75 }).toBuffer();
             console.log('[NFT] Encrypted thumbnail generated: 800px wide,', thumbBuf.length, 'bytes');
@@ -2366,7 +2394,7 @@ async function mintNFT(params, onProgress) {
               encryptionData.thumbnailUrl = thumbnailUrl;
               console.log('[NFT] Encrypted thumbnail stored:', thumbnailUrl);
             }
-            
+
             // Also upload encrypted thumbnail to IPFS as redundancy fallback (if SC offline, album can still decrypt)
             if (PINATA_JWT) {
               try {
@@ -2422,12 +2450,12 @@ async function mintNFT(params, onProgress) {
         }
       }
     }
-    
+
     // Clean up temp files (best-effort)
     for (const tmp of cleanupTempFiles) {
-      try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
+      try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) { }
     }
-    
+
     // Step 3: Build and upload metadata with edition support
     onProgress?.({ status: 'Uploading metadata...' });
     const metadata = buildNFTMetadata({
@@ -2458,7 +2486,7 @@ async function mintNFT(params, onProgress) {
       mintTimestamp,
       certificationMode,
     });
-    
+
     const metadataUpload = (storageOption === 'arweave')
       ? await uploadMetadataToAkordArweave(metadata, nftKeyB64)
       : await uploadMetadataToPinata(metadata, nftKeyB64);
@@ -2469,9 +2497,9 @@ async function mintNFT(params, onProgress) {
     if (metadataUpload.metadataNonce && encryptionData) {
       encryptionData.metadataNonce = metadataUpload.metadataNonce;
     }
-    
+
     console.log('[NFT] Metadata uploaded:', metadataUpload.arweaveUrl || metadataUpload.gatewayUrl);
-    
+
     // Free large data URI from memory — metadata is now on IPFS, transaction only needs the URL.
     // For on-chain NFTs the data URI can be multi-MB base64; replace with thumbnailUrl for gallery display.
     // (matches mobile nftOperations.js line 3252-3257)
@@ -2480,10 +2508,10 @@ async function mintNFT(params, onProgress) {
       console.log('[NFT] Replacing on-chain data URI imageUrl with:', replacement?.slice(0, 80));
       imageUrl = replacement;
     }
-    
+
     // Step 4: Calculate fee and open wallet for payment
     onProgress?.({ status: 'Opening wallet...' });
-    
+
     // Use estimateNftCostsRealtime for accurate totals — Limited Edition uses dynamic fee
     const costEstimate = await estimateNftCostsRealtime({ nftType, storageOption, fileSizeBytes: fileSize, edition });
     const solPrice = costEstimate.solPrice;
@@ -2497,13 +2525,13 @@ async function mintNFT(params, onProgress) {
 
     console.log('[NFT] Fee:', feeUsd, 'USD =', feeSol.toFixed(6), 'SOL =', feeLamports, 'lamports', 'edition:', edition);
     console.log('[NFT] Estimated total:', estimatedTotalUsd.toFixed(4), 'USD =', estimatedTotalSol.toFixed(6), 'SOL (network:', networkSol.toFixed(6), 'storage:', storageUsd.toFixed(4), 'USD)');
-    
+
     // Generate unique reference for this mint
     const reference = crypto.randomBytes(32).toString('base64url');
-    
+
     // Open local payment page in browser (where Phantom extension is installed)
     // This page will handle wallet connection and SOL transfer
-    
+
     // For on-chain SVG, the imageUrl is a large data URI that would exceed URL length limits.
     // Register it server-side and pass a short token instead.
     let imageUrlForParam = imageUrl;
@@ -2536,7 +2564,7 @@ async function mintNFT(params, onProgress) {
         imageUrlForParam = '';
       }
     }
-    
+
     const paymentParams = new URLSearchParams({
       recipient: NFT_COMMISSION_WALLET,
       amount: feeSol.toFixed(9),
@@ -2564,13 +2592,13 @@ async function mintNFT(params, onProgress) {
       exifBindingHash: exifBindingHash || '',
       certificationMode: certificationMode || '',
     }).toString();
-    
+
     // Use local server to serve payment page (Phantom extension needs HTTP, not file://)
     const paymentUrl = `http://localhost:3000/nft-payment?${paymentParams}`;
-    
+
     console.log('[NFT] Opening browser for payment:', paymentUrl);
     shell.openExternal(paymentUrl);
-    
+
     // Return success with pending status - user completes payment in browser with Phantom extension
     return {
       success: true,
@@ -2656,8 +2684,11 @@ async function fetchStandardNFTMetadata(mintAddress) {
           attributes: metaJson.attributes || [],
           properties: metaJson.properties || {},
         };
-      } catch (_) {
-        return { name, uri };
+      } catch (e) {
+        // Metadata fetch failed - could be rate limit, network error, OR encrypted
+        // Don't assume encrypted - caller should check for explicit encryption markers
+        console.log(`[NFT] Metadata fetch failed for ${mintAddress}:`, e.message, 'URI:', uri?.slice(0, 60));
+        return { name, uri, metadata: { name }, fetchFailed: true };
       }
     }
     return { name, uri };
@@ -2694,15 +2725,28 @@ function fetchUserNFTs(walletAddress, limit = 9, authHeaders = null) {
 }
 
 async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) {
-  
+
   // Ensure Solana connection is initialized (needed for RPC fetch below)
   initializeSolana();
-  
+
   console.log('[NFT] Fetching NFTs for wallet:', walletAddress);
-  
+
   try {
+    // Build blacklist set: ONLY transferred-out NFTs (NOT stored NFTs)
+    // DAS is the source of truth — we must NOT filter out owned NFTs
+    const blacklist = new Set();
+    try {
+      const bl = await getTransferredOutBlacklist();
+      for (const id of bl) {
+        blacklist.add(id);
+        blacklist.add('cnft_' + id);
+      }
+    } catch (_) { }
+    if (blacklist.size > 0) console.log('[NFT] ' + blacklist.size + ' mints in transferred-out blacklist');
+
     // 1. Fetch via DAS API (gets both standard + compressed NFTs, but may miss some standard ones)
-    const nfts = await fetchNFTsFromDAS(walletAddress, limit, authHeaders);
+    // Pass null for knownMints — DAS is authoritative, never skip owned NFTs
+    const nfts = await fetchNFTsFromDAS(walletAddress, limit, authHeaders, null);
     console.log('[NFT] DAS returned', nfts.length, 'NFTs');
 
     // 2. Also fetch standard NFTs via getTokenAccountsByOwner (catches ones DAS misses)
@@ -2713,11 +2757,11 @@ async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) 
         const nftMints = tokenAccounts.value
           .filter(a => a.account.data.parsed.info.tokenAmount.amount === '1' && a.account.data.parsed.info.tokenAmount.decimals === 0)
           .map(a => a.account.data.parsed.info.mint);
-        
-        // Find mints not already in DAS results
+
+        // Find mints not already in DAS results and not in blacklist
         const dasIds = new Set(nfts.map(n => (n.assetId || n.mintAddress || '').replace('cnft_', '')));
-        const missing = nftMints.filter(m => !dasIds.has(m));
-        
+        const missing = nftMints.filter(m => !dasIds.has(m) && !blacklist.has(m));
+
         if (missing.length > 0) {
           console.log(`[NFT] Found ${missing.length} standard NFTs not in DAS, fetching metadata...`);
           // Fetch metadata for missing standard NFTs in batches of 3
@@ -2725,23 +2769,60 @@ async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) 
             const batch = missing.slice(i, i + 3);
             const results = await Promise.all(batch.map(async (mintAddress) => {
               try {
-                const metadataJson = await fetchStandardNFTMetadata(mintAddress);
-                if (!metadataJson || !metadataJson.name) return null;
+                const metadataResult = await fetchStandardNFTMetadata(mintAddress);
+                // If metadata fetch failed but we have basic data, still show the NFT
+                if (!metadataResult) return null;
+                if (metadataResult.fetchFailed) {
+                  // Metadata fetch failed (could be encrypted or rate-limited) - show basic NFT
+                  console.log('[NFT] Metadata fetch failed for', mintAddress, '- showing basic NFT');
+                  return {
+                    mintAddress,
+                    assetId: mintAddress,
+                    name: 'NFT',
+                    description: '',
+                    image: '',
+                    imageUrl: '',
+                    metadataUrl: metadataResult.uri || '',
+                    ownerAddress: walletAddress,
+                    isCompressed: false,
+                    edition: null,
+                    certificationMode: null,
+                    encrypted: false, // Unknown - user needs to check
+                    watermarked: false,
+                    license: null,
+                    storageType: 'ipfs',
+                    encryptionData: null,
+                    thumbnailUrl: null,
+                    attributes: [],
+                    source: 'rpc',
+                    metadataFetchFailed: true,
+                  };
+                }
+                if (!metadataResult.name) return null;
+                const metadataJson = metadataResult.metadata || metadataResult;
                 const attrs = Array.isArray(metadataJson.attributes) ? metadataJson.attributes : [];
                 const getAttr = (t) => { const a = attrs.find(x => x.trait_type === t); return a ? a.value : null; };
                 const editionRaw = getAttr('Edition');
                 const edition = editionRaw ? String(editionRaw).toLowerCase() : null;
-                const encryptedFromAttr = getAttr('Encrypted') === 'true';
-                const encryptedFromProps = !!(metadataJson.properties && metadataJson.properties.encryption && metadataJson.properties.encryption.encrypted);
-                const encrypted = encryptedFromAttr || encryptedFromProps;
+                const encryptedFromAttr = isExplicitlyTrue(getAttr('Encrypted'));
+                const encryptedFromProps = isExplicitlyTrue(metadataJson.properties && metadataJson.properties.encryption && metadataJson.properties.encryption.encrypted);
+                const encProps = (metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
+                const encryptedFromKeys = hasWrappedEncryptionPayload(encProps);
+                // Only trust EXPLICIT encryption markers - not fetch failures (could be rate limit)
+                const encrypted = encryptedFromAttr || encryptedFromProps || encryptedFromKeys;
                 let imgUrl = metadataJson.image || '';
                 // Convert ipfs:// scheme to gateway URL (old standard NFTs use raw ipfs:// URIs)
                 if (imgUrl.startsWith('ipfs://')) imgUrl = 'https://ipfs.io/ipfs/' + imgUrl.replace(/^ipfs:\/\/(ipfs\/)?/, '');
-                const encProps = (metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
                 const storageAttr = getAttr('Storage');
-                const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imgUrl.includes('stealthlynk.io') || imgUrl.includes('stealthcloud')) ? 'cloud' : imgUrl.startsWith('data:') ? 'onchain' : (imgUrl.includes('akrd.net') || imgUrl.includes('arweave.net')) ? 'arweave' : 'ipfs';
+                const isArweaveUrl = (url) => url && (url.includes('akrd.net') || url.includes('arweave.net'));
+                const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imgUrl.includes('stealthlynk.io') || imgUrl.includes('stealthcloud')) ? 'cloud' : imgUrl.startsWith('data:') ? 'onchain' : (isArweaveUrl(imgUrl)) ? 'arweave' : 'ipfs';
+                const arweaveUrl = (storageType === 'arweave' && imgUrl) ? imgUrl : null;
+                // Detect PhotoLynk ecosystem NFTs (only these should default to private when encrypted)
+                const contentHash = getAttr('Content Hash');
+                const exifHash = getAttr('EXIF Hash');
+                const isPhotoLynkEcosystem = !!(contentHash && exifHash);
                 const certModeRaw = getAttr('Certification Mode');
-                const certificationMode = certModeRaw ? String(certModeRaw).toLowerCase() : (edition === 'limited' ? 'private' : edition === 'open' ? 'public' : null);
+                const certificationMode = certModeRaw ? String(certModeRaw).toLowerCase() : (edition === 'limited' ? 'private' : edition === 'open' ? 'public' : (encrypted && isPhotoLynkEcosystem) ? 'private' : null);
                 return {
                   mintAddress,
                   assetId: mintAddress,
@@ -2749,6 +2830,7 @@ async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) 
                   description: metadataJson.description || '',
                   image: imgUrl,
                   imageUrl: imgUrl,
+                  arweaveUrl: arweaveUrl,
                   metadataUrl: metadataJson.uri || '',
                   ownerAddress: walletAddress,
                   isCompressed: false,
@@ -2758,7 +2840,7 @@ async function _fetchUserNFTsImpl(walletAddress, limit = 9, authHeaders = null) 
                   watermarked: getAttr('Watermarked') === 'true',
                   license: getAttr('License') || null,
                   storageType,
-                  encryptionData: (encProps.wrappedKey) ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, nonce: encProps.nonce, ...(encProps.thumbnailNonce ? { thumbnailNonce: encProps.thumbnailNonce } : {}), ...(encProps.thumbnailUrl ? { thumbnailUrl: encProps.thumbnailUrl } : {}) } : null,
+                  encryptionData: encryptedFromKeys ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, ...(encProps.nonce ? { nonce: encProps.nonce } : {}), ...(encProps.thumbnailNonce ? { thumbnailNonce: encProps.thumbnailNonce } : {}), ...(encProps.thumbnailUrl ? { thumbnailUrl: encProps.thumbnailUrl } : {}) } : null,
                   thumbnailUrl: encProps.thumbnailUrl || null,
                   attributes: attrs,
                   source: 'rpc',
@@ -2789,7 +2871,7 @@ const DAS_CACHE_FILE = path.join(userDataPath, 'nft_das_cache.json');
 function saveDasCache(total, ts) {
   try {
     fs.writeFileSync(DAS_CACHE_FILE, JSON.stringify({ total, ts }));
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function loadDasCache() {
@@ -2798,9 +2880,9 @@ function loadDasCache() {
       const data = JSON.parse(fs.readFileSync(DAS_CACHE_FILE, 'utf8'));
       _lastDasTotal = data.total;
       _lastDasTotalTs = data.ts;
-      console.log(`[DAS] Restored cache from disk: total=${_lastDasTotal}, age=${Math.round((Date.now() - _lastDasTotalTs)/1000)}s`);
+      console.log(`[DAS] Restored cache from disk: total=${_lastDasTotal}, age=${Math.round((Date.now() - _lastDasTotalTs) / 1000)}s`);
     }
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function invalidateDasCache() {
@@ -2821,8 +2903,12 @@ let _dasInFlight = null;
 /**
  * Fetch NFTs using Solana DAS (Digital Asset Standard) API
  * Same implementation as mobile app's fetchCompressedNFTs
+ * @param {string} walletAddress - Owner wallet address
+ * @param {number} limit - Max NFTs to fetch
+ * @param {Object} authHeaders - Auth headers for server proxy
+ * @param {Set<string>} knownMints - Optional set of mint IDs to skip (includes transferred-out blacklist)
  */
-async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
+async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null, knownMints = null) {
   // Global lock: if another DAS fetch is already running, piggyback on it
   if (_dasInFlight) {
     console.log('[DAS] fetchNFTsFromDAS — already in flight, waiting for existing call');
@@ -2831,7 +2917,7 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
 
   const run = async () => {
     try {
-      return await _fetchNFTsFromDASImpl(walletAddress, limit, authHeaders);
+      return await _fetchNFTsFromDASImpl(walletAddress, limit, authHeaders, knownMints);
     } finally {
       _dasInFlight = null;
     }
@@ -2840,9 +2926,11 @@ async function fetchNFTsFromDAS(walletAddress, limit = 9, authHeaders = null) {
   return _dasInFlight;
 }
 
-async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = null) {
+async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = null, knownMints = null) {
   let pageSize = 20; // Start small — auto-halves on "Response is too big"
+  const ORIG_PAGE_SIZE = 20;
   const MIN_PAGE_SIZE = 5;
+  let consecutiveOk = 0;
   const MAX_PAGES = 50; // Desktop has no OOM concerns, fetch everything
 
   // Cooldown: if DAS was called recently (within 5 min) AND returned results, skip unless force-refreshing
@@ -2853,28 +2941,24 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
     return [];
   }
 
-  // Early exit: if local NFT count matches cached DAS total, skip API call entirely (0 calls)
-  if (!forceRefresh && _lastDasTotal !== null && _lastDasTotal > 0 && Date.now() - _lastDasTotalTs < 900000) {
-    try {
-      const localNFTs = await getStoredNFTs();
-      if (localNFTs.length >= _lastDasTotal) {
-        console.log(`[DAS] Local NFTs (${localNFTs.length}) >= cached DAS total (${_lastDasTotal}), skipping API call`);
-        return [];
-      }
-    } catch (_) {}
-  }
+  // NOTE: Removed stale "local >= total" early exit.
+  // Local storage can be bloated with transferred NFTs, so local count > DAS total
+  // is NOT a valid reason to skip. The 5-min cooldown above is sufficient.
 
   const buildDasUrls = () => {
     const urls = [];
     // Server DAS proxy first (30s server-side cache, avoids rate limits)
-    urls.push({ name: 'server-proxy', url: 'http://localhost:3000/api/nft-service/das-proxy', isProxy: true });
+    // Use 127.0.0.1 explicitly to avoid IPv6 ::1 connection issues
+    urls.push({ name: 'server-proxy', url: 'http://127.0.0.1:3000/api/nft-service/das-proxy', isProxy: true });
     // Helius direct fallback
+    console.log('[DAS] Building URLs - HELIUS_API_KEY present:', !!process.env.HELIUS_API_KEY);
     if (process.env.HELIUS_API_KEY) {
       urls.push({ name: 'helius-1', url: `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}` });
     }
     if (process.env.HELIUS_API_KEY_2) {
       urls.push({ name: 'helius-2', url: `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY_2}` });
     }
+    console.log(`[DAS] Will try ${urls.length} endpoints:`, urls.map(u => u.name).join(', '));
     return urls;
   };
 
@@ -2922,11 +3006,13 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
         }
         const items = json?.result?.items;
         if (!Array.isArray(items)) {
-          console.error(`[DAS] ${endpoint.name} missing result.items`);
+          console.error(`[DAS] ${endpoint.name} missing result.items`, JSON.stringify(json?.result).slice(0, 200));
           resolve({ ok: false, items: [] });
           return;
         }
         const total = json?.result?.total || items.length;
+        const compressedCount = items.filter(i => i.compression?.compressed).length;
+        console.log(`[DAS] ${endpoint.name} returned ${items.length} items (${compressedCount} compressed), total: ${total}`);
         resolve({ ok: true, items, total });
       });
     });
@@ -2979,12 +3065,14 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
         // "Response is too big" (-32702) — halve page size and retry same page
         if (result.errorCode === -32702 && pageSize > MIN_PAGE_SIZE) {
           pageSize = Math.max(MIN_PAGE_SIZE, Math.floor(pageSize / 2));
+          consecutiveOk = 0;
           console.log(`[DAS] Response too big, reducing page size to ${pageSize} and retrying`);
           continue;
         }
         // At minimum page size and still too big — skip this page (giant on-chain SVG)
         if (result.errorCode === -32702 && pageSize <= MIN_PAGE_SIZE) {
           console.log(`[DAS] Page ${dasPage} has oversized NFT (>20MB), skipping`);
+          consecutiveOk = 0;
           dasPage++;
           continue;
         }
@@ -2998,6 +3086,14 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
       found = true;
       if (result.items.length === 0) break;
       console.log(`[DAS] Page ${dasPage}: ${result.items.length} items`);
+      // Page size recovery: after 3 consecutive successes at reduced size, try bumping back up
+      if (pageSize < ORIG_PAGE_SIZE) {
+        consecutiveOk++;
+        if (consecutiveOk >= 3) {
+          const ns = Math.min(ORIG_PAGE_SIZE, pageSize * 2);
+          if (ns > pageSize) { console.log(`[DAS] Recovering page size: ${pageSize} → ${ns}`); pageSize = ns; consecutiveOk = 0; }
+        }
+      }
       items.push(...result.items);
       if (result.items.length < pageSize) break; // Last page
       dasPage++;
@@ -3018,8 +3114,8 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
   // Process a single DAS item into an NFT object
   const processItem = async (item) => {
     let imageUrl = item.content?.links?.image ||
-                  item.content?.files?.[0]?.uri ||
-                  '';
+      item.content?.files?.[0]?.uri ||
+      '';
     if (imageUrl && imageUrl.startsWith('ipfs://')) imageUrl = 'https://ipfs.io/ipfs/' + imageUrl.slice(7);
     const metadataUrl = item.content?.json_uri || '';
     const isCompressed = item.compression?.compressed === true;
@@ -3078,19 +3174,49 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
     };
     const editionRaw = getAttr('Edition');
     const edition = editionRaw ? String(editionRaw).toLowerCase() : null;
+    // Read on-chain Storage attribute FIRST (needed for accurate encryption detection)
+    const storageAttr = getAttr('Storage');
+    const isArweaveUrl = (url) => url && (url.includes('akrd.net') || url.includes('arweave.net'));
+    const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imageUrl && (imageUrl.includes('stealthlynk.io') || imageUrl.includes('stealthcloud'))) ? 'cloud' : (imageUrl && imageUrl.startsWith('data:')) ? 'onchain' : (imageUrl && isArweaveUrl(imageUrl)) ? 'arweave' : 'ipfs';
+    
     // Extract encryption keys from metadata properties (matches mobile)
     const encProps = (metadataJson && metadataJson.properties && metadataJson.properties.encryption) ? metadataJson.properties.encryption : {};
-    const encryptedFromAttr = getAttr('Encrypted') === 'true';
+    const encryptedFromAttr = isExplicitlyTrue(getAttr('Encrypted'));
     const encryptedFromFileType = (item.content?.files?.[0]?.mime === 'application/octet-stream') || (item.content?.files?.[0]?.type === 'application/octet-stream');
-    const encryptedFromProps = !!(encProps.encrypted);
-    const encryptedFromKeys = !!(encProps.wrappedKey && encProps.nonce && encProps.wrapNonce);
-    // Heuristic: metadata fetch returned non-JSON AND DAS has no inline attributes → encrypted
-    const encryptedFromHeuristic = metadataFetchFailed && dasAttrs.length === 0;
-    const encrypted = encryptedFromAttr || encryptedFromFileType || encryptedFromProps || encryptedFromKeys || encryptedFromHeuristic;
+    const encryptedFromProps = isExplicitlyTrue(encProps.encrypted);
+    const encryptedFromKeys = hasWrappedEncryptionPayload(encProps);
+    // CRITICAL: Only trust EXPLICIT encryption markers:
+    // - Encrypted attribute = 'true'
+    // - properties.encryption.encrypted = true
+    // - Encryption keys present (wrappedKey, nonce, wrapNonce)
+    // - application/octet-stream ONLY for StealthCloud (IPFS/Arweave use it as generic fallback)
+    let encrypted = encryptedFromAttr || encryptedFromProps || encryptedFromKeys || (encryptedFromFileType && storageType === 'cloud');
+    
+    // Fallback: If metadata fetch failed but this is a PhotoLynk cNFT with StealthCloud URL, check if image URL suggests encryption
+    if (!encrypted && metadataFetchFailed && isCompressed && imageUrl) {
+      const isPhotoLynkMerkle = item.compression?.tree === PHOTOLYNK_MERKLE_TREE;
+      const isStealthCloud = imageUrl.includes('stealthlynk.io') || imageUrl.includes('stealthcloud');
+      // Encrypted files are often stored as .bin or have non-image file extensions
+      const looksEncrypted = imageUrl.endsWith('.bin') || imageUrl.includes('/enc/') || imageUrl.includes('/encrypted/');
+      if (isPhotoLynkMerkle && isStealthCloud && looksEncrypted) {
+        console.log('[NFT] Detected encrypted cNFT from URL pattern:', imageUrl.slice(0, 60));
+        encrypted = true;
+      }
+    }
     const watermarked = getAttr('Watermarked') === 'true';
     const license = getAttr('License') || null;
+    // Detect PhotoLynk ecosystem NFTs (only these should default to private when encrypted)
+    const contentHash = getAttr('Content Hash');
+    const exifHash = getAttr('EXIF Hash');
+    // Exclude NFTs with "PhotoLynk" in name (app screenshots, not certified photos)
+    const nameExcludesEcosystem = item.content?.metadata?.name?.toLowerCase().includes('photolynk');
+    const isPhotoLynkEcosystem = !nameExcludesEcosystem && !!(contentHash && exifHash);
     const certModeRaw = getAttr('Certification Mode');
-    const certificationMode = certModeRaw ? String(certModeRaw).toLowerCase() : (edition === 'limited' ? 'private' : edition === 'open' ? 'public' : null);
+    const certificationMode = certModeRaw ? String(certModeRaw).toLowerCase() 
+      : (encrypted && isPhotoLynkEcosystem) ? 'private' 
+      : (edition === 'open') ? 'public' 
+      : (edition === 'limited') ? 'private' 
+      : null;
 
     // Don't cache encrypted .bin files as images — they can't render
     if (encrypted && cachedImagePath) {
@@ -3106,14 +3232,13 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
       if (imageUrl.includes('stealthlynk.io')) {
         try {
           cachedImagePath = await cacheImage(imageUrl, cid, cacheHeaders);
-        } catch (_) {}
+        } catch (_) { }
       } else {
-        cacheImage(imageUrl, cid, cacheHeaders).catch(() => {});
+        cacheImage(imageUrl, cid, cacheHeaders).catch(() => { });
       }
     }
-    // Read on-chain Storage attribute (authoritative for cross-device detection), fall back to URL-based detection
-    const storageAttr = getAttr('Storage');
-    const storageType = storageAttr === 'StealthCloud' ? 'cloud' : storageAttr === 'Arweave' ? 'arweave' : storageAttr === 'Embedded SVG' ? 'onchain' : storageAttr === 'IPFS' ? 'ipfs' : (imageUrl && (imageUrl.includes('stealthlynk.io') || imageUrl.includes('stealthcloud'))) ? 'cloud' : (imageUrl && imageUrl.startsWith('data:')) ? 'onchain' : (imageUrl && (imageUrl.includes('akrd.net') || imageUrl.includes('arweave.net'))) ? 'arweave' : 'ipfs';
+
+    const arweaveUrl = (storageType === 'arweave' && imageUrl) ? imageUrl : null;
     return {
       mintAddress: isCompressed ? `cnft_${item.id}` : item.id,
       assetId: item.id,
@@ -3121,6 +3246,7 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
       description: item.content?.metadata?.description || '',
       image: cachedImagePath || imageUrl,
       imageUrl: imageUrl,
+      arweaveUrl: arweaveUrl,
       cachedPath: cachedImagePath,
       metadataUrl: metadataUrl,
       ownerAddress: walletAddress,
@@ -3133,7 +3259,7 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
       license: license,
       storageType: storageType,
       // Extract encryption keys + thumbnail info from metadata props (cross-device discovery)
-      encryptionData: encryptedFromKeys ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, nonce: encProps.nonce, ...(encProps.thumbnailNonce ? { thumbnailNonce: encProps.thumbnailNonce } : {}), ...(encProps.thumbnailUrl ? { thumbnailUrl: encProps.thumbnailUrl } : {}) } : null,
+      encryptionData: encryptedFromKeys ? { wrappedKey: encProps.wrappedKey, wrapNonce: encProps.wrapNonce, ...(encProps.nonce ? { nonce: encProps.nonce } : {}), ...(encProps.thumbnailNonce ? { thumbnailNonce: encProps.thumbnailNonce } : {}), ...(encProps.thumbnailUrl ? { thumbnailUrl: encProps.thumbnailUrl } : {}) } : null,
       thumbnailUrl: encProps.thumbnailUrl || null,
       attributes: attrs,
       metadata: metadataJson ? { uri: metadataUrl, attributes: attrs, properties: metadataJson.properties || {} } : null,
@@ -3144,7 +3270,8 @@ async function _fetchNFTsFromDASImpl(walletAddress, limit = 9, authHeaders = nul
     };
   };
 
-  // Process items in parallel batches of 3 (avoid 429 rate limits on IPFS gateways)
+  // DAS is authoritative — process ALL items (no knownMints filtering)
+  // This ensures transferred NFTs disappear (DAS won't return them) and new NFTs appear
   const itemsToProcess = items.slice(0, limit);
   const nfts = [];
   for (let i = 0; i < itemsToProcess.length; i += 5) {
@@ -3169,7 +3296,7 @@ function fetchWithRedirects(url, maxRedirects = 5) {
       resolve({ ok: false, data: '' });
       return;
     }
-    
+
     const protocol = url.startsWith('https') ? https : http;
     const req = protocol.get(url, { timeout: 8000 }, (res) => {
       // Follow redirects (301, 302, 307, 308)
@@ -3184,13 +3311,13 @@ function fetchWithRedirects(url, maxRedirects = 5) {
         fetchWithRedirects(redirectUrl, maxRedirects - 1).then(resolve);
         return;
       }
-      
+
       if (res.statusCode !== 200) {
         console.log('[NFT] Gateway returned:', res.statusCode);
         resolve({ ok: false, data: '' });
         return;
       }
-      
+
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve({ ok: true, data }));
@@ -3210,24 +3337,24 @@ const _METADATA_NEG_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 async function fetchFullMetadata(metadataUrl, isCompressed = false) {
   if (!metadataUrl) return null;
-  
+
   const cid = extractIPFSCid(metadataUrl);
   const cacheKey = cid || metadataUrl;
-  
+
   // Check negative cache — skip network calls for known-encrypted metadata
   if (_metadataNegativeCache[cacheKey] && (Date.now() - _metadataNegativeCache[cacheKey]) < _METADATA_NEG_CACHE_TTL) {
     return null;
   }
-  
+
   const gatewayList = isCompressed ? CNFT_IPFS_GATEWAYS : IPFS_GATEWAYS;
   const gateways = cid ? gatewayList.map(g => g + cid) : [metadataUrl];
-  
+
   let sawNonJson = false;
   for (const gateway of gateways) {
     try {
       console.log('[NFT] Trying metadata gateway:', gateway.slice(0, 50));
       const result = await fetchWithRedirects(gateway);
-      
+
       if (result.ok && result.data) {
         try {
           const json = JSON.parse(result.data);
@@ -3248,12 +3375,12 @@ async function fetchFullMetadata(metadataUrl, isCompressed = false) {
       console.log('[NFT] Gateway failed:', e.message);
     }
   }
-  
+
   // Cache negative result so we don't re-fetch encrypted metadata on next scan
   if (sawNonJson) {
     _metadataNegativeCache[cacheKey] = Date.now();
   }
-  
+
   return null;
 }
 
@@ -3273,12 +3400,12 @@ function openWalletConnect(callback) {
   // For desktop, we show a window where user can:
   // 1. Enter wallet address manually (simplest)
   // 2. Open browser to connect via Phantom extension on StealthCloud
-  
+
   if (walletWindow && !walletWindow.isDestroyed()) {
     walletWindow.focus();
     return;
   }
-  
+
   walletWindow = new BrowserWindow({
     width: 420,
     height: 520,
@@ -3288,10 +3415,10 @@ function openWalletConnect(callback) {
       contextIsolation: false,
     }
   });
-  
+
   const html = generateWalletConnectHTML();
   walletWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-  
+
   walletWindow.on('closed', () => {
     walletWindow = null;
   });
@@ -3305,7 +3432,7 @@ function generateWalletConnectHTML() {
   <meta charset="UTF-8">
   <title>Connect Wallet</title>
   <style>
-    :root { --bg: #0a0a0a; --card: #1a1a1a; --accent: #9945FF; --accent2: #14F195; --text: #fff; --text-muted: #888; --border: rgba(255,255,255,0.1); }
+    :root { --bg: #040406; --card: #0C0C12; --accent: #9945FF; --accent2: #00FFA3; --text: #F4F4F8; --text-muted: #5C5C72; --border: rgba(255,255,255,0.06); }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 30px 24px; }
     h1 { font-size: 22px; margin-bottom: 6px; text-align: center; }
@@ -3413,7 +3540,7 @@ function openNFTMintWindow(appDataPath, credentials) {
     mintWindow.focus();
     return;
   }
-  
+
   mintWindow = new BrowserWindow({
     width: 480,
     height: 700,
@@ -3423,17 +3550,17 @@ function openNFTMintWindow(appDataPath, credentials) {
       contextIsolation: false,
     }
   });
-  
+
   const fees = getCurrentFees();
   const promo = isPromoActive();
   const promoDays = getPromoDaysRemaining();
-  
+
   const html = generateNFTMintHTML(fees, promo, promoDays, credentials);
   // Write HTML to temp file and load via file:// — data: URLs cause NSOpenPanel to freeze on macOS
   const tmpMintPath = path.join(os.tmpdir(), 'photolynk-mint.html');
   fs.writeFileSync(tmpMintPath, html, 'utf8');
   mintWindow.loadFile(tmpMintPath);
-  
+
   mintWindow.on('closed', () => {
     mintWindow = null;
   });
@@ -3444,7 +3571,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   // Mobile formula: storage + on-chain + app commission
   // Compressed NFT: ~$0 on-chain + commission
   // Standard NFT: ~$2.60 on-chain (rent + metaplex) + commission
-  
+
   // App commission fees
   const cnftCloudFee = fees.APP_COMMISSION_CNFT_CLOUD_USD;
   const cnftIpfsFee = fees.APP_COMMISSION_CNFT_IPFS_USD;
@@ -3470,7 +3597,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   const cnftIpfsTotal = cnftIpfsFee + CNFT_ONCHAIN_USD + ipfsStorageUsd;
   const nftCloudTotal = nftCloudFee + STANDARD_ONCHAIN_USD + cloudStorageUsd;
   const nftIpfsTotal = nftIpfsFee + STANDARD_ONCHAIN_USD + ipfsStorageUsd;
-  
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -3478,13 +3605,13 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
   <title>Certify Photo</title>
   <style>
     :root {
-      --bg: #0a0a0a;
-      --card: #1a1a1a;
+      --bg: #040406;
+      --card: #0C0C12;
       --accent: #9945FF;
-      --accent2: #14F195;
-      --text: #fff;
-      --text-muted: #888;
-      --border: rgba(255,255,255,0.1);
+      --accent2: #00FFA3;
+      --text: #F4F4F8;
+      --text-muted: #5C5C72;
+      --border: rgba(255,255,255,0.06);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 20px; overflow: hidden; }
@@ -3744,8 +3871,11 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
           input.accept = 'image/*';
           input.style.display = 'none';
           input.onchange = () => {
+            console.log('[NFT SelectPhoto] input.files:', input.files, 'length:', input.files?.length);
             if (input.files && input.files.length > 0) {
-              done(input.files[0].path || null);
+              const file = input.files[0];
+              console.log('[NFT SelectPhoto] file object:', file, 'path:', file?.path);
+              done(file?.path || null);
             } else {
               done(null);
             }
@@ -3756,6 +3886,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
           input.click();
           setTimeout(() => { done(null); try { input.remove(); } catch(_){} }, 120000);
         });
+        console.log('[NFT SelectPhoto] filePath selected:', filePath, 'type:', typeof filePath);
         if (filePath) {
           selectedPhoto = filePath;
           document.getElementById('preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(filePath);
@@ -3848,14 +3979,16 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
     async function mintNFT() {
       if (isMinting) return;
       isMinting = true;
-      
+
       const btn = document.getElementById('mint-btn');
       btn.disabled = true;
       btn.innerHTML = '<span>⏳</span> Certifying...';
-      
+
       const name = document.getElementById('nft-name').value || 'Certified Photo';
       const description = document.getElementById('nft-description').value || '';
-      
+
+      console.log('[NFT Mint Standalone] selectedPhoto:', selectedPhoto, 'type:', typeof selectedPhoto);
+
       try {
         const result = await ipcRenderer.invoke('mint-nft', {
           nftType: selectedType,        // 'compressed' or 'standard'
@@ -3880,6 +4013,7 @@ function generateNFTMintHTML(fees, promo, promoDays, credentials) {
           throw new Error(result.error || 'Minting failed');
         }
       } catch (e) {
+        console.error('[NFT Mint Standalone] Error:', e);
         btn.innerHTML = '<span>✕</span> ' + (e.message || 'Failed');
         btn.style.background = 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
         setTimeout(() => {
@@ -3911,7 +4045,7 @@ function openNFTAlbumWindow(appDataPath, walletAddress) {
     albumWindow.focus();
     return;
   }
-  
+
   albumWindow = new BrowserWindow({
     width: 480,
     height: 600,
@@ -3921,10 +4055,10 @@ function openNFTAlbumWindow(appDataPath, walletAddress) {
       contextIsolation: false,
     }
   });
-  
+
   const html = generateNFTAlbumHTML(walletAddress);
   albumWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-  
+
   albumWindow.on('closed', () => {
     albumWindow = null;
   });
@@ -4072,10 +4206,46 @@ function generateNFTAlbumHTML(walletAddress) {
 // ============================================================================
 
 let nftStorageFile = null;
+let nftTransferredOutFile = null;
+let _transferredOutCache = null;
 
 function initNFTStorage(appDataPath) {
   nftStorageFile = path.join(appDataPath, 'photolynk_nfts.json');
+  nftTransferredOutFile = path.join(appDataPath, 'photolynk_nft_transferred_out.json');
   console.log('[NFT Storage] Initialized:', nftStorageFile);
+}
+
+// Transferred out blacklist - tracks NFTs that were transferred out (matches mobile)
+async function getTransferredOutBlacklist() {
+  if (_transferredOutCache) return _transferredOutCache;
+  try {
+    if (!nftTransferredOutFile || !fs.existsSync(nftTransferredOutFile)) {
+      _transferredOutCache = new Set();
+      return _transferredOutCache;
+    }
+    const raw = fs.readFileSync(nftTransferredOutFile, 'utf8');
+    const arr = JSON.parse(raw);
+    _transferredOutCache = new Set(Array.isArray(arr) ? arr : []);
+  } catch (_) {
+    _transferredOutCache = new Set();
+  }
+  return _transferredOutCache;
+}
+
+async function addToTransferredOutBlacklist(assetId) {
+  if (!assetId) return;
+  const bl = await getTransferredOutBlacklist();
+  const normalized = String(assetId).replace(/^cnft_/, '').trim();
+  if (!normalized || bl.has(normalized)) return;
+  bl.add(normalized);
+  try {
+    if (nftTransferredOutFile) {
+      fs.writeFileSync(nftTransferredOutFile, JSON.stringify([...bl], null, 2));
+      console.log('[NFT] Added to transferred-out blacklist:', normalized);
+    }
+  } catch (e) {
+    console.log('[NFT] Failed to save transferred-out blacklist:', e.message);
+  }
 }
 
 async function getStoredNFTs() {
@@ -4118,7 +4288,7 @@ async function saveNFTToStorage(nftData, serverUrl = null, authHeaders = null) {
       console.log('[NFT Storage] Saved (no id):', nftData.name);
     }
     fs.writeFileSync(nftStorageFile, JSON.stringify(existing, null, 2));
-    
+
     // Sync to server if available
     if (serverUrl && authHeaders) {
       try {
@@ -4136,22 +4306,157 @@ async function saveNFTToStorage(nftData, serverUrl = null, authHeaders = null) {
   }
 }
 
+// Extract image ID from StealthCloud URL for deletion
+function extractImageId(url) {
+  if (!url) return null;
+  // StealthCloud: /api/nft/image/:userId/:filename or nft.stealthlynk.io/:userId/:filename
+  const scMatch = url.match(/(?:\/api\/nft\/image\/|nft\.stealthlynk\.io\/)([^/]+)\/([^/?#]+)/);
+  if (scMatch) {
+    // Return just the filename without extension as the imageId
+    return scMatch[2].replace(/\.[^.]+$/, '');
+  }
+  return null;
+}
+
+/**
+ * Clean up orphaned images on StealthCloud for transferred NFTs.
+ * Scans local NFT storage and deletes any images for NFTs no longer owned.
+ * One-time cleanup for existing orphaned images.
+ */
+async function cleanupOrphanedImages(walletAddress, serverUrl, authHeaders) {
+  if (!walletAddress || !serverUrl || !authHeaders) {
+    console.log('[NFT Cleanup] Missing credentials, skipping orphaned image cleanup');
+    return { cleaned: 0, errors: 0 };
+  }
+
+  const normMint = (m) => m ? String(m).replace(/^cnft_/, '').trim() : '';
+  const normWallet = (w) => w ? String(w).trim() : '';
+  const walletNorm = normWallet(walletAddress);
+
+  try {
+    // Get actual on-chain ownership
+    const ownedMints = new Set();
+    try {
+      const dasResult = await _fetchNFTsFromDASImpl(walletAddress, 1000, authHeaders);
+      for (const n of (dasResult || [])) {
+        if (n.assetId) ownedMints.add(normMint(n.assetId));
+        if (n.mintAddress) ownedMints.add(normMint(n.mintAddress));
+      }
+    } catch (_) { }
+
+    if (ownedMints.size === 0) {
+      console.log('[NFT Cleanup] No on-chain data, skipping cleanup');
+      return { cleaned: 0, errors: 0 };
+    }
+
+    const localNFTs = await getStoredNFTs();
+    let cleaned = 0;
+    let errors = 0;
+
+    for (const nft of localNFTs) {
+      // Only process NFTs for this wallet
+      if (normWallet(nft.ownerAddress) !== walletNorm) continue;
+
+      const mint = normMint(nft.mintAddress);
+      // If not owned on-chain, delete images
+      if (!ownedMints.has(mint)) {
+        try {
+          // Delete main image
+          if (nft.imageUrl) {
+            const imageId = extractImageId(nft.imageUrl);
+            if (imageId) {
+              try {
+                const axios = require('axios');
+                await axios.delete(`${serverUrl}/api/nft/image/${imageId}`, {
+                  headers: authHeaders, timeout: 10000
+                });
+                console.log('[NFT Cleanup] Deleted orphaned image:', imageId);
+                cleaned++;
+              } catch (imgErr) {
+                console.log('[NFT Cleanup] Image delete failed:', imgErr.message);
+                errors++;
+              }
+            }
+          }
+          // Delete thumbnail
+          if (nft.thumbnailUrl && nft.thumbnailUrl !== nft.imageUrl) {
+            const thumbId = extractImageId(nft.thumbnailUrl);
+            if (thumbId && thumbId !== extractImageId(nft.imageUrl)) {
+              try {
+                const axios = require('axios');
+                await axios.delete(`${serverUrl}/api/nft/image/${thumbId}`, {
+                  headers: authHeaders, timeout: 10000
+                });
+                console.log('[NFT Cleanup] Deleted orphaned thumbnail:', thumbId);
+                cleaned++;
+              } catch (thumbErr) {
+                console.log('[NFT Cleanup] Thumbnail delete failed:', thumbErr.message);
+                errors++;
+              }
+            }
+          }
+        } catch (e) {
+          console.log('[NFT Cleanup] Error cleaning NFT:', e.message);
+          errors++;
+        }
+      }
+    }
+
+    console.log(`[NFT Cleanup] Orphaned image cleanup complete: ${cleaned} images deleted, ${errors} errors`);
+    return { cleaned, errors };
+  } catch (e) {
+    console.log('[NFT Cleanup] Cleanup failed:', e.message);
+    return { cleaned: 0, errors: 1 };
+  }
+}
+
 async function removeNFTFromStorage(mintAddress, serverUrl = null, authHeaders = null) {
   try {
     const existing = await getStoredNFTs();
+    const nftToRemove = existing.find(nft => nft.mintAddress === mintAddress);
     const filtered = existing.filter(nft => nft.mintAddress !== mintAddress);
     fs.writeFileSync(nftStorageFile, JSON.stringify(filtered, null, 2));
     console.log('[NFT Storage] Removed:', mintAddress);
-    
+
     // Clean up associated certificates (prevents orphan certs — matches mobile apps)
-    try { await removeCertificateLocal(mintAddress); } catch (_) {}
-    
+    try { await removeCertificateLocal(mintAddress); } catch (_) { }
+
     if (serverUrl && authHeaders) {
       try {
         const axios = require('axios');
+        // Remove from metadata
         await axios.post(`${serverUrl}/api/nft/sync`, { action: 'remove', mintAddress }, {
           headers: authHeaders, timeout: 10000
         });
+
+        // Also delete image files from StealthCloud to prevent orphaned storage
+        if (nftToRemove?.imageUrl) {
+          try {
+            const imageId = extractImageId(nftToRemove.imageUrl);
+            if (imageId) {
+              await axios.delete(`${serverUrl}/api/nft/image/${imageId}`, {
+                headers: authHeaders, timeout: 10000
+              });
+              console.log('[NFT Storage] Deleted image:', imageId);
+            }
+          } catch (imgErr) {
+            console.log('[NFT Storage] Image delete failed:', imgErr.message);
+          }
+        }
+        // Delete thumbnail if exists
+        if (nftToRemove?.thumbnailUrl && nftToRemove.thumbnailUrl !== nftToRemove.imageUrl) {
+          try {
+            const thumbId = extractImageId(nftToRemove.thumbnailUrl);
+            if (thumbId && thumbId !== extractImageId(nftToRemove.imageUrl)) {
+              await axios.delete(`${serverUrl}/api/nft/image/${thumbId}`, {
+                headers: authHeaders, timeout: 10000
+              });
+              console.log('[NFT Storage] Deleted thumbnail:', thumbId);
+            }
+          } catch (thumbErr) {
+            console.log('[NFT Storage] Thumbnail delete failed:', thumbErr.message);
+          }
+        }
       } catch (syncErr) {
         console.log('[NFT Storage] Server sync removal failed:', syncErr.message);
       }
@@ -4162,39 +4467,153 @@ async function removeNFTFromStorage(mintAddress, serverUrl = null, authHeaders =
 }
 
 /**
- * Remove locally-stored NFTs that were transferred out (no longer on server for this wallet).
- * Compares local set vs server set to find transferred items.
+ * Clear all stored NFTs (for clean slate / resync)
+ */
+async function clearAllStoredNFTs() {
+  try {
+    if (nftStorageFile && fs.existsSync(nftStorageFile)) {
+      fs.unlinkSync(nftStorageFile);
+    }
+    // Also clear transferred out blacklist
+    if (transferredOutFile && fs.existsSync(transferredOutFile)) {
+      fs.unlinkSync(transferredOutFile);
+    }
+    // Clear certificates too
+    const certsPath = getCertsFilePath();
+    if (certsPath && fs.existsSync(certsPath)) {
+      fs.unlinkSync(certsPath);
+    }
+    // Clear cache
+    clearCache();
+    console.log('[NFT Storage] Cleared all stored NFTs');
+    return { success: true };
+  } catch (e) {
+    console.error('[NFT Storage] Clear all failed:', e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Remove locally-stored NFTs that were transferred out (no longer owned per DAS).
+ * Uses DAS + RPC to get actual on-chain ownership, ignoring potentially stale server data.
+ * Also filters by transferred-out blacklist (mobile-synced transfers).
  * Matches solana-seeker/nftOperations.js removeTransferredNFTs.
  */
 async function removeTransferredNFTs(walletAddress, serverUrl, authHeaders) {
   try {
-    if (!serverUrl || !authHeaders || !walletAddress) return;
+    if (!walletAddress) return;
     const normMint = (m) => m ? String(m).replace(/^cnft_/, '').trim() : '';
     const normWallet = (w) => w ? String(w).trim() : '';
-    const axios = require('axios');
-    const resp = await axios.post(`${serverUrl}/api/nft/sync`, {
-      action: 'list-mints', walletAddress,
-    }, { headers: authHeaders, timeout: 15000 });
-    const serverMints = new Set((resp.data?.mints || []).map(m => normMint(m)));
-    if (serverMints.size === 0) return; // Empty = server has no data — don't wipe local
+
+    // Get actual on-chain ownership from DAS (cNFTs) + RPC (standard NFTs)
+    const ownedMints = new Set();
+    let sawDasOwnership = false;
+    try {
+      const dasResult = await _fetchNFTsFromDASImpl(walletAddress, 1000, authHeaders);
+      if (Array.isArray(dasResult) && dasResult.length > 0) sawDasOwnership = true;
+      for (const n of (dasResult || [])) {
+        if (n.assetId) ownedMints.add(normMint(n.assetId));
+        if (n.mintAddress) ownedMints.add(normMint(n.mintAddress));
+      }
+    } catch (_) { }
+
+    // Also get standard NFTs via RPC
+    try {
+      initializeSolana();
+      if (solanaAvailable && connection && TOKEN_PROGRAM_ID) {
+        const ownerPubkey = new PublicKey(walletAddress);
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(ownerPubkey, { programId: TOKEN_PROGRAM_ID });
+        for (const a of tokenAccounts.value) {
+          if (a.account.data.parsed.info.tokenAmount.amount === '1' && a.account.data.parsed.info.tokenAmount.decimals === 0) {
+            ownedMints.add(normMint(a.account.data.parsed.info.mint));
+          }
+        }
+      }
+    } catch (_) { }
+
+    if (ownedMints.size === 0) return; // No on-chain data — don't wipe local
+
+    // Load transferred-out blacklist (synced from mobile)
+    const transferredOut = await getTransferredOutBlacklist();
 
     const localNFTs = await getStoredNFTs();
     const walletNorm = normWallet(walletAddress);
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
     let removed = 0;
     const kept = [];
+    const nftsToDelete = []; // Track for image deletion
     for (const nft of localNFTs) {
       if (normWallet(nft.ownerAddress) !== walletNorm) { kept.push(nft); continue; }
       const mint = normMint(nft.mintAddress);
-      // Skip recently minted (< 5 min) — server may not have synced yet
+      const isCompressed = String(nft.mintAddress || nft.assetId || '').startsWith('cnft_');
+      // Skip recently minted (< 5 min) — DAS may not have indexed yet
       if (nft.createdAt && new Date(nft.createdAt).getTime() > fiveMinAgo) { kept.push(nft); continue; }
-      if (nft.source === 'das') { kept.push(nft); continue; }
-      if (serverMints.has(mint)) { kept.push(nft); continue; }
-      console.log(`[NFT] Removing transferred NFT: ${nft.name || mint}`);
-      try { await removeCertificateLocal(nft.mintAddress); } catch (_) {}
+      if (isCompressed && !sawDasOwnership) { kept.push(nft); continue; }
+      if (ownedMints.has(mint)) { kept.push(nft); continue; }
+      // Also filter by transferred-out blacklist (mobile-synced transfers)
+      if (transferredOut.has(mint)) {
+        console.log(`[NFT] Removing blacklisted transferred NFT: ${nft.name || mint}`);
+        nftsToDelete.push(nft);
+        removed++;
+        continue;
+      }
+      // Not owned per DAS and not in blacklist
+      console.log(`[NFT] Removing transferred NFT (not in DAS): ${nft.name || mint}`);
+      nftsToDelete.push(nft);
       removed++;
     }
     if (removed > 0) {
+      // Delete images from StealthCloud BEFORE updating storage (need NFT data)
+      if (serverUrl && authHeaders) {
+        for (const nft of nftsToDelete) {
+          try {
+            // Delete main image
+            if (nft.imageUrl) {
+              const imageId = extractImageId(nft.imageUrl);
+              if (imageId) {
+                try {
+                  const axios = require('axios');
+                  await axios.delete(`${serverUrl}/api/nft/image/${imageId}`, {
+                    headers: authHeaders, timeout: 10000
+                  });
+                  console.log('[NFT] Deleted transferred image:', imageId);
+                } catch (imgErr) {
+                  console.log('[NFT] Image delete failed:', imgErr.message);
+                }
+              }
+            }
+            // Delete thumbnail
+            if (nft.thumbnailUrl && nft.thumbnailUrl !== nft.imageUrl) {
+              const thumbId = extractImageId(nft.thumbnailUrl);
+              if (thumbId && thumbId !== extractImageId(nft.imageUrl)) {
+                try {
+                  const axios = require('axios');
+                  await axios.delete(`${serverUrl}/api/nft/image/${thumbId}`, {
+                    headers: authHeaders, timeout: 10000
+                  });
+                  console.log('[NFT] Deleted transferred thumbnail:', thumbId);
+                } catch (thumbErr) {
+                  console.log('[NFT] Thumbnail delete failed:', thumbErr.message);
+                }
+              }
+            }
+            // Remove certificate
+            try { await removeCertificateLocal(nft.mintAddress); } catch (_) { }
+            // Remove from server metadata
+            try {
+              const axios = require('axios');
+              await axios.post(`${serverUrl}/api/nft/sync`, { action: 'remove', mintAddress: nft.mintAddress }, {
+                headers: authHeaders, timeout: 10000
+              });
+            } catch (syncErr) {
+              console.log('[NFT] Server metadata removal failed:', syncErr.message);
+            }
+          } catch (delErr) {
+            console.log(`[NFT] Failed to delete transferred NFT:`, delErr.message);
+          }
+        }
+      }
+
       fs.writeFileSync(nftStorageFile, JSON.stringify(kept, null, 2));
       console.log(`[NFT] Removed ${removed} transferred NFTs from local cache`);
     }
@@ -4207,23 +4626,27 @@ async function bulkSaveNFTs(nfts) {
     // First pass: build metadataUrl → index map so we can merge cnft_tx_ with real entries
     const byMeta = {};  // metadataUrl → array index in result
     const result = [];
-    
+
     for (const n of nfts) {
       const id = n && (n.mintAddress || n.assetId);
       if (!id) continue;
-      
+
       const isTxOnly = id.startsWith('cnft_tx_') || id.startsWith('tx_');
       const hasRealId = !isTxOnly && id.length > 20;
-      
+
       if (n.metadataUrl && byMeta[n.metadataUrl] !== undefined) {
         const existingIdx = byMeta[n.metadataUrl];
         const existing = result[existingIdx];
         const existingId = existing && (existing.mintAddress || existing.assetId);
         const existingIsTx = existingId && (existingId.startsWith('cnft_tx_') || existingId.startsWith('tx_'));
-        
+
         if (existingIsTx && hasRealId) {
           // Replace cnft_tx_ entry with real asset ID entry, preserving local fields
-          result[existingIdx] = { ...existing, ...n, mintAddress: n.mintAddress, assetId: n.assetId };
+          // Preserve critical boolean flags that DAS might miss
+          const merged = { ...existing, ...n, mintAddress: n.mintAddress, assetId: n.assetId };
+          if (existing.encrypted && !n.encrypted) merged.encrypted = existing.encrypted;
+          if (existing.watermarked && !n.watermarked) merged.watermarked = existing.watermarked;
+          result[existingIdx] = merged;
           console.log('[NFT Storage] Replaced cnft_tx_ with real asset ID:', n.assetId || n.mintAddress);
           continue;
         } else if (isTxOnly && !existingIsTx) {
@@ -4233,11 +4656,11 @@ async function bulkSaveNFTs(nfts) {
         // Same-type duplicate — skip
         continue;
       }
-      
+
       if (n.metadataUrl) byMeta[n.metadataUrl] = result.length;
       result.push(n);
     }
-    
+
     // Dedup by mintAddress (safety net)
     const seenIds = new Set();
     const clean = result.filter(n => {
@@ -4271,13 +4694,57 @@ async function syncNFTsFromServer(serverUrl, authHeaders, walletAddress = null) 
       params: walletAddress ? { walletAddress } : undefined,
       timeout: 15000,
     });
-    const serverNFTs = response.data?.nfts || [];
-    
+    let serverNFTs = response.data?.nfts || [];
+
+    // Verify ownership with DAS - filter out NFTs that were transferred but server still has
+    if (walletAddress && serverNFTs.length > 0) {
+      try {
+        // Quick DAS check: get all owned asset IDs
+        const ownedAssets = new Set();
+        let sawDasOwnership = false;
+        const dasResult = await _fetchNFTsFromDASImpl(walletAddress, 1000, authHeaders);
+        if (Array.isArray(dasResult) && dasResult.length > 0) sawDasOwnership = true;
+        for (const n of (dasResult || [])) {
+          if (n.assetId) ownedAssets.add(n.assetId.replace(/^cnft_/, ''));
+          if (n.mintAddress) ownedAssets.add(n.mintAddress.replace(/^cnft_/, ''));
+        }
+        // Also check standard NFTs via RPC
+        try {
+          initializeSolana();
+          if (solanaAvailable && connection && TOKEN_PROGRAM_ID) {
+            const ownerPubkey = new PublicKey(walletAddress);
+            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(ownerPubkey, { programId: TOKEN_PROGRAM_ID });
+            for (const a of tokenAccounts.value) {
+              if (a.account.data.parsed.info.tokenAmount.amount === '1' && a.account.data.parsed.info.tokenAmount.decimals === 0) {
+                ownedAssets.add(a.account.data.parsed.info.mint);
+              }
+            }
+          }
+        } catch (_) { }
+
+        // Filter server NFTs - only keep those DAS confirms ownership
+        const beforeCount = serverNFTs.length;
+        serverNFTs = serverNFTs.filter(n => {
+          const rawId = String(n.mintAddress || n.assetId || '');
+          const mintId = rawId.replace(/^cnft_/, '');
+          const isCompressed = rawId.startsWith('cnft_');
+          if (isCompressed && !sawDasOwnership) return true;
+          return ownedAssets.has(mintId);
+        });
+        const removed = beforeCount - serverNFTs.length;
+        if (removed > 0) {
+          console.log(`[NFT Sync] Filtered ${removed} transferred NFTs from server list (DAS ownership check)`);
+        }
+      } catch (verifyErr) {
+        console.log('[NFT Sync] DAS ownership verification skipped:', verifyErr.message);
+      }
+    }
+
     if (serverNFTs.length === 0) return { success: true, nfts: await getStoredNFTs(), merged: 0 };
-    
+
     const localNFTs = await getStoredNFTs();
     let merged = 0;
-    
+
     // Build lookup maps by mintAddress AND metadataUrl (cNFT IDs may differ: cnft_tx_<sig> vs cnft_<assetId>)
     const localByMint = {};
     const localByMeta = {};
@@ -4285,12 +4752,12 @@ async function syncNFTsFromServer(serverUrl, authHeaders, walletAddress = null) 
       if (n.mintAddress) localByMint[n.mintAddress] = i;
       if (n.metadataUrl) localByMeta[n.metadataUrl] = i;
     });
-    
+
     for (const serverNFT of serverNFTs) {
       // Match by mintAddress first, then by metadataUrl (cross-device ID mismatch)
       let idx = serverNFT.mintAddress ? localByMint[serverNFT.mintAddress] : undefined;
       if (idx === undefined && serverNFT.metadataUrl) idx = localByMeta[serverNFT.metadataUrl];
-      
+
       if (idx === undefined) {
         localNFTs.push(serverNFT);
         if (serverNFT.mintAddress) localByMint[serverNFT.mintAddress] = localNFTs.length - 1;
@@ -4316,18 +4783,140 @@ async function syncNFTsFromServer(serverUrl, authHeaders, walletAddress = null) 
         if (serverNFT.watermarked && !local.watermarked) { local.watermarked = serverNFT.watermarked; merged++; }
         if (serverNFT.license && !local.license) { local.license = serverNFT.license; merged++; }
         if (serverNFT.storageType && (!local.storageType || (local.storageType === 'ipfs' && serverNFT.storageType !== 'ipfs'))) { local.storageType = serverNFT.storageType; merged++; }
+        if (serverNFT.arweaveUrl && !local.arweaveUrl) { local.arweaveUrl = serverNFT.arweaveUrl; merged++; }
       }
     }
-    
+
     if (merged > 0) {
       fs.writeFileSync(nftStorageFile, JSON.stringify(localNFTs, null, 2));
       console.log('[NFT Storage] Merged/updated', merged, 'NFTs from server');
     }
-    
+
     return { success: true, nfts: localNFTs, merged };
   } catch (e) {
     console.error('[NFT Storage] Server sync failed:', e.message);
     return { success: false, error: e.message, nfts: await getStoredNFTs(), merged: 0 };
+  }
+}
+
+/**
+ * Wallet-authoritative sync: DAS/RPC is source of truth, server is just backup.
+ * 1. Get actual on-chain NFTs from DAS (cNFTs) + RPC (standard)
+ * 2. Get server NFTs
+ * 3. Delete from server anything not owned on-chain (transferred)
+ * 4. Push to server any new on-chain NFTs not on server
+ * 5. Return authoritative list (what DAS says, enriched with local data)
+ */
+async function syncNFTsToServer(serverUrl, authHeaders, walletAddress) {
+  if (!walletAddress) {
+    return { success: false, error: 'No wallet address', nfts: await getStoredNFTs() };
+  }
+
+  const normMint = (m) => m ? String(m).replace(/^cnft_/, '').trim() : '';
+  const normWallet = (w) => w ? String(w).trim() : '';
+  const walletNorm = normWallet(walletAddress);
+
+  try {
+    // 1. Use local storage as on-chain source of truth
+    // loadNFTAlbum already saved DAS-authoritative data to local storage,
+    // so we don't need to call DAS again (which would hit the 5-min cooldown anyway)
+    const localNFTs = await getStoredNFTs();
+    const walletNFTs = localNFTs.filter(n => {
+      const owner = n.ownerAddress || '';
+      return owner === walletAddress || owner === walletNorm;
+    });
+
+    const dasNFTs = walletNFTs.map(n => ({
+      ...n,
+      _source: 'local',
+      _id: normMint(n.assetId || n.mintAddress)
+    }));
+
+    if (dasNFTs.length === 0) {
+      console.log('[NFT Sync] No local NFTs for wallet');
+      return { success: true, nfts: [], added: 0, removed: 0, source: 'local' };
+    }
+
+    const dasIdSet = new Set(dasNFTs.map(n => n._id));
+
+    // 3. Get server NFTs
+    let serverNFTs = [];
+    try {
+      const axios = require('axios');
+      const response = await axios.get(`${serverUrl}/api/nft/list`, {
+        headers: authHeaders,
+        params: { walletAddress },
+        timeout: 15000,
+      });
+      serverNFTs = response.data?.nfts || [];
+    } catch (serverErr) {
+      console.log('[NFT Sync] Server fetch failed:', serverErr.message);
+    }
+
+    // 4. Remove from server ONLY if explicitly in transferred-out blacklist
+    // NEVER remove just because missing from local cache (DAS might have missed it)
+    let removed = 0;
+    const transferredOut = await getTransferredOutBlacklist();
+    for (const serverNFT of serverNFTs) {
+      const serverId = normMint(serverNFT.mintAddress || serverNFT.assetId);
+      // Only remove if explicitly blacklisted as transferred out
+      if (transferredOut.has(serverId)) {
+        try {
+          const axios = require('axios');
+          await axios.post(`${serverUrl}/api/nft/sync`, {
+            action: 'remove',
+            mintAddress: serverNFT.mintAddress || serverNFT.assetId,
+            ownerAddress: walletAddress
+          }, { headers: authHeaders, timeout: 10000 });
+          console.log('[NFT Sync] Removed transferred NFT from server:', serverId);
+          removed++;
+        } catch (delErr) {
+          console.log('[NFT Sync] Failed to remove from server:', serverId, delErr.message);
+        }
+      }
+    }
+
+    // 5. Build lookup for enrichment (reuse walletNFTs from step 1)
+    const localById = {};
+    walletNFTs.forEach(n => {
+      const id = normMint(n.mintAddress);
+      if (id) localById[id] = n;
+    });
+
+    // 6. Push any new DAS NFTs to server
+    const serverIdSet = new Set(serverNFTs.map(n => normMint(n.mintAddress || n.assetId)));
+    let added = 0;
+    for (const dasNFT of dasNFTs) {
+      if (!serverIdSet.has(dasNFT._id)) {
+        // New on-chain NFT not on server - push it
+        const enriched = localById[dasNFT._id] || dasNFT;
+        try {
+          const axios = require('axios');
+          await axios.post(`${serverUrl}/api/nft/sync`, {
+            action: 'add',
+            nft: {
+              ...enriched,
+              ownerAddress: walletAddress,
+              syncedAt: new Date().toISOString()
+            }
+          }, { headers: authHeaders, timeout: 10000 });
+          console.log('[NFT Sync] Pushed new NFT to server:', dasNFT._id);
+          added++;
+        } catch (pushErr) {
+          console.log('[NFT Sync] Failed to push to server:', dasNFT._id, pushErr.message);
+        }
+      }
+    }
+
+    // Local storage already has DAS-authoritative data (saved by loadNFTAlbum)
+    // No need to rewrite it here
+
+    console.log('[NFT Sync] Server sync complete: ' + walletNFTs.length + ' NFTs, added ' + added + ' to server, removed ' + removed + ' from server');
+    return { success: true, nfts: walletNFTs, added, removed, source: 'local' };
+
+  } catch (e) {
+    console.error('[NFT Sync] Wallet-authoritative sync failed:', e.message);
+    return { success: false, error: e.message, nfts: await getStoredNFTs() };
   }
 }
 
@@ -4339,7 +4928,7 @@ async function resolveSolDomain(domain) {
   const trimmed = domain.trim().toLowerCase();
   let cleanDomain = trimmed;
   let tld = 'skr';
-  
+
   if (trimmed.endsWith('.skr')) {
     cleanDomain = trimmed.replace(/\.skr$/, '');
     tld = 'skr';
@@ -4347,10 +4936,10 @@ async function resolveSolDomain(domain) {
     cleanDomain = trimmed.replace(/\.sol$/, '');
     tld = 'sol';
   }
-  
+
   const fullDomain = `${cleanDomain}.${tld}`;
   console.log('[NFT] Resolving', fullDomain);
-  
+
   return new Promise((resolve) => {
     // Try AllDomains API for .skr
     if (tld === 'skr') {
@@ -4364,13 +4953,13 @@ async function resolveSolDomain(domain) {
               resolve({ success: true, address: json.owner });
               return;
             }
-          } catch (e) {}
+          } catch (e) { }
           resolve({ success: false, error: `Could not resolve ${fullDomain}` });
         });
       }).on('error', () => resolve({ success: false, error: `Could not resolve ${fullDomain}` }));
       return;
     }
-    
+
     // Try Bonfida API for .sol
     https.get(`https://sns-sdk-proxy.bonfida.workers.dev/resolve/${cleanDomain}`, { timeout: 10000 }, (res) => {
       let data = '';
@@ -4382,7 +4971,7 @@ async function resolveSolDomain(domain) {
             resolve({ success: true, address: json.result });
             return;
           }
-        } catch (e) {}
+        } catch (e) { }
         resolve({ success: false, error: `Could not resolve ${fullDomain}` });
       });
     }).on('error', () => resolve({ success: false, error: `Could not resolve ${fullDomain}` }));
@@ -4398,12 +4987,12 @@ function isSolDomain(input) {
 async function resolveRecipient(input) {
   if (!input?.trim()) return { success: false, error: 'No recipient specified' };
   const trimmed = input.trim();
-  
+
   if (isSolDomain(trimmed)) {
     const result = await resolveSolDomain(trimmed);
     return { ...result, isDomain: true, domainName: trimmed };
   }
-  
+
   // Try to parse as Solana address
   if (solanaAvailable) {
     try {
@@ -4413,7 +5002,7 @@ async function resolveRecipient(input) {
       return { success: false, error: 'Invalid Solana address or domain' };
     }
   }
-  
+
   // Basic validation without web3.js
   if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) {
     return { success: true, address: trimmed, isDomain: false };
@@ -4437,7 +5026,7 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
   if (!initializeSolana()) {
     return { verified: false, error: 'Solana not available' };
   }
-  
+
   try {
     // Handle compressed NFTs
     if (mintAddress?.startsWith('cnft_')) {
@@ -4448,18 +5037,18 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
           if (txInfo && !txInfo.meta?.err) {
             return { verified: true, exists: true, compressed: true, txBased: true };
           }
-        } catch (e) {}
+        } catch (e) { }
         return { verified: false, error: 'Transaction not found' };
       }
-      
+
       // Use DAS API for real asset ID - route through proxy with Helius fallback
       const assetId = mintAddress.replace('cnft_', '');
-      
+
       // Try proxy first
       const tryProxy = () => new Promise((resolve) => {
         const postData = JSON.stringify({ method: 'getAsset', params: { id: assetId } });
         const req = http.request({
-          hostname: 'localhost', port: 3000, path: '/api/nft-service/das-proxy', method: 'POST',
+          hostname: '127.0.0.1', port: 3000, path: '/api/nft-service/das-proxy', method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
           timeout: 10000
         }, (res) => {
@@ -4481,7 +5070,7 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
         req.write(postData);
         req.end();
       });
-      
+
       // Try Helius direct fallback
       const tryHelius = (apiKey) => new Promise((resolve) => {
         const postData = JSON.stringify({
@@ -4510,15 +5099,15 @@ async function verifyNFTOnChain(mintAddress, txSignature = null) {
         req.write(postData);
         req.end();
       });
-      
+
       // Try proxy first, then fallback to Helius keys
       let result = await tryProxy();
       if (!result && process.env.HELIUS_API_KEY) result = await tryHelius(process.env.HELIUS_API_KEY);
       if (!result && process.env.HELIUS_API_KEY_2) result = await tryHelius(process.env.HELIUS_API_KEY_2);
-      
+
       return result || { verified: false, error: 'Asset not found or rate limited' };
     }
-    
+
     // Standard NFT verification
     const mintPubkey = new PublicKey(mintAddress);
     const accountInfo = await connection.getAccountInfo(mintPubkey);
@@ -4538,16 +5127,16 @@ async function transferNFT(mintAddress, recipientInput) {
   if (!resolved.success) {
     return { success: false, error: resolved.error };
   }
-  
+
   const isCompressed = mintAddress?.startsWith('cnft_');
-  
+
   // For desktop, we open a browser-based transfer flow
   // The actual signing happens in the wallet
   const transferUrl = `https://stealthlynk.io/nft-transfer?mint=${encodeURIComponent(mintAddress)}&to=${resolved.address}&compressed=${isCompressed}`;
-  
+
   console.log('[NFT Transfer] Opening transfer page:', transferUrl);
   shell.openExternal(transferUrl);
-  
+
   return {
     success: true,
     status: 'pending',
@@ -4565,11 +5154,11 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
     const connection = new Connection(SOLANA_RPC_ENDPOINTS[0], 'confirmed');
     const fromPubkey = new PublicKey(from);
     const toPubkey = new PublicKey(to);
-    
+
     if (isCompressed) {
       // Build compressed NFT (cNFT) transfer using Bubblegum program
       console.log('[Build cNFT Transfer] Building compressed NFT transfer...');
-      
+
       const assetId = String(mint).replace(/^cnft_/, '');
       const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
       const isRetryableCompressedTransferError = (error) => {
@@ -4594,7 +5183,7 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
         return parts.join(' | ');
       };
       const dasEndpoints = [
-        { url: 'http://localhost:3000/api/nft-service/das-proxy', isProxy: true },
+        { url: 'http://127.0.0.1:3000/api/nft-service/das-proxy', isProxy: true },
         { url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***', isProxy: false },
         { url: 'https://mainnet.helius-rpc.com/?api-key=***REMOVED***', isProxy: false },
       ];
@@ -4618,7 +5207,7 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
         }
         throw lastError || new Error(`DAS ${method} failed`);
       };
-      
+
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           const assetData = await callDAS('getAsset', { id: assetId });
@@ -4626,29 +5215,29 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
             console.error('[Build cNFT Transfer] Failed to fetch asset:', assetData.error);
             return { success: false, error: 'Failed to fetch cNFT data. Asset may not exist.' };
           }
-          
+
           const asset = assetData.result;
           console.log('[Build cNFT Transfer] Asset owner:', asset.ownership?.owner);
-          
+
           if (asset.ownership?.owner !== from) {
             return { success: false, error: 'You do not own this NFT' };
           }
-          
+
           const proofData = await callDAS('getAssetProof', { id: assetId });
           if (!proofData.result) {
             console.error('[Build cNFT Transfer] Failed to fetch proof:', proofData.error);
             return { success: false, error: 'Failed to fetch cNFT proof.' };
           }
-          
+
           const proof = proofData.result;
           console.log('[Build cNFT Transfer] Proof fetched, tree:', proof.tree_id);
-          
+
           const BUBBLEGUM_PROGRAM_ID = new PublicKey('BGUMAp9Gq7iTEuizy4pqaxsTyUCBK68MDfK752saRPUY');
           const SPL_NOOP_PROGRAM_ID = new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV');
           const SPL_ACCOUNT_COMPRESSION_PROGRAM_ID = new PublicKey('cmtDvXumGCrqC1Age74AVPhSRVXJMd8PJS91L8KbNCK');
-          
+
           const merkleTree = new PublicKey(proof.tree_id);
-          
+
           const decodeHash = (hash) => {
             if (!hash) return Buffer.alloc(32);
             if (hash.startsWith?.('0x')) return Buffer.from(hash.slice(2), 'hex');
@@ -4658,34 +5247,34 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
               return Buffer.from(hash);
             }
           };
-          
+
           const root = decodeHash(proof.root);
           const dataHash = decodeHash(asset.compression.data_hash);
           const creatorHash = decodeHash(asset.compression.creator_hash);
           const leafIndex = asset.compression.leaf_id;
           const nonce = BigInt(leafIndex);
-          
+
           const [treeConfig] = PublicKey.findProgramAddressSync(
             [merkleTree.toBuffer()],
             BUBBLEGUM_PROGRAM_ID
           );
-          
+
           const proofPath = proof.proof.map(p => ({
             pubkey: new PublicKey(p),
             isSigner: false,
             isWritable: false,
           }));
-          
+
           const discriminator = Buffer.from([163, 52, 200, 231, 140, 3, 69, 186]);
           const nonceBuffer = Buffer.alloc(8);
           nonceBuffer.writeBigUInt64LE(nonce, 0);
           const indexBuffer = Buffer.alloc(4);
           indexBuffer.writeUInt32LE(leafIndex, 0);
-          
+
           const instructionData = Buffer.concat([
             discriminator, root, dataHash, creatorHash, nonceBuffer, indexBuffer,
           ]);
-          
+
           const transferAccounts = [
             { pubkey: treeConfig, isSigner: false, isWritable: false },
             { pubkey: fromPubkey, isSigner: true, isWritable: false },
@@ -4697,21 +5286,21 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
             ...proofPath,
           ];
-          
+
           const transferInstruction = new TransactionInstruction({
             programId: BUBBLEGUM_PROGRAM_ID,
             keys: transferAccounts,
             data: instructionData,
           });
-          
+
           const { blockhash } = await connection.getLatestBlockhash('confirmed');
-          
+
           const messageV0 = new TransactionMessage({
             payerKey: fromPubkey,
             recentBlockhash: blockhash,
             instructions: [transferInstruction],
           }).compileToV0Message();
-          
+
           const transaction = new VersionedTransaction(messageV0);
           const simulation = await connection.simulateTransaction(transaction, {
             sigVerify: false,
@@ -4721,7 +5310,7 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
             throw new Error(describeSimulationFailure(simulation) || 'Transaction simulation failed');
           }
           const serialized = Buffer.from(transaction.serialize()).toString('base64');
-          
+
           console.log('[Build cNFT Transfer] Transaction built successfully');
           return { success: true, transaction: serialized, isVersioned: true };
         } catch (e) {
@@ -4734,18 +5323,18 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
         }
       }
     }
-    
+
     // Build standard NFT transfer transaction
     const { createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } = require('@solana/spl-token');
-    
+
     const mintPubkey = new PublicKey(mint);
-    
+
     // Get associated token addresses
     const fromAta = await getAssociatedTokenAddress(mintPubkey, fromPubkey);
     const toAta = await getAssociatedTokenAddress(mintPubkey, toPubkey);
-    
+
     const transaction = new Transaction();
-    
+
     // Check if recipient has ATA, if not create it
     const toAtaInfo = await connection.getAccountInfo(toAta);
     if (!toAtaInfo) {
@@ -4758,7 +5347,7 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
         )
       );
     }
-    
+
     // Add transfer instruction (amount=1 for NFT)
     transaction.add(
       createTransferInstruction(
@@ -4768,15 +5357,15 @@ async function buildTransferTransaction(mint, from, to, isCompressed) {
         1           // amount (1 for NFT)
       )
     );
-    
+
     // Get recent blockhash
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = fromPubkey;
-    
+
     // Serialize transaction (without signatures - Phantom will sign)
     const serialized = transaction.serialize({ requireAllSignatures: false }).toString('base64');
-    
+
     console.log('[Build Transfer TX] Transaction built successfully');
     return { success: true, transaction: serialized };
   } catch (e) {
@@ -4802,28 +5391,28 @@ async function estimateTransferFee(isCompressed, recipientAddress, fromAddress) 
         }
       };
     }
-    
+
     // Token account size is 165 bytes for SPL tokens
     const TOKEN_ACCOUNT_SIZE = 165;
-    
+
     // Get rent exemption for token account (only needed for standard NFTs if recipient doesn't have ATA)
     let rentLamports = 0;
     if (!isCompressed) {
       rentLamports = await getRentExemptLamports(TOKEN_ACCOUNT_SIZE);
     }
-    
+
     // Get recent priority fee
     const priorityMicroLamports = await getRecentPriorityMicroLamports();
-    
+
     // Base network fee is 5000 lamports (0.000005 SOL)
     // Priority fee is in micro-lamports per compute unit, typical tx uses ~200k CU
     const baseFee = 5000;
     const priorityFee = Math.ceil((priorityMicroLamports * 200000) / 1000000);
     const networkFeeLamports = baseFee + priorityFee;
-    
+
     const totalLamports = rentLamports + networkFeeLamports;
     const feeSol = totalLamports / 1e9;
-    
+
     return {
       success: true,
       feeLamports: totalLamports,
@@ -4861,6 +5450,9 @@ function generateCertificate(nftData) {
   // Only generate certificates for NFTs created within the PhotoLynk ecosystem
   // External NFTs (Bored Apes, DeGods, etc.) must never get PhotoLynk proofs
   if (!nftData.forceGenerate && !isPhotoLynkEcosystem(nftData)) return null;
+  // Only generate certificates for NFTs with Public/Private certification
+  // Skip NFTs without certificationMode or edition (like 3rd party reference NFTs)
+  if (!nftData.forceGenerate && !nftData.certificationMode && !nftData.edition) return null;
   // Never generate certs for temporary tx_ entries — wait for real cnft_ ID
   // (unless forceGenerate is set, which is used by the post-mint path where we know it's a real mint)
   if (!nftData.forceGenerate && nftData.mintAddress && String(nftData.mintAddress).startsWith('tx_')) return null;
@@ -4960,7 +5552,7 @@ async function removeCertificateLocal(mintAddress) {
     const filePath = getCertsFilePath();
     if (!fs.existsSync(filePath)) return { success: true };
     let certs = [];
-    try { certs = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) {}
+    try { certs = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) { }
     // Normalize cnft_ prefix so both forms are removed
     const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
     const target = normMint(mintAddress);
@@ -4980,7 +5572,7 @@ async function saveCertificateLocal(cert) {
     console.log('[NFT] saveCertificateLocal path:', filePath, 'nftStorageFile:', nftStorageFile);
     let certs = [];
     if (fs.existsSync(filePath)) {
-      try { certs = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) {}
+      try { certs = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) { }
     }
     const idx = certs.findIndex(c => c.id === cert.id);
     if (idx >= 0) {
@@ -5161,6 +5753,27 @@ function formatCertificateForExport(cert) {
 }
 
 // ============================================================================
+// RPC HELPERS (for certificate ownership verification)
+// ============================================================================
+
+async function fetchStandardNFTMintsRPC(walletAddress) {
+  initializeSolana();
+  if (!solanaAvailable || !connection || !TOKEN_PROGRAM_ID) {
+    return [];
+  }
+  try {
+    const ownerPubkey = new PublicKey(walletAddress);
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(ownerPubkey, { programId: TOKEN_PROGRAM_ID });
+    return tokenAccounts.value
+      .filter(a => a.account.data.parsed.info.tokenAmount.amount === '1' && a.account.data.parsed.info.tokenAmount.decimals === 0)
+      .map(a => a.account.data.parsed.info.mint);
+  } catch (e) {
+    console.log('[NFT] RPC mint fetch failed:', e.message);
+    return [];
+  }
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -5168,71 +5781,78 @@ module.exports = {
   // Initialization
   initializeSolana,
   initNFTStorage,
-  
+
   // Cache
   initCache,
   clearCache,
   getCachedImagePath,
   cacheImage,
   extractIPFSCid,
-  
+
   // Pricing (matches mobile exactly)
   getCurrentFees,
   isPromoActive,
   getPromoDaysRemaining,
-  
+
   // SOL price
   getSolPrice,
   usdToSol,
   estimateNftCostsRealtime,
   prewarmPriorityFee,
-  
+
   // Upload functions (same as mobile)
   uploadToPinata,
   uploadMetadataToPinata,
   uploadToStealthCloud,
   uploadToAkordArweave,
   uploadMetadataToAkordArweave,
-  
+
   // NFT metadata and minting
   buildNFTMetadata,
   computeContentHash,
   computeCameraSerialHash,
   mintNFT,
-  
+
   // NFT fetching (uses DAS API like mobile)
   fetchUserNFTs,
   fetchImageFromMetadata,
-  
+  fetchNFTsFromDAS,
+  fetchStandardNFTMintsRPC,
+
   // NFT local storage (same as mobile)
   getStoredNFTs,
   saveNFTToStorage,
   removeNFTFromStorage,
+  clearAllStoredNFTs,
   removeTransferredNFTs,
+  addToTransferredOutBlacklist,
+  getTransferredOutBlacklist,
   bulkSaveNFTs,
   getNFTByMintAddress,
   syncNFTsFromServer,
-  
+  syncNFTsToServer,
+  cleanupOrphanedImages,
+
   // Domain resolution (same as mobile)
   resolveSolDomain,
   isSolDomain,
   resolveRecipient,
-  
+
   // Blockchain verification (same as mobile)
   getExplorerUrl,
   getSolscanUrl,
   verifyNFTOnChain,
-  
+
   // NFT transfer
   transferNFT,
   buildTransferTransaction,
   estimateTransferFee,
-  
+
   // Windows
   openWalletConnect,
   openNFTMintWindow,
   openNFTAlbumWindow,
-  
+
   // Edition system (matches mobile)
   computeExifHash,
   generateOnChainImage,
@@ -5242,7 +5862,7 @@ module.exports = {
   encryptNFTImage,
   decryptNFTImage,
   decryptMetadataJSON,
-  
+
   // Ecosystem check
   isPhotoLynkEcosystem,
   // Certificates (matches mobile)
@@ -5251,7 +5871,7 @@ module.exports = {
   removeCertificateLocal,
   formatCertificateForExport,
   getCertsFilePath,
-  
+
   // Constants (same as mobile)
   NFT_COMMISSION_WALLET,
   isFeeWalletExempt,
@@ -5263,10 +5883,10 @@ module.exports = {
   EDITION_ROYALTY_BPS,
   SOLANA_RPC_ENDPOINTS,
   PINATA_JWT,
-  
+
   // DAS cache control
   invalidateDasCache,
-  
+
   // Status flags
   solanaAvailable,
   splTokenAvailable,

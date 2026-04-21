@@ -1,6 +1,6 @@
 {
   "name": "photolynk-server-tray",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "PhotoLynk Server - System Tray Manager",
   "license": "MIT",
   "homepage": "https://github.com/viktorvishyn369/PhotoLynk",
@@ -17,9 +17,10 @@
     "build-mac": "npm run build-mac:x64 && npm run build-mac:arm64",
     "build-win": "electron-builder --win",
     "build-linux": "electron-builder --linux",
-    "rebuild-native": "electron-builder install-app-deps",
-    "rebuild-native:x64": "npm_config_arch=x64 npm_config_target_arch=x64 electron-builder install-app-deps",
-    "rebuild-native:arm64": "npm_config_arch=arm64 npm_config_target_arch=arm64 electron-builder install-app-deps"
+    "rebuild-native": "electron-builder install-app-deps && npm run rebuild-nft-service",
+    "rebuild-native:x64": "npm_config_arch=x64 npm_config_target_arch=x64 electron-builder install-app-deps && npm run rebuild-nft-service",
+    "rebuild-native:arm64": "npm_config_arch=arm64 npm_config_target_arch=arm64 electron-builder install-app-deps && npm run rebuild-nft-service",
+    "rebuild-nft-service": "cd ../nft-service && npm rebuild better-sqlite3 --runtime=electron --target=28.3.3 --disturl=https://electronjs.org/headers --build-from-source"
   },
   "build": {
     "appId": "com.photolynk.server.tray",

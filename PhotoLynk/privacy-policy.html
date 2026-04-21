@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - PhotoLynk</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a1a1a;
+            border-bottom: 2px solid #0099FF;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2a2a2a;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #3a3a3a;
+            margin-top: 20px;
+        }
+        .last-updated {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 30px;
+        }
+        .important {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .warning {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .highlight {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        a {
+            color: #0099FF;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Privacy Policy</h1>
+        <p class="last-updated">Last Updated: April 20, 2026</p>
+
+        <h2>1. Service Overview</h2>
+        <p>PhotoLynk ("the Service") is a photo and video backup application developed by StealthLynk, US. This Privacy Policy explains how we collect, use, store, and protect your information when you use our Service.</p>
+        <p>We are committed to privacy by design: we encrypt your data on your device before it ever leaves, and we cannot access your photos or videos.</p>
+
+        <h2>2. Information We Collect</h2>
+
+        <h3>2.1 Local and Remote Modes</h3>
+        <div class="highlight">
+            <strong>Zero-Knowledge Mode:</strong> When using Local or Remote modes, all data remains on servers you own and control. StealthLynk, US does not have access to, collect, or store your photos, videos, email address, password, device identifiers, or any file metadata.
+        </div>
+        <p>You are solely responsible for the security, maintenance, and backup of your self-hosted server and all data stored thereon.</p>
+
+        <h3>2.2 StealthCloud Mode</h3>
+        <p>When using StealthCloud mode, we collect and process:</p>
+        <ul>
+            <li><strong>Account Information:</strong> Email address for authentication purposes</li>
+            <li><strong>Device Identifiers:</strong> Hardware device identifiers for security and account recovery</li>
+            <li><strong>Encrypted Data:</strong> Photos and videos encrypted on your device before transmission</li>
+            <li><strong>Subscription Information:</strong> Payment and subscription status (processed by third-party payment processors)</li>
+        </ul>
+        <div class="important">
+            <strong>End-to-End Encryption:</strong> All media files and metadata are encrypted on your device using industry-standard encryption (XSalsa20-Poly1305 via TweetNaCl) before transmission. StealthLynk, US stores only encrypted data and does not possess the decryption keys. <strong>We cannot access, view, or decrypt your files.</strong>
+        </div>
+
+        <h3>2.3 In-App Purchase Information</h3>
+        <p>When you make in-app purchases, we collect and process:</p>
+        <ul>
+            <li><strong>Purchase Receipts:</strong> Transaction receipts from Apple App Store, Google Play Store, or Solana Mobile dApp Store for verification purposes</li>
+            <li><strong>Account Balance:</strong> Credit balance and transaction history for photo certification services</li>
+            <li><strong>Premium Status:</strong> Whether you have purchased the Premium tier ($49.99 USD one-time) and associated feature entitlements (100 GB encrypted cloud storage for 4 years, 25 free certifications, 250 commission-free certifications)</li>
+            <li><strong>Verification Credit:</strong> Photo Verification Credit purchases ($15.00 USD consumable) that add to your account balance for photo certification services</li>
+            <li><strong>Platform Information:</strong> The platform (iOS, Android, or Solana dApp Store) where the purchase was made</li>
+        </ul>
+        <p>Purchase receipts are verified with Apple, Google, or Solana Mobile to prevent fraud and ensure legitimate transactions. We do not store your payment card information — all payment processing is handled by the respective platforms according to their privacy policies.</p>
+        <p>Transaction records, including purchase amounts, dates, and certification service usage, are retained for accounting, tax compliance, and customer support purposes.</p>
+
+        <h3>2.4 Blockchain Data</h3>
+        <div class="warning">
+            <strong>Public Blockchain Data:</strong> When using NFT certification features or cryptocurrency payments, certain data is stored on the public Solana blockchain and is permanently visible to anyone.
+        </div>
+        <p>The following data is stored on the public Solana blockchain:</p>
+        <ul>
+            <li><strong>Wallet Address:</strong> Your connected Solana wallet address (publicly visible and searchable)</li>
+            <li><strong>Transaction Hashes:</strong> Proof of certification timestamp and payment records (publicly visible)</li>
+            <li><strong>Content Hash:</strong> SHA-256 hash of your photo content (publicly visible — this is a cryptographic fingerprint, not the photo itself)</li>
+            <li><strong>Certificate Metadata:</strong> Title, description, location, camera information, and certification attributes you choose to include</li>
+            <li><strong>Transaction Amounts:</strong> SOL or SKR token amounts for payments (publicly visible on the ledger)</li>
+        </ul>
+        <div class="important">
+            <strong>Important:</strong> This blockchain data is immutable and cannot be deleted by StealthLynk, US or anyone else, as it is part of the decentralized Solana ledger. Even if you delete your PhotoLynk account, blockchain records remain permanently.
+        </div>
+
+        <h2>3. Permissions</h2>
+        <ul>
+            <li><strong>Camera:</strong> Used only to scan QR codes for server pairing / local setup</li>
+            <li><strong>Photos/Videos:</strong> Used to back up your media, restore it, and scan for duplicates</li>
+            <li><strong>Network:</strong> Used to connect to your local server, remote server, or StealthCloud</li>
+            <li><strong>Biometric Authentication:</strong> Optional, used to secure saved credentials (iOS only)</li>
+        </ul>
+
+        <h2>4. Data Encryption and Security</h2>
+        <p>StealthCloud implements end-to-end encryption:</p>
+        <ul>
+            <li>Files are encrypted on your device before upload using TweetNaCl secretbox (XSalsa20-Poly1305)</li>
+            <li>Each file is split into encrypted chunks</li>
+            <li>Encryption keys are derived from your credentials and stored only on your device</li>
+            <li>StealthLynk, US cannot decrypt your data</li>
+            <li>All data transmission occurs over HTTPS/TLS</li>
+        </ul>
+        <div class="warning">
+            <strong>Security Limitation:</strong> However, no method of transmission over the Internet or electronic storage is 100% secure. We cannot guarantee absolute security.
+        </div>
+
+        <h3>4.1 Data Integrity</h3>
+        <p>PhotoLynk does not modify, alter, or change any metadata (EXIF data, creation date, location information, camera settings, etc.) of your photos or videos. Your files are stored exactly as they exist on your device, preserving all original properties and metadata intact.</p>
+
+        <h2>5. Third-Party Services</h2>
+        <p>We use the following third-party services:</p>
+        <ul>
+            <li><strong>Payment Processing:</strong> Apple App Store, Google Play Store, Solana Mobile dApp Store, RevenueCat (subscription management)</li>
+            <li><strong>Blockchain Infrastructure:</strong> Solana Mainnet blockchain, Jupiter API (token pricing), DexScreener API (token pricing)</li>
+            <li><strong>NFT Storage:</strong> IPFS, Arweave, or embedded SVG (depending on user selection)</li>
+            <li><strong>Timestamp Services:</strong> RFC 3161 trusted timestamp authorities</li>
+            <li><strong>Provenance:</strong> C2PA (Coalition for Content Provenance and Authenticity) infrastructure</li>
+        </ul>
+        <p>We do not use third-party analytics, advertising networks, or tracking services.</p>
+
+        <h3>5.1 Blockchain Data Sharing</h3>
+        <p>When you mint an NFT or make a blockchain payment:</p>
+        <ul>
+            <li>Your transaction is broadcast to the Solana network and visible to all network participants</li>
+            <li>We share no additional data beyond what is required for the transaction</li>
+            <li>Third-party block explorers may index and display your transaction data</li>
+        </ul>
+
+        <h2>6. Data Retention</h2>
+        <ul>
+            <li><strong>Local and Remote modes:</strong> Data retention is entirely under your control</li>
+            <li><strong>StealthCloud mode:</strong> Encrypted data is retained while your subscription is active, plus a 3-day grace period after expiration</li>
+            <li><strong>Account deletion:</strong> Upon account deletion, all associated encrypted data will be permanently deleted within 30 days</li>
+            <li><strong>Blockchain data:</strong> Permanently retained on the Solana blockchain and cannot be deleted</li>
+            <li><strong>Purchase records:</strong> Retained for 7 years for accounting and tax compliance</li>
+        </ul>
+
+        <h2>7. Your Rights</h2>
+        <p>Depending on your jurisdiction, you may have the right to:</p>
+        <ul>
+            <li>Access your personal data</li>
+            <li>Correct inaccurate data</li>
+            <li>Delete your account and associated data (except blockchain data)</li>
+            <li>Export your data</li>
+            <li>Object to processing</li>
+            <li>Withdraw consent</li>
+        </ul>
+        <p>To exercise these rights, contact us at <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
+        <div class="warning">
+            <strong>Limitation:</strong> We cannot delete, modify, or restrict access to data stored on the Solana blockchain. This includes NFT certificates, transaction records, and wallet addresses.
+        </div>
+
+        <h2>8. Children's Privacy</h2>
+        <p>The Service is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13. If we discover that we have inadvertently collected information from a child under 13, we will delete it promptly.</p>
+
+        <h2>9. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. We will notify you of any changes by:</p>
+        <ul>
+            <li>Posting the new Privacy Policy on this page</li>
+            <li>Updating the "Last Updated" date</li>
+            <li>Sending an email notification for significant changes</li>
+            <li>Displaying an in-app notification</li>
+        </ul>
+        <p>Your continued use of the Service after changes constitutes acceptance of the modified Privacy Policy.</p>
+
+        <h2>10. Contact</h2>
+        <p>For questions about this Privacy Policy, contact:</p>
+        <p><strong>StealthLynk, US</strong><br>
+        Email: <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a></p>
+
+        <h2>11. Disclaimer and Limitation of Liability</h2>
+        <p><strong>PLEASE READ THIS SECTION CAREFULLY. IT LIMITS OUR LIABILITY AND AFFECTS YOUR LEGAL RIGHTS.</strong></p>
+
+        <h3>11.1 No Warranty</h3>
+        <p>THE SECURITY MEASURES DESCRIBED IN THIS POLICY ARE PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. WE CANNOT GUARANTEE THAT YOUR DATA WILL NEVER BE ACCESSED BY UNAUTHORIZED PARTIES.</p>
+
+        <h3>11.2 Limitation of Liability</h3>
+        <p>TO THE FULLEST EXTENT PERMITTED BY LAW, STEALTHLYNK, US SHALL NOT BE LIABLE FOR ANY DAMAGES ARISING FROM:</p>
+        <ul>
+            <li>Unauthorized access to your data due to your failure to protect your credentials</li>
+            <li>Data loss due to device failure, loss of credentials, or failure to back up encryption keys</li>
+            <li>Blockchain network issues, including but not limited to: network congestion, failed transactions, wallet software bugs, or protocol changes</li>
+            <li>Third-party services we rely upon (Solana network, IPFS, Arweave, timestamp authorities)</li>
+            <li>Cryptocurrency price volatility affecting the value of SKR tokens</li>
+            <li>Loss of access to NFT certificates due to lost wallet access</li>
+        </ul>
+
+        <h3>11.3 Local and Remote Mode Disclaimer</h3>
+        <p>When using Local or Remote modes, you are solely responsible for the security and backup of your data. We have no access to, control over, or liability for data stored on your servers.</p>
+
+        <h3>11.4 StealthCloud Mode Disclaimer</h3>
+        <p>While we implement strong encryption, you acknowledge that:</p>
+        <ul>
+            <li>We cannot recover your data if you lose your password</li>
+            <li>We cannot prevent you from losing access to your data if you fail to secure your credentials</li>
+            <li>Future cryptographic advances may theoretically compromise current encryption</li>
+        </ul>
+
+        <h3>11.5 Force Majeure</h3>
+        <p>We are not liable for any failure to protect your data due to circumstances beyond our reasonable control.</p>
+
+        <h3>11.6 Maximum Liability</h3>
+        <p>OUR TOTAL LIABILITY FOR ANY CLAIM RELATED TO PRIVACY OR DATA SECURITY SHALL NOT EXCEED THE AMOUNT YOU PAID FOR THE SERVICE IN THE 12 MONTHS PRIOR TO THE CLAIM, OR $100, WHICHEVER IS GREATER.</p>
+
+        <h2>12. Solana Mobile dApp Store Compliance</h2>
+        <p>By using PhotoLynk through the Solana Mobile dApp Store, you acknowledge that:</p>
+        <ul>
+            <li>You have also reviewed the <a href="https://docs.solanamobile.com/dapp-store/tou" target="_blank">Solana Mobile dApp Store Terms of Use</a></li>
+            <li>You understand that blockchain transactions are public and irreversible</li>
+            <li>You are responsible for securing your own wallet and private keys</li>
+            <li>You understand that we do not custody any cryptocurrency on your behalf</li>
+        </ul>
+    </div>
+</body>
+</html>

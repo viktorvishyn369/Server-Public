@@ -31,6 +31,22 @@ let backupPowerSaveBlockerId = null;
 
 const store = new Store({ name: 'photolynk-tray' });
 
+function getStoredDeviceUuid(credentials = {}) {
+  return credentials.deviceUuid || credentials.device_uuid || '';
+}
+
+function getStoredMasterKeyCredentials(credentials = {}) {
+  const email = String(credentials.mk_email || credentials.email || '').toLowerCase().trim();
+  const password = String(credentials.mk_password || credentials.password || '');
+  return { email, password };
+}
+
+function deriveStoredMasterKey(credentials = {}) {
+  const { email, password } = getStoredMasterKeyCredentials(credentials);
+  if (!email || !password) return null;
+  return new Uint8Array(crypto.pbkdf2Sync(password, email, 30000, 32, 'sha256'));
+}
+
 // Disable sandbox on Linux to prevent SIGTRAP crashes on Ubuntu 24.04+ / newer kernels
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('no-sandbox');
@@ -60,7 +76,7 @@ function maybeStartExifBackfill() {
       runExifBackfill({
         serverUrl: credentials.baseUrl,
         token: credentials.token,
-        deviceUuid: credentials.deviceUuid || '',
+        deviceUuid: getStoredDeviceUuid(credentials),
         backupFolders,
         store,
       }).catch(e => console.error('[ExifBackfill] Fatal:', e?.message));
@@ -242,22 +258,22 @@ function startServer() {
   }
 
   safeConsole('log', 'Starting server from:', serverPath);
-  
+
   const serverEntry = path.join(serverPath, 'server.js');
-  
+
   // Verify server.js exists
   if (!fs.existsSync(serverEntry)) {
     safeConsole('error', 'Server entry not found:', serverEntry);
     return;
   }
   safeConsole('log', 'Server entry found:', serverEntry);
-  
+
   const nodeModulesPaths = [
     ...(app && app.isPackaged
       ? [
-          path.join(process.resourcesPath, 'app.asar', 'node_modules'),
-          path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
-        ]
+        path.join(process.resourcesPath, 'app.asar', 'node_modules'),
+        path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+      ]
       : [path.join(__dirname, 'node_modules')]),
     path.join(serverPath, 'node_modules')
   ];
@@ -275,9 +291,9 @@ function startServer() {
   const nodeExecutable = process.execPath;
   env.ELECTRON_RUN_AS_NODE = '1';
   safeConsole('log', 'Using bundled Electron Node:', nodeExecutable);
-  
+
   safeConsole('log', 'Spawning server with:', nodeExecutable, serverEntry);
-  
+
   serverProcess = spawn(nodeExecutable, ['--max-old-space-size=512', serverEntry], {
     cwd: serverPath,
     env,
@@ -697,7 +713,7 @@ function freePort3000ForPhotoLynk() {
     safeConsole('log', 'Port 3000 blocked by non-PhotoLynk process');
     return false;
   }
-  
+
   // If no processes were found at all, or we killed them, check if port is now free
   const remaining = getPort3000Listeners();
   safeConsole('log', 'Remaining listeners after cleanup:', remaining.length > 0 ? remaining.join(', ') : 'none');
@@ -751,7 +767,7 @@ function computeUserUuidSync(email, password) {
   if (!email || !password) return null;
   const normalizedEmail = email.trim().toLowerCase();
   const name = normalizedEmail + ':' + password;
-  
+
   // DNS namespace UUID: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 (same as mobile)
   const namespaceBytes = Buffer.from([
     0x6b, 0xa7, 0xb8, 0x10,
@@ -760,17 +776,17 @@ function computeUserUuidSync(email, password) {
     0x80, 0xb4,
     0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
   ]);
-  
+
   // UUID v5: SHA-1(namespace + name)
   const hash = crypto.createHash('sha1')
     .update(namespaceBytes)
     .update(name)
     .digest();
-  
+
   // Apply UUID v5 version (0101xxxx) and variant (10xxxxxx) bits
   hash[6] = (hash[6] & 0x0f) | 0x50;
   hash[8] = (hash[8] & 0x3f) | 0x80;
-  
+
   const hex = hash.slice(0, 16).toString('hex');
   return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20, 32);
 }
@@ -778,14 +794,14 @@ function computeUserUuidSync(email, password) {
 function getPairingData() {
   const ips = getLocalIpAddresses();
   const ip = ips.length > 0 ? ips[0] : '127.0.0.1';
-  
+
   // Get or create a persistent pairing token
   let pairingToken = store.get('pairingToken');
   if (!pairingToken) {
     pairingToken = generatePairingToken();
     store.set('pairingToken', pairingToken);
   }
-  
+
   return {
     type: 'photolynk-local',
     ip: ip,
@@ -804,7 +820,7 @@ function refreshQRCodeInMainWindow() {
   const QRCode = require('qrcode');
   const pairingData = getPairingData();
   const qrDataString = JSON.stringify(pairingData);
-  
+
   // Refresh in main window (QR modal) - preload new image before swapping
   if (mainWindow && !mainWindow.isDestroyed()) {
     QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
@@ -812,7 +828,7 @@ function refreshQRCodeInMainWindow() {
         safeConsole('error', '[Pairing] Failed to regenerate QR code:', err);
         return;
       }
-      
+
       // Preload image then swap instantly - no flicker
       mainWindow.webContents.executeJavaScript(`
         (function() {
@@ -824,16 +840,16 @@ function refreshQRCodeInMainWindow() {
           newImg.src = '${qrUrl}';
         })();
       `);
-      
+
       safeConsole('log', '[Pairing] QR code refreshed in main window');
     });
   }
-  
+
   // Also refresh in separate QR window if open (large QR)
   if (qrWindow && !qrWindow.isDestroyed()) {
     QRCode.toDataURL(qrDataString, { width: 280, margin: 2 }, (err, qrUrl) => {
       if (err) return;
-      
+
       qrWindow.webContents.executeJavaScript(`
         (function() {
           var newImg = new Image();
@@ -844,7 +860,7 @@ function refreshQRCodeInMainWindow() {
           newImg.src = '${qrUrl}';
         })();
       `);
-      
+
       safeConsole('log', '[Pairing] QR code refreshed in QR window');
     });
   }
@@ -856,19 +872,19 @@ function refreshQRCodeInMainWindow() {
 
 function startPairingServer() {
   if (pairingServer) return;
-  
+
   pairingServer = http.createServer((req, res) => {
     // CORS headers for mobile app
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    
+
     if (req.method === 'OPTIONS') {
       res.writeHead(200);
       res.end();
       return;
     }
-    
+
     if (req.method === 'POST' && req.url === '/api/pair') {
       let body = '';
       req.on('data', chunk => { body += chunk; });
@@ -876,7 +892,7 @@ function startPairingServer() {
         try {
           const data = JSON.parse(body);
           const { email, password, token } = data;
-          
+
           // Validate pairing token
           const storedToken = store.get('pairingToken');
           if (!token || token !== storedToken) {
@@ -884,41 +900,41 @@ function startPairingServer() {
             res.end(JSON.stringify({ success: false, error: 'Invalid pairing token' }));
             return;
           }
-          
+
           if (!email || !password) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Email and password required' }));
             return;
           }
-          
+
           // Store credentials securely (include device_uuid + legacy MK creds for migrated users)
           const creds = {
             email: email,
             password: password,
+            mk_email: data.mk_email || email,
+            mk_password: data.mk_password || password,
             remoteAddress: '',
             remotePort: '3000'
           };
           if (data.device_uuid) creds.device_uuid = data.device_uuid;
-          if (data.mk_email) creds.mk_email = data.mk_email;
-          if (data.mk_password) creds.mk_password = data.mk_password;
           store.set('backupCredentials', creds);
-          
+
           // Generate new pairing token for security (one-time use)
           const newToken = generatePairingToken();
           store.set('pairingToken', newToken);
-          
+
           // Refresh QR code in main window with new token
           refreshQRCodeInMainWindow();
-          
+
           safeConsole('log', '[Pairing] Credentials received from mobile for:', email);
-          
+
           // Use device_uuid from mobile if provided (critical for wallet-migrated users
           // where email:password no longer derives the correct legacy UUID).
           // Fall back to computing from email:password for older mobile versions.
           const userUuid = data.device_uuid || computeUserUuidSync(email, password);
           if (userUuid && uploadsPath) {
             const userFolderPath = path.join(uploadsPath, userUuid);
-            
+
             // Create UUID folder if it doesn't exist
             try {
               if (!fs.existsSync(userFolderPath)) {
@@ -928,7 +944,7 @@ function startPairingServer() {
             } catch (mkdirErr) {
               safeConsole('error', '[Pairing] Failed to create user folder:', mkdirErr.message);
             }
-            
+
             // Add UUID folder to source folders if not already there
             const currentFolders = store.get('backupFolders') || [];
             if (!currentFolders.includes(userFolderPath)) {
@@ -936,7 +952,7 @@ function startPairingServer() {
               store.set('backupFolders', currentFolders);
               safeConsole('log', '[Pairing] Added user folder to sources:', userFolderPath);
             }
-            
+
             // Update LOCAL STORAGE path in UI immediately with the UUID
             if (mainWindow && !mainWindow.isDestroyed()) {
               const escapedPath = userFolderPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -954,13 +970,13 @@ function startPairingServer() {
               `);
             }
           }
-          
+
           // Register user on local server so login works with these credentials
           (async () => {
             try {
               const localServerUrl = 'http://127.0.0.1:3000';
               const deviceUuid = userUuid || crypto.randomUUID();
-              
+
               // Try to register user on local server
               const registerRes = await fetch(`${localServerUrl}/api/register`, {
                 method: 'POST',
@@ -971,7 +987,7 @@ function startPairingServer() {
                   device_uuid: deviceUuid
                 })
               });
-              
+
               if (registerRes.ok) {
                 safeConsole('log', '[Pairing] User registered on local server:', email);
               } else if (registerRes.status === 409) {
@@ -985,7 +1001,7 @@ function startPairingServer() {
               safeConsole('log', '[Pairing] Could not register on local server (server may not be running):', regErr.message);
             }
           })();
-          
+
           // Authenticate with StealthCloud to get token for NFT uploads
           (async () => {
             try {
@@ -1015,13 +1031,13 @@ function startPairingServer() {
               safeConsole('log', '[Pairing] StealthCloud auth failed (NFT will use IPFS):', authErr.message);
             }
           })();
-          
+
           // Show success popup in main window instead of closing it
           if (mainWindow && !mainWindow.isDestroyed()) {
             // Send the updated folders to the renderer
             const updatedFolders = store.get('backupFolders') || [];
             mainWindow.webContents.send('backup-folders', updatedFolders);
-            
+
             // Update the email/password fields in the UI
             mainWindow.webContents.executeJavaScript(`
               (function() {
@@ -1080,10 +1096,10 @@ function startPairingServer() {
               // ignore notification errors
             }
           }
-          
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, message: 'Paired successfully' }));
-          
+
         } catch (e) {
           safeConsole('error', '[Pairing] Error:', e);
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1095,7 +1111,7 @@ function startPairingServer() {
       res.end(JSON.stringify({ error: 'Not found' }));
     }
   });
-  
+
   pairingServer.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       safeConsole('log', '[Pairing] Port', PAIRING_PORT, 'in use, trying next...');
@@ -1105,7 +1121,7 @@ function startPairingServer() {
       safeConsole('error', '[Pairing] Server error:', err);
     }
   });
-  
+
   pairingServer.listen(PAIRING_PORT, '0.0.0.0', () => {
     safeConsole('log', '[Pairing] Server listening on port', PAIRING_PORT);
   });
@@ -1133,18 +1149,18 @@ function showMainWindow() {
     }
     return;
   }
-  
+
   // Ensure paths are initialized
   if (!uploadsPath) {
     initPaths();
   }
-  
+
   const pairingData = getPairingData();
   const credentials = store.get('backupCredentials') || {};
   const photoFolders = store.get('backupFolders') || [];
   const defaultDownloadPath = path.join(os.homedir(), 'Pictures', 'PhotoLynk Sync');
   const savedDownloadPath = store.get('syncDownloadPath') || defaultDownloadPath;
-  
+
   // Compute initial uploads path with UUID if credentials exist
   // Prefer device_uuid from mobile pairing (critical for wallet-migrated users
   // where email:password would derive a different UUID than the legacy one)
@@ -1158,7 +1174,7 @@ function showMainWindow() {
     }
   }
   const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim();
-  
+
   mainWindow = new BrowserWindow({
     width: 472,
     height: 802,
@@ -1175,37 +1191,37 @@ function showMainWindow() {
       webSecurity: false
     }
   });
-  
+
   // Generate QR code and build HTML
   const QRCode = require('qrcode');
   const qrDataString = JSON.stringify(pairingData);
-  
+
   // Read icon as base64 for embedding in HTML
   const fs = require('fs');
   const iconPath = path.join(__dirname, 'icon.png');
   const iconBase64 = ''; // Temporarily disable to reduce data URL size
   const iconDataUrl = '';
-  
+
   QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
     const qrImage = err ? '' : qrUrl;
-    
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <style>
     :root {
-      --bg-primary: #000000;
-      --bg-card: rgba(20, 20, 20, 0.95);
-      --bg-input: rgba(30, 30, 30, 0.9);
+      --bg-primary: #040406;
+      --bg-card: rgba(12, 12, 18, 0.96);
+      --bg-input: rgba(255, 255, 255, 0.04);
       --accent: #03E1FF;
-      --accent-green: #4ADE80;
-      --text-primary: #FFFFFF;
-      --text-secondary: #888888;
-      --text-muted: #555555;
-      --border: rgba(255, 255, 255, 0.1);
-      --success: #4ADE80;
-      --error: #F87171;
+      --accent-green: #00FFA3;
+      --text-primary: #F4F4F8;
+      --text-secondary: #8888A0;
+      --text-muted: #5C5C72;
+      --border: rgba(255, 255, 255, 0.06);
+      --success: #00FFA3;
+      --error: #FF4466;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overflow: hidden; overflow-x: hidden; }
@@ -2221,9 +2237,11 @@ function showMainWindow() {
   
   <!-- NFT Welcome/Guide Modal -->
   <div id="nft-guide-overlay" class="nft-guide-overlay" style="display: none !important;">
-    <div class="nft-guide-header">
-      <div style="font-size:14px;font-weight:700;color:#fff;">Certifying Your Photos</div>
-      <button class="nft-mint-close" onclick="closeNFTGuide()">✕</button>
+    <div class="nft-guide-modal">
+      <div class="nft-guide-header">
+        <div style="font-size:14px;font-weight:700;color:#fff;">Certifying Your Photos</div>
+        <button class="nft-mint-close" onclick="closeNFTGuide()">✕</button>
+      </div>
       <div class="nft-guide-scroll">
 
         <!-- ── 3 USE-CASE EXAMPLES ── -->
@@ -2330,6 +2348,7 @@ function showMainWindow() {
         <span style="font-size:12px;color:#52525b;">Don't show again</span>
       </div>
       <button class="nft-guide-close-btn" onclick="closeNFTGuide()">Got It</button>
+    </div>
     </div>
   </div>
   
@@ -2937,6 +2956,15 @@ function showMainWindow() {
       if (spinner) spinner.style.display = 'none';
       img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="#1a1a1a" width="100" height="100"/><text x="50" y="55" text-anchor="middle" fill="#666" font-size="24">⬡</text></svg>');
       img.style.opacity = '0.5';
+      
+      // Detect CORS errors specifically
+      if (img.dataset.originalUrl) {
+        const url = img.dataset.originalUrl;
+        const isExternal = !url.startsWith('data:') && !url.startsWith('file://') && !url.includes('localhost');
+        if (isExternal) {
+          console.log('[NFT Album] CORS/external URL failed, use Image button to open in browser:', url.slice(0, 60));
+        }
+      }
     }
     
     // NFT State
@@ -2945,17 +2973,32 @@ function showMainWindow() {
     // TTL cache: reuse last successful result for 5 minutes to avoid DAS spam on auto-refresh
     let _fetchNFTsInFlight = null;
     let _fetchNFTsCache = null;
+    let _fetchNFTsCacheWallet = null;
     let _fetchNFTsCacheTs = 0;
     const _FETCH_NFTS_TTL_MS = 300000; // 5 minutes
+    async function invalidateNFTFetchCaches(resetDas = false) {
+      _fetchNFTsCache = null;
+      _fetchNFTsCacheWallet = null;
+      _fetchNFTsCacheTs = 0;
+      if (resetDas) {
+        try { await ipcRenderer.invoke('invalidate-das-cache'); } catch (_) { }
+      }
+    }
     async function fetchUserNFTsCached(limit = 1000, forceRefresh = false) {
       if (!nftWalletAddress) return { success: false, nfts: [] };
+      if (_fetchNFTsCacheWallet && _fetchNFTsCacheWallet !== nftWalletAddress) {
+        await invalidateNFTFetchCaches(false);
+      }
+      if (forceRefresh) {
+        await invalidateNFTFetchCaches(true);
+      }
       // Return cached result if still fresh
-      if (!forceRefresh && _fetchNFTsCache && (Date.now() - _fetchNFTsCacheTs) < _FETCH_NFTS_TTL_MS) {
+      if (!forceRefresh && _fetchNFTsCache && _fetchNFTsCacheWallet === nftWalletAddress && (Date.now() - _fetchNFTsCacheTs) < _FETCH_NFTS_TTL_MS) {
         return _fetchNFTsCache;
       }
-      if (_fetchNFTsInFlight) return _fetchNFTsInFlight;
+      if (_fetchNFTsInFlight && !forceRefresh) return _fetchNFTsInFlight;
       _fetchNFTsInFlight = ipcRenderer.invoke('fetch-user-nfts', nftWalletAddress, limit)
-        .then(result => { _fetchNFTsCache = result; _fetchNFTsCacheTs = Date.now(); return result; })
+        .then(result => { _fetchNFTsCache = result; _fetchNFTsCacheWallet = nftWalletAddress; _fetchNFTsCacheTs = Date.now(); return result; })
         .finally(() => { _fetchNFTsInFlight = null; });
       return _fetchNFTsInFlight;
     }
@@ -3248,6 +3291,7 @@ function showMainWindow() {
     const IMAGE_EXTS = ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff','tif','avif','dng','cr2','cr3','nef','arw','orf','rw2'];
     
     function handleNFTPhotoSelected(filePath) {
+      console.log('[NFT] handleNFTPhotoSelected called with:', filePath, 'type:', typeof filePath);
       selectedNFTPhoto = filePath;
       document.getElementById('nft-preview-img').src = 'http://localhost:3000/local-image?path=' + encodeURIComponent(filePath);
       document.getElementById('nft-photo-select').style.display = 'none';
@@ -3298,8 +3342,10 @@ function showMainWindow() {
         dropTarget.style.borderColor = '';
         dropTarget.style.background = '';
         const files = e.dataTransfer.files;
+        console.log('[NFT] Drop event files:', files, 'length:', files?.length);
         if (files && files.length > 0) {
           const file = files[0];
+          console.log('[NFT] Dropped file:', file.name, 'path:', file?.path, 'type:', file?.type);
           const ext = (file.name.split('.').pop() || '').toLowerCase();
           if (IMAGE_EXTS.includes(ext)) {
             handleNFTPhotoSelected(file.path);
@@ -3353,6 +3399,7 @@ function showMainWindow() {
               syncQuickInfoNfts();
               try { await ipcRenderer.invoke('purge-nft-storage'); } catch (_) {}
               try { await ipcRenderer.invoke('clear-nft-cache'); } catch (_) {}
+              await invalidateNFTFetchCaches(true);
             }
             loadNFTAlbum();
             // Clear certs UI when wallet changed, and always reload if certs overlay is open
@@ -3430,11 +3477,13 @@ function showMainWindow() {
       btn.innerHTML = '<span>⏳</span> Certifying...';
       
       const nameInputVal = document.getElementById('nft-name-input').value.trim();
+      console.log('[NFT Mint] selectedNFTPhoto:', selectedNFTPhoto, 'type:', typeof selectedNFTPhoto);
       const selectedPath = (typeof selectedNFTPhoto === 'string')
         ? selectedNFTPhoto
         : (selectedNFTPhoto && typeof selectedNFTPhoto.path === 'string')
           ? selectedNFTPhoto.path
           : String(selectedNFTPhoto || '');
+      console.log('[NFT Mint] resolved selectedPath:', selectedPath);
       const name = nameInputVal || (selectedPath ? selectedPath.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() : '') || 'My Photo';
       const description = document.getElementById('nft-desc-input').value || '';
       
@@ -3491,6 +3540,7 @@ function showMainWindow() {
           throw new Error(result.error || 'Minting failed');
         }
       } catch (e) {
+        console.error('[NFT Mint] Error during mint:', e);
         btn.innerHTML = '<span>✕</span> ' + (e.message || 'Failed');
         btn.style.background = 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
         setTimeout(() => {
@@ -3827,10 +3877,10 @@ function showMainWindow() {
       updateNFTResultsSummary();
       if (allNFTs.length > 0) {
         renderNFTPage();
-        checkForNewNFTsOnce();
+        checkForNewNFTsOnce(true);
         startNFTAutoRefresh();
       } else {
-        loadNFTAlbum();
+        loadNFTAlbum(true);
       }
     }
     
@@ -3864,16 +3914,11 @@ function showMainWindow() {
         if (!c.cameraHash) { const a = attrs.find(x => x.trait_type === 'Camera Hash'); if (a) { c.cameraHash = a.value; enriched = true; } }
         if (!c.license || c.license === 'arr') { const a = attrs.find(x => x.trait_type === 'License'); if (a) { c.license = a.value; enriched = true; } }
         if (!c.storageType && nft.storageType) { c.storageType = nft.storageType; enriched = true; }
-        if (!c.encrypted && nft.encrypted) { c.encrypted = true; enriched = true; }
+        if (!c.encrypted && hasUsableWrappedEncryptionPayload(nft.encryptionData)) { c.encrypted = true; enriched = true; }
         if (!c.watermarked && nft.watermarked) { c.watermarked = true; enriched = true; }
         const metaCert = nft.metadata?.properties?.certificate;
         if (!c.rfc3161Token && metaCert?.rfc3161?.tsaTokenBase64) { c.rfc3161Token = metaCert.rfc3161.tsaTokenBase64; c.hasRfc3161 = true; enriched = true; }
         if (!c.c2paManifest && nft.metadata?.properties?.c2pa) { c.c2paManifest = nft.metadata.properties.c2pa; c.hasC2pa = true; enriched = true; }
-        if (!c.rfc3161Token && !c.hasRfc3161) { const a = attrs.find(x => x.trait_type === 'RFC 3161 Timestamp'); if (a) { c.hasRfc3161 = true; enriched = true; } }
-        if (!c.c2paManifest && !c.hasC2pa) { const a = attrs.find(x => x.trait_type === 'C2PA Provenance'); if (a) { c.hasC2pa = true; enriched = true; } }
-        // Fallback: NFT-level flags (survive metadata stripping)
-        if (!c.hasRfc3161 && nft.hasRfc3161) { c.hasRfc3161 = true; enriched = true; }
-        if (!c.hasC2pa && nft.hasC2pa) { c.hasC2pa = true; enriched = true; }
         // NOTE: Do NOT unconditionally set hasRfc3161/hasC2pa — only set when evidence exists.
         // Setting the flag without the actual token causes permanent "Recovering..." UI state.
       }
@@ -3893,7 +3938,7 @@ function showMainWindow() {
           const metaUrl = nft?.metadataUrl || nft?.metadata?.uri || nft?.uri || c.metadataUrl || '';
           if (metaUrl) {
             try {
-              const encData = (nft?.encrypted || c.encrypted) ? (nft?.encryptionData || null) : null;
+              const encData = hasUsableWrappedEncryptionPayload(nft?.encryptionData) ? (nft?.encryptionData || null) : null;
               const result = await ipcRenderer.invoke('fetch-rfc3161-token', metaUrl, encData);
               c._recoveryAttemptedAt = Date.now();
               recoveryAttempted++;
@@ -3935,6 +3980,11 @@ function showMainWindow() {
           else if (key && nftMap[key]) {
             if (s.metadata && !nftMap[key].metadata) nftMap[key].metadata = s.metadata;
             if (s.attributes?.length && !nftMap[key].attributes?.length) nftMap[key].attributes = s.attributes;
+            if (s.encryptionData && !nftMap[key].encryptionData) nftMap[key].encryptionData = s.encryptionData;
+            if (s.thumbnailUrl && !nftMap[key].thumbnailUrl) nftMap[key].thumbnailUrl = s.thumbnailUrl;
+            if (s.edition && !nftMap[key].edition) nftMap[key].edition = s.edition;
+            if (s.certificationMode && !nftMap[key].certificationMode) nftMap[key].certificationMode = s.certificationMode;
+            if (hasUsableWrappedEncryptionPayload(s.encryptionData) && !nftMap[key].encrypted) nftMap[key].encrypted = true;
           }
         }
       } catch (_) {}
@@ -4418,26 +4468,57 @@ function showMainWindow() {
     function isPhotoLynkEcosystemNFT(nft) {
       if (!nft) return false;
       if (nft.merkleTree === '7qSKB5q1JMmsGx2cHzAJPxvjzXCbAfpWNDTKDM3tSunS') return true;
-      if (nft.creatorWallet === 'HttTZkUG8xn5A1uJPjRDJqqufdwvHmNQroEGmST8iimU') return true;
+      const mintPlatform = String(nft.mintPlatform || '').toLowerCase();
+      if (mintPlatform.includes('photolynk') || mintPlatform === 'nft-service') return true;
+      if (nft.contentHash && nft.exifHash) return true;
       const attrs = nft.metadata?.attributes || nft.attributes || [];
       const hasContentHash = attrs.some(a => a.trait_type === 'Content Hash');
       const hasExifHash = attrs.some(a => a.trait_type === 'EXIF Hash');
       if (hasContentHash && hasExifHash) return true;
       const metaCert = nft.metadata?.properties?.certificate;
       if (metaCert && metaCert.type && metaCert.type.includes('PhotoLynk')) return true;
-      if (nft.name && nft.name.includes('PhotoLynk')) return true;
       return false;
     }
 
+    function hasUsableWrappedEncryptionPayload(encryptionData) {
+      return !!(encryptionData?.wrappedKey && encryptionData?.wrapNonce && (encryptionData?.nonce || encryptionData?.thumbnailNonce));
+    }
+
+    function shouldUseEncryptedRendering(nft) {
+      return nft?.encrypted === true && hasUsableWrappedEncryptionPayload(nft?.encryptionData);
+    }
+
     function isPrivateNFTClassification(nft) {
-      return nft?.certificationMode === 'private'
-        || (nft?.edition === 'limited' && nft?.certificationMode !== 'public')
-        || nft?.encrypted === true;
+      // Match solana-seeker NFTGallery.js isPrivateNFTTabMatch exactly
+      const isPhotoLynk = isPhotoLynkEcosystemNFT(nft);
+      const mode = String(nft?.certificationMode || '').toLowerCase();
+      const edition = String(nft?.edition || '').toLowerCase();
+      if (!isPhotoLynk) return shouldUseEncryptedRendering(nft);
+      if (mode === 'public') return false;
+      if (mode === 'private') return true;
+      if (edition === 'limited') return true;  // Limited → Private
+      return shouldUseEncryptedRendering(nft);  // Encrypted → Private
     }
 
     function isPublicNFTClassification(nft) {
-      return (nft?.certificationMode === 'public' || (nft?.edition === 'open' && !nft?.certificationMode))
-        && nft?.encrypted !== true;
+      // Match solana-seeker NFTGallery.js isPublicNFTTabMatch exactly
+      if (!isPhotoLynkEcosystemNFT(nft)) return false;
+      const mode = String(nft?.certificationMode || '').toLowerCase();
+      const edition = String(nft?.edition || '').toLowerCase();
+      if (mode === 'private') return false;
+      if (mode === 'public') return true;
+      return edition === 'open';  // Open → Public
+    }
+
+    function isPhotoLynkCertifiedNFT(nft) {
+      // Match solana-seeker NFTGallery.js isPhotoLynkCertifiedNFT exactly
+      if (!nft) return false;
+      if (!isPhotoLynkEcosystemNFT(nft)) return false;
+      const mode = String(nft?.certificationMode || '').toLowerCase();
+      const edition = String(nft?.edition || '').toLowerCase();
+      if (mode === 'public' || mode === 'private') return true;
+      if (edition === 'open' || edition === 'limited') return true;
+      return shouldUseEncryptedRendering(nft);
     }
 
     function getNFTEffectiveDateValue(nft) {
@@ -4459,7 +4540,7 @@ function showMainWindow() {
       const compressed = nft.isCompressed === true || (nft.mintAddress || '').startsWith('cnft_');
       if (compressed) { tags.push('compressed', 'cnft'); } else { tags.push('standard'); }
       // Encrypted
-      if (nft.encrypted) tags.push('encrypted');
+      if (shouldUseEncryptedRendering(nft)) tags.push('encrypted');
       if (nft.watermarked) tags.push('watermarked');
       // Certified — check cachedCerts
       const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
@@ -4474,11 +4555,18 @@ function showMainWindow() {
     }
 
     function getFilteredNFTs() {
+      // Match solana-seeker NFTGallery.js filtering exactly
       let result = allNFTs;
       if (nftFilter === 'private') {
-        result = result.filter(nft => isPhotoLynkEcosystemNFT(nft) && isPrivateNFTClassification(nft));
+        // Private tab: show ecosystem NFTs OR any certified/encrypted NFT (broader check for synced NFTs)
+        result = result.filter(nft => {
+          const isEcosystem = isPhotoLynkEcosystemNFT(nft) || isPhotoLynkCertifiedNFT(nft);
+          const isPrivate = isPrivateNFTClassification(nft) || shouldUseEncryptedRendering(nft);
+          return (isEcosystem && isPrivate) || shouldUseEncryptedRendering(nft);
+        });
       } else if (nftFilter === 'public') {
-        result = result.filter(nft => isPhotoLynkEcosystemNFT(nft) && isPublicNFTClassification(nft));
+        // Public tab: show ecosystem NFTs OR certified NFTs that are public
+        result = result.filter(nft => (isPhotoLynkEcosystemNFT(nft) || isPhotoLynkCertifiedNFT(nft)) && isPublicNFTClassification(nft));
       }
       if (!nftSearchQuery.trim()) return result;
       const q = nftSearchQuery.toLowerCase();
@@ -4575,14 +4663,14 @@ function showMainWindow() {
           if (nft.encryptionData && !existing.encryptionData) existing.encryptionData = nft.encryptionData;
           if (nft.thumbnailUrl && !existing.thumbnailUrl) existing.thumbnailUrl = nft.thumbnailUrl;
           if (nft.edition && !existing.edition) existing.edition = nft.edition;
-          if (nft.encrypted && !existing.encrypted) existing.encrypted = nft.encrypted;
+          if (shouldUseEncryptedRendering(nft) && !existing.encrypted) existing.encrypted = true;
           if (nft.watermarked && !existing.watermarked) existing.watermarked = nft.watermarked;
           if (nft.license && !existing.license) existing.license = nft.license;
           if (nft.storageType && (!existing.storageType || existing.storageType === 'ipfs')) existing.storageType = nft.storageType;
           if (nft.createdAt && !existing.createdAt) existing.createdAt = nft.createdAt;
-          if (nft.encrypted && nft.imageUrl && !existing.encryptionData?.wrappedKey) {
+          if (shouldUseEncryptedRendering(nft) && nft.imageUrl && hasUsableWrappedEncryptionPayload(existing.encryptionData)) {
             // Don't overwrite imageUrl if existing already has encryption keys
-          } else if (nft.encrypted && nft.imageUrl) {
+          } else if (shouldUseEncryptedRendering(nft) && nft.imageUrl) {
             existing.imageUrl = nft.imageUrl;
             if (!existing.cachedPath) existing.image = nft.imageUrl;
           }
@@ -4598,7 +4686,7 @@ function showMainWindow() {
             if (old.encryptionData && !nft.encryptionData) nft.encryptionData = old.encryptionData;
             if (old.thumbnailUrl && !nft.thumbnailUrl) nft.thumbnailUrl = old.thumbnailUrl;
             if (old.edition && !nft.edition) nft.edition = old.edition;
-            if (old.encrypted && !nft.encrypted) nft.encrypted = old.encrypted;
+            if (hasUsableWrappedEncryptionPayload(old.encryptionData) && !nft.encrypted) nft.encrypted = true;
             if (old.watermarked && !nft.watermarked) nft.watermarked = old.watermarked;
             if (old.license && !nft.license) nft.license = old.license;
             if (old.imageUrl && !nft.imageUrl) nft.imageUrl = old.imageUrl;
@@ -4618,10 +4706,10 @@ function showMainWindow() {
       return added;
     }
 
-    async function checkForNewNFTsOnce() {
+    async function checkForNewNFTsOnce(forceRefresh = false) {
       if (!nftWalletAddress) return 0;
       try {
-        const result = await fetchUserNFTsCached();
+        const result = await fetchUserNFTsCached(1000, forceRefresh);
         if (result && result.success && result.nfts) {
           // Merge local storage data into DAS results before appending
           // (DAS doesn't have encryptionData, thumbnailUrl, original imageUrl for encrypted NFTs)
@@ -4641,11 +4729,11 @@ function showMainWindow() {
                   if (stored.encryptionData) nft.encryptionData = stored.encryptionData;
                   if (stored.thumbnailUrl) nft.thumbnailUrl = stored.thumbnailUrl;
                   if (stored.edition && !nft.edition) nft.edition = stored.edition;
-                  if (stored.encrypted && !nft.encrypted) nft.encrypted = stored.encrypted;
+                  if (hasUsableWrappedEncryptionPayload(stored.encryptionData) && !nft.encrypted) nft.encrypted = true;
                   if (stored.watermarked && !nft.watermarked) nft.watermarked = stored.watermarked;
                   if (stored.license && !nft.license) nft.license = stored.license;
                   if (stored.storageType && (!nft.storageType || nft.storageType === 'ipfs' || nft.storageType === 'unknown')) nft.storageType = stored.storageType;
-                  if (stored.encrypted && stored.imageUrl) {
+                  if (hasUsableWrappedEncryptionPayload(stored.encryptionData) && stored.imageUrl) {
                     nft.imageUrl = stored.imageUrl;
                     if (!nft.cachedPath) nft.image = stored.imageUrl;
                   }
@@ -4694,7 +4782,7 @@ function showMainWindow() {
       }
     }
     
-    async function loadNFTAlbum() {
+    async function loadNFTAlbum(forceRefresh = false) {
       try {
         const grid = document.getElementById('nft-grid');
         const loading = document.getElementById('nft-loading');
@@ -4738,7 +4826,7 @@ function showMainWindow() {
 
         // Fetch DAS NFTs + sync from server in parallel (not sequential)
         const [result] = await Promise.all([
-          fetchUserNFTsCached(),
+          fetchUserNFTsCached(1000, forceRefresh),
           ipcRenderer.invoke('sync-nfts-from-server').catch(syncErr => {
             console.log('[NFT Album] Server sync skipped:', syncErr.message);
           }),
@@ -4769,14 +4857,15 @@ function showMainWindow() {
                 if (stored.encryptionData) nft.encryptionData = stored.encryptionData;
                 if (stored.thumbnailUrl) nft.thumbnailUrl = stored.thumbnailUrl;
                 if (stored.edition && !nft.edition) nft.edition = stored.edition;
-                if (stored.encrypted && !nft.encrypted) nft.encrypted = stored.encrypted;
+                if (hasUsableWrappedEncryptionPayload(stored.encryptionData) && !nft.encrypted) nft.encrypted = true;
+                if (stored.certificationMode && !nft.certificationMode) nft.certificationMode = stored.certificationMode;
                 if (stored.watermarked && !nft.watermarked) nft.watermarked = stored.watermarked;
                 if (stored.license && !nft.license) nft.license = stored.license;
                 if (stored.storageType && (!nft.storageType || nft.storageType === 'ipfs')) nft.storageType = stored.storageType;
                 if (stored.createdAt && !nft.createdAt) nft.createdAt = stored.createdAt;
                 // For encrypted NFTs: DAS imageUrl is a proxied URL that can't be decrypted.
                 // Use the original upload URL from local storage (Pinata/StealthCloud) instead.
-                if (stored.encrypted && stored.imageUrl) {
+                if (hasUsableWrappedEncryptionPayload(stored.encryptionData) && stored.imageUrl) {
                   nft.imageUrl = stored.imageUrl;
                   // Also update nft.image so grid uses the correct URL for decrypt
                   if (!nft.cachedPath) nft.image = stored.imageUrl;
@@ -4937,7 +5026,7 @@ function showMainWindow() {
       imageContainer.style.maxHeight = '';
       imageContainer.style.background = '';
 
-      if (nft.encrypted && nft.encryptionData) {
+      if (shouldUseEncryptedRendering(nft)) {
         // Has real encryption keys — decrypt (check cache first)
         const detailCacheKey = nft.thumbnailUrl || nft.imageUrl || nft.image || nft.mintAddress;
         if (detailCacheKey && _decryptCache[detailCacheKey]) {
@@ -4950,7 +5039,7 @@ function showMainWindow() {
         imageContainer.insertAdjacentHTML('beforeend', '<div id="nft-decrypt-status" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#9945FF;font-size:13px;font-weight:600;">🔒 Decrypting...</div>');
         (async () => {
           try {
-            const result = await ipcRenderer.invoke('decrypt-nft-image', { imageUrl: nft.imageUrl || nft.image, thumbnailUrl: nft.thumbnailUrl || null, encryptionData: nft.encryptionData });
+            const result = await ipcRenderer.invoke('decrypt-nft-image', { imageUrl: nft.arweaveUrl || nft.imageUrl || nft.image, thumbnailUrl: nft.thumbnailUrl || null, encryptionData: nft.encryptionData });
             const statusEl = document.getElementById('nft-decrypt-status');
             if (result && result.success && result.dataUrl) {
               imgEl.src = result.dataUrl;
@@ -5014,21 +5103,28 @@ function showMainWindow() {
       const badgeRow = document.getElementById('nft-detail-badge-row');
       if (badgeRow) {
         badgeRow.innerHTML = '';
-        // Certification mode badge (Private/Public) — replaces legacy Open/Limited
+        // Certification mode badge (Private/Public) — only for PhotoLynk ecosystem NFTs
         if (isPrivateNFTClassification(nft)) {
           badgeRow.innerHTML += '<div class="nft-chip cert-private">🔐 Private</div>';
         } else if (isPublicNFTClassification(nft)) {
           badgeRow.innerHTML += '<div class="nft-chip cert-public">🌍 Public</div>';
+        } else if (isCompressed) {
+          badgeRow.innerHTML += '<div class="nft-chip cnft">cNFT</div>';
         } else {
-          badgeRow.innerHTML += '<div class="nft-chip ' + (isCompressed ? 'cnft' : 'standard') + '">' + (isCompressed ? 'Public' : 'Private') + '</div>';
+          // Non-PhotoLynk standard NFTs — show type based on storage
+          const rawImg = (nft.imageUrl || nft.image || '');
+          const isAr = rawImg.includes('arweave.net') || rawImg.includes('akrd.net') || nft.arweaveUrl;
+          const isData = rawImg.startsWith('data:');
+          const badgeText = isData ? 'On-Chain' : isAr ? 'Arweave' : nft.storageType === 'ipfs' ? 'IPFS' : 'Standard';
+          badgeRow.innerHTML += '<div class="nft-chip standard">' + badgeText + '</div>';
         }
         // Storage chip
         const rawImageUrl = (nft && (nft.imageUrl || nft.image)) ? String(nft.imageUrl || nft.image) : '';
         const _allUrls = rawImageUrl + (nft.arweaveUrl || '');
-        const storageLabel = nft.storageType ? (nft.storageType === 'cloud' ? 'Encrypted Cloud' : nft.storageType === 'arweave' ? 'Arweave' : nft.storageType === 'onchain' ? 'On-Chain' : 'Decentralized') : (isStealthCloudUrl(_allUrls) ? 'Encrypted Cloud' : _allUrls.includes('arweave.net') || _allUrls.includes('akrd.net') ? 'Arweave' : 'Decentralized');
+        const storageLabel = nft.storageType ? (nft.storageType === 'cloud' ? (shouldUseEncryptedRendering(nft) ? 'Encrypted Cloud' : 'StealthCloud') : nft.storageType === 'arweave' ? 'Arweave' : nft.storageType === 'onchain' ? 'On-Chain' : 'Decentralized') : (isStealthCloudUrl(_allUrls) ? (shouldUseEncryptedRendering(nft) ? 'Encrypted Cloud' : 'StealthCloud') : _allUrls.includes('arweave.net') || _allUrls.includes('akrd.net') ? 'Arweave' : 'Decentralized');
         badgeRow.innerHTML += '<div class="nft-chip storage">' + storageLabel + '</div>';
         // Encrypted badge
-        if (nft.encrypted === true) {
+        if (shouldUseEncryptedRendering(nft)) {
           badgeRow.innerHTML += '<div class="nft-chip encrypted">🔒 Encrypted</div>';
         }
         // Watermarked badge
@@ -5233,34 +5329,48 @@ function showMainWindow() {
       if (!currentDetailNFT) return;
       const isCompressed = currentDetailNFT.isCompressed === true;
       
-
-      const rawImageUrl = (currentDetailNFT && (currentDetailNFT.imageUrl || currentDetailNFT.image)) ? String(currentDetailNFT.imageUrl || currentDetailNFT.image) : '';
+      // Get image URL from various sources
+      let rawImageUrl = (currentDetailNFT && (currentDetailNFT.imageUrl || currentDetailNFT.image)) ? String(currentDetailNFT.imageUrl || currentDetailNFT.image) : '';
+      
+      // If no image URL but we have arweaveUrl, use that
+      if (!rawImageUrl && currentDetailNFT.arweaveUrl) {
+        rawImageUrl = currentDetailNFT.arweaveUrl;
+      }
+      
       const _allUrls3 = rawImageUrl + (currentDetailNFT.arweaveUrl || '');
       const isCloud = currentDetailNFT.storageType === 'cloud' || (!currentDetailNFT.storageType && isStealthCloudUrl(_allUrls3));
-      const isArweave = currentDetailNFT.storageType === 'arweave' || rawImageUrl.includes('akrd.net') || rawImageUrl.includes('arweave.net');
+      const isArweave = currentDetailNFT.storageType === 'arweave' || rawImageUrl.includes('akrd.net') || rawImageUrl.includes('arweave.net') || (currentDetailNFT.arweaveUrl && !rawImageUrl);
       const isOnChain = currentDetailNFT.storageType === 'onchain' || rawImageUrl.startsWith('data:');
+      
       if (isOnChain) {
         // On-chain SVG is embedded in metadata — show the metadata URL instead
         const metaUrl = currentDetailNFT.metadataUrl || currentDetailNFT.uri || '';
         if (metaUrl) require('electron').shell.openExternal(metaUrl.startsWith('http') ? metaUrl : 'https://ipfs.io/ipfs/' + metaUrl);
         return;
       }
+      
       if (isCloud || isArweave) {
-        if (rawImageUrl) require('electron').shell.openExternal(rawImageUrl);
+        const urlToOpen = rawImageUrl || currentDetailNFT.arweaveUrl;
+        if (urlToOpen) require('electron').shell.openExternal(urlToOpen);
         return;
       }
 
       let imgUrl = rawImageUrl;
       let cid = extractIPFSCid(imgUrl);
 
-      if (!cid && currentDetailNFT.metadataUrl) {
+      // If no image URL or CID, try to fetch from metadata
+      if (!imgUrl && currentDetailNFT.metadataUrl) {
         try {
+          console.log('[NFT Image] No image URL, fetching from metadata:', currentDetailNFT.metadataUrl);
           const result = await ipcRenderer.invoke('fetch-nft-image-from-metadata', currentDetailNFT.metadataUrl, isCompressed);
           if (result && result.imageUrl) {
             imgUrl = result.imageUrl;
             cid = extractIPFSCid(imgUrl);
+            console.log('[NFT Image] Got image from metadata:', imgUrl.slice(0, 60));
           }
-        } catch (e) {}
+        } catch (e) {
+          console.log('[NFT Image] Failed to fetch from metadata:', e.message);
+        }
       }
 
       if (cid) {
@@ -5276,7 +5386,6 @@ function showMainWindow() {
     function isPhotoLynkEcosystem(nft) {
       if (!nft) return false;
       if (nft.merkleTree === '7qSKB5q1JMmsGx2cHzAJPxvjzXCbAfpWNDTKDM3tSunS') return true;
-      if (nft.creatorWallet === 'HttTZkUG8xn5A1uJPjRDJqqufdwvHmNQroEGmST8iimU') return true;
       const mintPlatform = String(nft.mintPlatform || '').toLowerCase();
       if (mintPlatform.includes('photolynk') || mintPlatform === 'nft-service') return true;
       if (nft.contentHash && nft.exifHash) return true;
@@ -5286,7 +5395,6 @@ function showMainWindow() {
       if (hasContentHash && hasExifHash) return true;
       const metaCert = nft.metadata?.properties?.certificate;
       if (metaCert && metaCert.type && metaCert.type.includes('PhotoLynk')) return true;
-      if (nft.name && nft.name.includes('PhotoLynk')) return true;
       return false;
     }
 
@@ -5299,7 +5407,7 @@ function showMainWindow() {
       
       document.getElementById('nft-transfer-img').src = imageUrl;
       document.getElementById('nft-transfer-name').textContent = currentDetailNFT.name || 'Unnamed Photo';
-      document.getElementById('nft-transfer-type').textContent = isPrivateNFTClassification(currentDetailNFT) ? 'Private' : isPublicNFTClassification(currentDetailNFT) ? 'Public' : isCompressed ? 'Public' : 'Private';
+      document.getElementById('nft-transfer-type').textContent = isPrivateNFTClassification(currentDetailNFT) ? 'Private' : isPublicNFTClassification(currentDetailNFT) ? 'Public' : isCompressed ? 'Public' : 'Standard';
       
       const recipientInput = document.getElementById('nft-transfer-recipient');
       const confirmBtn = document.querySelector('.nft-transfer-actions .nft-action-btn.primary');
@@ -5833,7 +5941,7 @@ function showMainWindow() {
         item.className = 'nft-item ' + (isCompressed ? 'compressed' : 'standard');
         item.onclick = () => openNFTDetail(globalIdx);
         // Treat any encrypted NFT with encryptionData as having keys — master key is derived from credentials
-        const hasEncKeys = !!(nft.encrypted && nft.encryptionData);
+        const hasEncKeys = shouldUseEncryptedRendering(nft);
         const isCached = !!nft.cachedPath && !hasEncKeys;
         const imageUrl = isCached ? nft.cachedPath : (nft.image || nft.imageUrl || '');
         const originalUrl = nft.ipfsThumbnailUrl || nft.imageUrl || nft.image || '';  // Prefer IPFS thumb as fallback (tiny ~30KB)
@@ -5885,9 +5993,9 @@ function showMainWindow() {
         
         // Build inline badge pills for bottom overlay (matches mobile Solana style)
         const rawImg = (nft.imageUrl || nft.image || '');
-        const stType = nft.storageType || (rawImg.startsWith('data:') ? 'onchain' : (rawImg.includes('stealthlynk.io') || rawImg.includes('stealthcloud')) ? 'cloud' : (rawImg.includes('akrd.net') || rawImg.includes('arweave.net')) ? 'arweave' : 'ipfs');
+        const stType = nft.storageType || (rawImg.startsWith('data:') ? 'onchain' : (rawImg.includes('stealthlynk.io') || rawImg.includes('stealthcloud')) ? 'cloud' : (rawImg.includes('arweave.net') || rawImg.includes('akrd.net')) ? 'arweave' : 'ipfs');
         let badgeRow = '<div class="nft-badge-row">';
-        // Certification mode badge (Private/Public) — replaces legacy Open/Limited
+        // Certification mode badge (Private/Public) — only for PhotoLynk ecosystem NFTs
         if (isPrivateNFTClassification(nft)) {
           badgeRow += '<span class="nft-badge-pill" style="background:rgba(99,102,241,0.3);color:#818cf8;">🔐 Private</span>';
         } else if (isPublicNFTClassification(nft)) {
@@ -5895,10 +6003,14 @@ function showMainWindow() {
         } else if (isCompressed) {
           badgeRow += '<span class="nft-badge-pill" style="background:rgba(34,197,94,0.3);color:#22c55e;">cNFT</span>';
         } else {
-          badgeRow += '<span class="nft-badge-pill" style="background:rgba(153,69,255,0.3);color:#9945FF;">⬡</span>';
+          // Non-PhotoLynk standard NFTs — show storage type
+          const isAr = rawImg.includes('arweave.net') || rawImg.includes('akrd.net') || nft.arweaveUrl;
+          const isData = rawImg.startsWith('data:');
+          const badgeLabel = isData ? 'On-Chain' : isAr ? 'Arweave' : stType === 'ipfs' ? 'IPFS' : 'Standard';
+          badgeRow += '<span class="nft-badge-pill" style="background:rgba(153,69,255,0.3);color:#9945FF;">' + badgeLabel + '</span>';
         }
         // Encrypted badge
-        if (nft.encrypted) {
+        if (shouldUseEncryptedRendering(nft)) {
           badgeRow += '<span class="nft-badge-pill" style="background:rgba(153,69,255,0.3);color:#9945FF;">🔒</span>';
         }
         // Storage badge
@@ -5960,7 +6072,7 @@ function showMainWindow() {
                   if (spinner) spinner.style.display = 'none';
                   return;
                 }
-                const decryptUrl = (typeof originalUrl === 'string' && originalUrl.startsWith('http')) ? originalUrl : '';
+                const decryptUrl = (typeof originalUrl === 'string' && originalUrl.startsWith('http')) ? originalUrl : (nft.arweaveUrl || '');
                 const hasThumb = !!(nft.thumbnailUrl && nft.encryptionData?.thumbnailNonce);
                 if (!decryptUrl && !hasThumb) {
                   // No network URL and no encrypted thumbnail — show lock icon
@@ -6048,11 +6160,12 @@ function showMainWindow() {
       console.log('[NFT Album] Refreshing - clearing cache and rescanning...');
       try {
         await ipcRenderer.invoke('clear-nft-cache');
+        await invalidateNFTFetchCaches(true);
         console.log('[NFT Album] Cache cleared');
       } catch (e) {
         console.log('[NFT Album] Cache clear failed:', e.message);
       }
-      loadNFTAlbum(); 
+      loadNFTAlbum(true); 
     }
 
     // Bind all inline onclick handlers to window
@@ -6111,6 +6224,7 @@ function showMainWindow() {
         if (ce) ce.style.display = 'none';
         try { await ipcRenderer.invoke('purge-nft-storage'); } catch (_) {}
         try { await ipcRenderer.invoke('clear-nft-cache'); } catch (_) {}
+        await invalidateNFTFetchCaches(true);
         loadNFTAlbum();
       } else {
         checkForNewNFTsOnce();
@@ -6125,10 +6239,10 @@ function showMainWindow() {
   </script>
 </body>
 </html>`;
-    
+
     mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   });
-  
+
   mainWindow.on('close', (e) => {
     if (!app.isQuitting) {
       e.preventDefault();
@@ -6136,13 +6250,13 @@ function showMainWindow() {
     }
   });
   mainWindow.on('ready-to-show', () => { mainWindow.show(); });
-  
-  
+
+
   mainWindow.webContents.on('console-message', (e, level, msg) => {
     if (msg.startsWith('[NFT]')) safeConsole('log', '[Renderer]', msg);
   });
   mainWindow.setMenuBarVisibility(false);
-  
+
   // DevTools disabled for production
   // mainWindow.webContents.openDevTools({ mode: 'detach' });
 }
@@ -6152,10 +6266,10 @@ function showQRCodeWindow() {
     qrWindow.focus();
     return;
   }
-  
+
   const pairingData = getPairingData();
   const qrDataString = JSON.stringify(pairingData);
-  
+
   qrWindow = new BrowserWindow({
     width: 360,
     height: 480,
@@ -6172,7 +6286,7 @@ function showQRCodeWindow() {
       webSecurity: false
     }
   });
-  
+
   // Generate QR code HTML
   const QRCode = require('qrcode');
   QRCode.toDataURL(qrDataString, { width: 280, margin: 2 }, (err, url) => {
@@ -6181,7 +6295,7 @@ function showQRCodeWindow() {
       qrWindow.close();
       return;
     }
-    
+
     const html = `
 <!DOCTYPE html>
 <html>
@@ -6190,14 +6304,14 @@ function showQRCodeWindow() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     :root {
-      --bg-primary: #060608;
-      --bg-card: rgba(17, 17, 20, 0.9);
-      --accent: #03E1FF;           /* Ocean blue - main accent */
-      --text-primary: #F0F0F5;
+      --bg-primary: #040406;
+      --bg-card: rgba(12, 12, 18, 0.96);
+      --accent: #03E1FF;
+      --text-primary: #F4F4F8;
       --text-secondary: #8888A0;
-      --text-muted: #55556A;
-      --border: rgba(37, 37, 48, 0.8);
-      --glow-accent: 0 2px 10px rgba(3, 225, 255, 0.25);
+      --text-muted: #5C5C72;
+      --border: rgba(255, 255, 255, 0.06);
+      --glow-accent: 0 4px 16px rgba(3, 225, 255, 0.2);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -6312,14 +6426,14 @@ function showQRCodeWindow() {
   </div>
 </body>
 </html>`;
-    
+
     qrWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
   });
-  
+
   qrWindow.on('closed', () => {
     qrWindow = null;
   });
-  
+
   // Hide menu bar
   qrWindow.setMenuBarVisibility(false);
 }
@@ -6374,7 +6488,7 @@ ipcMain.on('save-backup-folders', (event, folders) => {
 
 ipcMain.on('open-folder', (event, folderPath) => {
   if (folderPath && typeof folderPath === 'string') {
-    try { fs.mkdirSync(folderPath, { recursive: true }); } catch (e) {}
+    try { fs.mkdirSync(folderPath, { recursive: true }); } catch (e) { }
     shell.openPath(folderPath).then(err => {
       if (err) console.error('[open-folder] shell.openPath error:', err);
     });
@@ -6467,13 +6581,36 @@ app.whenReady().then(() => {
   nftDesktop.initNFTStorage(appDataPath);
   nftDesktop.initializeSolana();
   // Caches are warmed on-demand by refreshNFTPricesRealtime in the renderer
-  
+
+  // Enable CORS for NFT image URLs from external domains (dappstorecontent.com, etc.)
+  // This prevents ERR_BLOCKED_BY_RESPONSE.NotSameOrigin errors
+  const { session } = require('electron');
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const isImageUrl = details.url.match(/\.(jpg|jpeg|png|gif|webp|bin|svg)(\?.*)?$/i) ||
+                       details.url.includes('dappstorecontent.com') ||
+                       details.url.includes('nft.stealthlynk.io') ||
+                       details.url.includes('akrd.net') ||
+                       details.url.includes('arweave.net');
+    if (isImageUrl) {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Access-Control-Allow-Origin': ['*'],
+          'Access-Control-Allow-Methods': ['GET', 'HEAD', 'OPTIONS'],
+          'Access-Control-Allow-Headers': ['*']
+        }
+      });
+    } else {
+      callback({ responseHeaders: details.responseHeaders });
+    }
+  });
+
   // Pre-warm macOS file dialog: read Pictures dir to cache UTI metadata and reduce NSOpenPanel cold-start
   if (process.platform === 'darwin') {
     setTimeout(() => {
       try {
         const picturesDir = app.getPath('pictures') || app.getPath('home');
-        fs.readdir(picturesDir, { withFileTypes: true }, () => {});
+        fs.readdir(picturesDir, { withFileTypes: true }, () => { });
       } catch (e) { /* ignore */ }
     }, 3000);
   }
@@ -6520,7 +6657,7 @@ ipcMain.on('focus-window', () => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
-    
+
     // Linux-specific: setAlwaysOnTop trick to force focus
     if (process.platform === 'linux') {
       mainWindow.setAlwaysOnTop(true);
@@ -6551,7 +6688,7 @@ ipcMain.handle('select-photo-for-nft', async () => {
 
 ipcMain.handle('open-pictures-folder', async () => {
   const picturesDir = app.getPath('pictures') || app.getPath('home');
-  try { require('fs').mkdirSync(picturesDir, { recursive: true }); } catch (e) {}
+  try { require('fs').mkdirSync(picturesDir, { recursive: true }); } catch (e) { }
   await shell.openPath(picturesDir);
   return picturesDir;
 });
@@ -6560,12 +6697,26 @@ ipcMain.handle('fetch-user-nfts', async (event, walletAddress, limit) => {
   // Pass StealthCloud auth headers so cached images from stealthlynk.io can be downloaded
   let authHeaders = null;
   const credentials = store.get('backupCredentials') || {};
+  const deviceUuid = getStoredDeviceUuid(credentials);
   if (credentials.baseUrl && credentials.token) {
     const authToken = String(credentials.token).startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
     authHeaders = { Authorization: authToken };
-    if (credentials.deviceUuid) authHeaders['X-Device-UUID'] = credentials.deviceUuid;
+    if (deviceUuid) authHeaders['X-Device-UUID'] = deviceUuid;
+    console.log('[NFT IPC] Using auth for DAS proxy:', credentials.baseUrl, 'token present:', !!credentials.token);
+  } else {
+    console.log('[NFT IPC] No server credentials - DAS proxy may fall back to direct Helius');
   }
   return await nftDesktop.fetchUserNFTs(walletAddress, limit, authHeaders);
+});
+
+ipcMain.handle('invalidate-das-cache', async () => {
+  try {
+    nftDesktop.invalidateDasCache();
+    return { success: true };
+  } catch (e) {
+    console.error('[NFT] Failed to invalidate DAS cache:', e.message);
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('fetch-nft-image-from-metadata', async (event, metadataUrl, isCompressed) => {
@@ -6594,13 +6745,14 @@ ipcMain.handle('save-minted-nft', async (event, nftData) => {
     await nftDesktop.saveNFTToStorage(nftData);
     // Sync to server
     const credentials = store.get('backupCredentials') || {};
+    const deviceUuid = getStoredDeviceUuid(credentials);
     if (credentials.baseUrl && credentials.token) {
       const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
       try {
         const axios = require('axios');
         await axios.post(`${credentials.baseUrl}/api/nft/sync`, {
           action: 'add', nft: nftData,
-        }, { headers: { Authorization: authHeader, ...(credentials.deviceUuid ? { 'X-Device-UUID': credentials.deviceUuid } : {}) }, timeout: 10000 });
+        }, { headers: { Authorization: authHeader, ...(deviceUuid ? { 'X-Device-UUID': deviceUuid } : {}) }, timeout: 10000 });
         safeConsole('log', '[NFT] Synced to server:', nftData.mintAddress);
       } catch (syncErr) {
         safeConsole('log', '[NFT] Server sync failed:', syncErr.message);
@@ -6620,10 +6772,10 @@ ipcMain.handle('generate-certificate', async (event, data) => {
     const cert = nftDesktop.generateCertificate(data);
     if (!cert) return { success: false, error: 'Certificate generation returned null' };
     safeConsole('log', '[NFT] Certificate generated: rfc3161Token?', !!cert.rfc3161Token, 'hasRfc3161:', cert.hasRfc3161, 'hasC2pa:', cert.hasC2pa);
-    
+
     // Save to tray's own local file
     await nftDesktop.saveCertificateLocal(cert);
-    
+
     // Also save directly to server-side cert file (tray IS the server)
     try {
       const nftBaseDir = path.join(app.getPath('userData'), 'cloud', 'nft');
@@ -6633,7 +6785,7 @@ ipcMain.handle('generate-certificate', async (event, data) => {
           const certFile = path.join(nftBaseDir, dir, 'certificates.json');
           let certs = [];
           if (fs.existsSync(certFile)) {
-            try { certs = JSON.parse(fs.readFileSync(certFile, 'utf8')); } catch (_) {}
+            try { certs = JSON.parse(fs.readFileSync(certFile, 'utf8')); } catch (_) { }
           }
           if (!certs.find(c => c.id === cert.id)) {
             certs.push(cert);
@@ -6645,9 +6797,10 @@ ipcMain.handle('generate-certificate', async (event, data) => {
     } catch (serverFileErr) {
       safeConsole('log', '[NFT] Server-side cert file save failed:', serverFileErr.message);
     }
-    
+
     // Sync to StealthCloud
     const credentials = store.get('backupCredentials') || {};
+    const deviceUuid = getStoredDeviceUuid(credentials);
     if (credentials.baseUrl && credentials.token) {
       const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
       try {
@@ -6658,7 +6811,7 @@ ipcMain.handle('generate-certificate', async (event, data) => {
         if (syncCert.c2paManifest) { syncCert.hasC2pa = true; delete syncCert.c2paManifest; }
         await axios.post(`${credentials.baseUrl}/api/nft/certificates`, {
           action: 'add', certificate: syncCert,
-        }, { headers: { Authorization: authHeader, ...(credentials.deviceUuid ? { 'X-Device-UUID': credentials.deviceUuid } : {}) }, timeout: 10000 });
+        }, { headers: { Authorization: authHeader, ...(deviceUuid ? { 'X-Device-UUID': deviceUuid } : {}) }, timeout: 10000 });
         safeConsole('log', '[NFT] Certificate synced to StealthCloud:', cert.id);
       } catch (syncErr) {
         safeConsole('log', '[NFT] Certificate StealthCloud sync failed:', syncErr.message);
@@ -6672,11 +6825,13 @@ ipcMain.handle('generate-certificate', async (event, data) => {
 });
 
 ipcMain.handle('mint-nft', async (event, data) => {
-  safeConsole('log', '[NFT] Mint request:', data);
-  
+  safeConsole('log', '[NFT] Mint request received:', JSON.stringify(data, null, 2));
+  safeConsole('log', '[NFT] filePath from request:', data?.filePath, 'type:', typeof data?.filePath);
+
   // Get credentials for StealthCloud upload
   let credentials = store.get('backupCredentials') || {};
-  
+  const deviceUuid = getStoredDeviceUuid(credentials);
+
   // Re-authenticate to get fresh token for StealthCloud upload
   if (credentials.baseUrl && credentials.email && credentials.password) {
     try {
@@ -6684,10 +6839,10 @@ ipcMain.handle('mint-nft', async (event, data) => {
       const loginResp = await axios.post(`${credentials.baseUrl}/api/login`, {
         email: credentials.email,
         password: credentials.password,
-        device_uuid: credentials.deviceUuid || '',
+        device_uuid: deviceUuid,
       }, { timeout: 10000 });
       if (loginResp.data && loginResp.data.token) {
-        credentials = { ...credentials, token: loginResp.data.token };
+        credentials = { ...credentials, token: loginResp.data.token, ...(deviceUuid ? { deviceUuid } : {}) };
         store.set('backupCredentials', credentials);
         safeConsole('log', '[NFT] Token refreshed for StealthCloud upload');
       }
@@ -6695,35 +6850,33 @@ ipcMain.handle('mint-nft', async (event, data) => {
       safeConsole('log', '[NFT] Token refresh failed:', loginErr.message);
     }
   }
-  
+
   const mintParams = {
     ...data,
     credentials: credentials.baseUrl ? {
       baseUrl: credentials.baseUrl,
       token: credentials.token,
-      deviceUuid: credentials.deviceUuid,
+      deviceUuid,
     } : null,
   };
-  
+
   // Derive master key from credentials if encryption is requested
-  // Use legacy MK creds for migrated wallet users (encryption key = original email+password)
-  if (data.encrypt && credentials.email && credentials.password) {
-    const mkEmail = (credentials.mk_email || credentials.email).toLowerCase().trim();
-    const mkPassword = credentials.mk_password || credentials.password;
-    mintParams.masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword, mkEmail, 30000, 32, 'sha256'));
+  if (data.encrypt) {
+    const masterKey = deriveStoredMasterKey(credentials);
+    if (masterKey) mintParams.masterKey = masterKey;
   }
-  
+
   // Use nftDesktop.mintNFT which handles upload and opens wallet for payment
   const result = await nftDesktop.mintNFT(mintParams, (progress) => {
     // Send progress to renderer
     event.sender.send('mint-progress', progress);
   });
-  
+
   // Invalidate DAS cache so next refresh does full re-scan to pick up new NFT
   if (result && result.success) {
     nftDesktop.invalidateDasCache();
   }
-  
+
   return result;
 });
 
@@ -6732,7 +6885,7 @@ ipcMain.on('bring-to-front', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
-    
+
     // Linux-specific: setAlwaysOnTop trick to force focus
     if (process.platform === 'linux') {
       mainWindow.setAlwaysOnTop(true);
@@ -6764,9 +6917,10 @@ ipcMain.handle('bulk-save-nfts', async (event, nfts) => {
 ipcMain.handle('remove-stored-nft', async (event, mintAddress) => {
   try {
     const credentials = store.get('backupCredentials') || {};
+    const deviceUuid = getStoredDeviceUuid(credentials);
     const serverUrl = credentials.baseUrl || null;
     const authHeader = credentials.token ? (String(credentials.token).startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`) : null;
-    const authHeaders = authHeader ? { Authorization: authHeader, ...(credentials.deviceUuid ? { 'X-Device-UUID': credentials.deviceUuid } : {}) } : null;
+    const authHeaders = authHeader ? { Authorization: authHeader, ...(deviceUuid ? { 'X-Device-UUID': deviceUuid } : {}) } : null;
     await nftDesktop.removeNFTFromStorage(mintAddress, serverUrl, authHeaders);
     return { success: true };
   } catch (e) {
@@ -6788,9 +6942,10 @@ ipcMain.handle('remove-certificate', async (event, mintAddress) => {
 ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddress) => {
   try {
     const credentials = store.get('backupCredentials') || {};
+    const deviceUuid = getStoredDeviceUuid(credentials);
     const serverUrl = credentials.baseUrl || null;
     const authHeader = credentials.token ? (String(credentials.token).startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`) : null;
-    const authHeaders = authHeader ? { Authorization: authHeader, ...(credentials.deviceUuid ? { 'X-Device-UUID': credentials.deviceUuid } : {}) } : null;
+    const authHeaders = authHeader ? { Authorization: authHeader, ...(deviceUuid ? { 'X-Device-UUID': deviceUuid } : {}) } : null;
     if (!serverUrl || !authHeaders || !newOwnerAddress) {
       await nftDesktop.removeCertificateLocal(mintAddress);
       return { success: true, transferred: false, reason: 'no server/auth/recipient' };
@@ -6799,7 +6954,7 @@ ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddres
     const certsPath = nftDesktop.getCertsFilePath();
     let certs = [];
     if (fs.existsSync(certsPath)) {
-      try { certs = JSON.parse(fs.readFileSync(certsPath, 'utf8')); } catch (_) {}
+      try { certs = JSON.parse(fs.readFileSync(certsPath, 'utf8')); } catch (_) { }
     }
     const normMint = (m) => m ? String(m).replace(/^cnft_/, '') : '';
     const target = normMint(mintAddress);
@@ -6811,10 +6966,8 @@ ipcMain.handle('transfer-certificate', async (event, mintAddress, newOwnerAddres
       const nft = await nftDesktop.getNFTByMintAddress(mintAddress) || await nftDesktop.getNFTByMintAddress(`cnft_${target}`);
       encData = nft?.encryptionData;
       if (encData?.wrappedKey && encData?.wrapNonce) {
-        const mkEmail = (credentials.mk_email || credentials.email || '').toLowerCase().trim();
-        const mkPassword = credentials.mk_password || credentials.password || '';
-        if (mkEmail && mkPassword) {
-          const masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword, mkEmail, 30000, 32, 'sha256'));
+        const masterKey = deriveStoredMasterKey(credentials);
+        if (masterKey) {
           const nacl = require('tweetnacl');
           const naclUtil = require('tweetnacl-util');
           const wk = naclUtil.decodeBase64(encData.wrappedKey);
@@ -6864,7 +7017,7 @@ ipcMain.handle('update-certificate-mint', async (event, oldMintAddress, newMintA
     const certsPath = nftDesktop.getCertsFilePath();
     if (!fs.existsSync(certsPath)) return { success: false, error: 'No certs file' };
     let certs = [];
-    try { certs = JSON.parse(fs.readFileSync(certsPath, 'utf8')); } catch (_) {}
+    try { certs = JSON.parse(fs.readFileSync(certsPath, 'utf8')); } catch (_) { }
     let updated = false;
     for (const cert of certs) {
       if (cert.mintAddress === oldMintAddress) {
@@ -6895,19 +7048,19 @@ ipcMain.handle('store-set', async (event, key, value) => {
 ipcMain.handle('purge-nft-storage', async () => {
   try {
     // Clear image cache mappings + files
-    try { nftDesktop.clearCache(); } catch (_) {}
+    try { nftDesktop.clearCache(); } catch (_) { }
     // Overwrite persisted NFT list with []
     try {
       const appDataPath = app.getPath('userData');
       const nftFile = path.join(appDataPath, 'photolynk_nfts.json');
       fs.writeFileSync(nftFile, JSON.stringify([], null, 2));
-    } catch (_) {}
+    } catch (_) { }
     // Overwrite persisted certificates list with []
     try {
       const appDataPath = app.getPath('userData');
       const certFile = path.join(appDataPath, 'nft_certificates.json');
       fs.writeFileSync(certFile, JSON.stringify([], null, 2));
-    } catch (_) {}
+    } catch (_) { }
     return { success: true };
   } catch (e) {
     safeConsole('log', '[NFT] Purge storage failed:', e.message);
@@ -6949,13 +7102,9 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     }
     // Derive master key from credentials (same PBKDF2 as mobile + backup-client)
     const credentials = store.get('backupCredentials') || {};
-    let masterKey = null;
-    if (credentials.email && credentials.password) {
-      // Use legacy MK creds for migrated wallet users (encryption key = original email+password)
-      const mkEmail2 = (credentials.mk_email || credentials.email).toLowerCase().trim();
-      const mkPassword2 = credentials.mk_password || credentials.password;
-      masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword2, mkEmail2, 30000, 32, 'sha256'));
-    } else if (!encryptionData.transferNftKey) {
+    const deviceUuid = getStoredDeviceUuid(credentials);
+    const masterKey = deriveStoredMasterKey(credentials);
+    if (!masterKey && !encryptionData.transferNftKey) {
       return { success: false, error: 'Login credentials not available — log in first' };
     }
 
@@ -6963,14 +7112,14 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     const useThumb = !!(thumbnailUrl && encryptionData.thumbnailNonce);
     const downloadUrl = useThumb ? thumbnailUrl : imageUrl;
     const decryptNonce = useThumb ? encryptionData.thumbnailNonce : encryptionData.nonce;
-    
+
     if (!downloadUrl || downloadUrl.startsWith('data:')) {
       // data: URIs can't be downloaded — need thumbnailUrl for on-chain encrypted
       if (!useThumb) {
         return { success: false, error: 'On-chain encrypted — no thumbnail available for decryption' };
       }
     }
-    
+
     safeConsole('log', '[NFT] Decrypt:', useThumb ? 'encrypted thumbnail' : 'full image', downloadUrl?.slice(0, 80));
 
     // Download encrypted .bin from URL (with auth for StealthCloud URLs, IPFS gateway fallback)
@@ -6990,7 +7139,7 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
             const loginResp = await axios.post(`${credentials.baseUrl}/api/login`, {
               email: credentials.email,
               password: credentials.password,
-              device_uuid: credentials.deviceUuid || '',
+              device_uuid: deviceUuid,
             }, { timeout: 10000 });
             if (loginResp.data && loginResp.data.token) {
               global._scDecryptToken = loginResp.data.token;
@@ -7013,6 +7162,16 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     const _cid = _extractCid(downloadUrl);
     const _fallbackGateways = ['https://w3s.link/ipfs/', 'https://nftstorage.link/ipfs/', 'https://ipfs.io/ipfs/', 'https://dweb.link/ipfs/'];
     const urlsToTry = [downloadUrl];
+    
+    // Encrypted NFT legacy fix: metadata may have .jpg URL but file is stored as .bin
+    if (isCloud && downloadUrl && (downloadUrl.endsWith('.jpg') || downloadUrl.endsWith('.jpeg'))) {
+      const binUrl = downloadUrl.replace(/\.jpe?g$/i, '.bin');
+      if (binUrl !== downloadUrl) {
+        safeConsole('log', '[NFT] Encrypted NFT: also trying .bin URL:', binUrl.slice(0, 80));
+        urlsToTry.push(binUrl);
+      }
+    }
+    
     if (_cid && !isCloud) {
       for (const gw of _fallbackGateways) {
         const gwUrl = gw + _cid;
@@ -7054,7 +7213,7 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     );
 
     // Clean up temp encrypted file
-    try { fs.unlinkSync(tempPath); } catch (_) {}
+    try { fs.unlinkSync(tempPath); } catch (_) { }
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -7063,7 +7222,7 @@ ipcMain.handle('decrypt-nft-image', async (event, { imageUrl, thumbnailUrl, encr
     // Return decrypted image as base64 data URL
     const decryptedData = fs.readFileSync(result.decryptedPath);
     const base64 = decryptedData.toString('base64');
-    try { fs.unlinkSync(result.decryptedPath); } catch (_) {}
+    try { fs.unlinkSync(result.decryptedPath); } catch (_) { }
 
     return { success: true, dataUrl: 'data:image/jpeg;base64,' + base64 };
   } catch (e) {
@@ -7114,6 +7273,7 @@ async function pushLocalNFTsToServer(serverUrl, headers, walletAddress = null) {
 
 ipcMain.handle('sync-nfts-from-server', async () => {
   const credentials = store.get('backupCredentials') || {};
+  const deviceUuid = getStoredDeviceUuid(credentials);
   if (!credentials.baseUrl || !credentials.email || !credentials.password) {
     return { success: false, error: 'Not authenticated' };
   }
@@ -7123,13 +7283,13 @@ ipcMain.handle('sync-nfts-from-server', async () => {
     const loginResp = await axios.post(`${credentials.baseUrl}/api/login`, {
       email: credentials.email,
       password: credentials.password,
-      device_uuid: credentials.deviceUuid || '',
+      device_uuid: deviceUuid,
     }, { timeout: 10000 });
     if (loginResp.data && loginResp.data.token) {
       store.set('backupCredentials', { ...credentials, token: loginResp.data.token });
       const authHeader = `Bearer ${loginResp.data.token}`;
       const headers = { Authorization: authHeader };
-      if (credentials.deviceUuid) headers['X-Device-UUID'] = credentials.deviceUuid;
+      if (deviceUuid) headers['X-Device-UUID'] = deviceUuid;
       const walletAddress = connectedWalletAddress || null;
       const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, headers, walletAddress);
       // Remove locally-cached NFTs that were transferred out (matches mobile apps)
@@ -7150,7 +7310,7 @@ ipcMain.handle('sync-nfts-from-server', async () => {
   // Fallback: try with existing token
   const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
   const fallbackHeaders = { Authorization: authHeader };
-  if (credentials.deviceUuid) fallbackHeaders['X-Device-UUID'] = credentials.deviceUuid;
+  if (deviceUuid) fallbackHeaders['X-Device-UUID'] = deviceUuid;
   const walletAddress = connectedWalletAddress || null;
   const result = await nftDesktop.syncNFTsFromServer(credentials.baseUrl, fallbackHeaders, walletAddress);
   // Remove locally-cached NFTs that were transferred out (matches mobile apps)
@@ -7173,7 +7333,7 @@ ipcMain.handle('clipboard-write', (event, text) => {
 // Fetch rfc3161Token from NFT metadata URI (IPFS/Arweave) when token was stripped
 ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData) => {
   if (!metadataUrl) return { token: null };
-  
+
   // Helper: download raw bytes from URL with timeout
   const downloadBuffer = (url) => new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? require('https') : require('http');
@@ -7208,7 +7368,7 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
     safeConsole('log', '[Certs] fetch-rfc3161-token: unsupported URL scheme:', metadataUrl.slice(0, 60));
     return { token: null };
   }
-  
+
   try {
     // Try each gateway until one succeeds
     let buf = null;
@@ -7225,21 +7385,17 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
       }
     }
     if (!buf || buf.length === 0) return { token: null };
-    
+
     // Try JSON parse first (unencrypted metadata)
     let json = null;
-    try { json = JSON.parse(buf.toString('utf8')); } catch (_) {}
-    
+    try { json = JSON.parse(buf.toString('utf8')); } catch (_) { }
+
     // If JSON parse fails and we have encryption data, try decrypting
     if (!json && encryptionData?.metadataNonce) {
       try {
         const credentials = store.get('backupCredentials') || {};
-        // Derive masterKey from email/password via PBKDF2 (same as mint + decrypt paths)
-        if (credentials.email && credentials.password) {
-          // Use legacy MK creds for migrated wallet users
-          const mkEmail3 = (credentials.mk_email || credentials.email).toLowerCase().trim();
-          const mkPassword3 = credentials.mk_password || credentials.password;
-          const masterKey = new Uint8Array(crypto.pbkdf2Sync(mkPassword3, mkEmail3, 30000, 32, 'sha256'));
+        const masterKey = deriveStoredMasterKey(credentials);
+        if (masterKey) {
           json = nftDesktop.decryptMetadataJSON(buf, encryptionData, masterKey);
           if (json) safeConsole('log', '[Certs] Decrypted encrypted metadata for RFC3161 recovery');
         } else {
@@ -7249,7 +7405,7 @@ ipcMain.handle('fetch-rfc3161-token', async (event, metadataUrl, encryptionData)
         safeConsole('log', '[Certs] Metadata decryption failed:', decErr.message);
       }
     }
-    
+
     if (!json) return { token: null };
     const token = json?.properties?.certificate?.rfc3161?.tsaTokenBase64 || null;
     const c2pa = json?.properties?.c2pa || null;
@@ -7306,7 +7462,7 @@ async function filterDisplayablePhotoLynkCertsForIPC(certs) {
       const mint = String(nft?.mintAddress || nft?.assetId || '').replace(/^cnft_/, '');
       if (mint) nftByMint[mint] = nft;
     }
-  } catch (_) {}
+  } catch (_) { }
   return certs.filter(cert => {
     if (!cert?.id) return false;
     const mint = String(cert.mintAddress || '').replace(/^cnft_/, '');
@@ -7339,7 +7495,7 @@ ipcMain.handle('save-enriched-certs', async (event, certs) => {
     let existing = [];
     try {
       if (fs.existsSync(filePath)) existing = JSON.parse(fs.readFileSync(filePath, 'utf8')) || [];
-    } catch (_) {}
+    } catch (_) { }
     // Build lookup from incoming enriched certs
     const enrichedById = {};
     const enrichedByMint = {};
@@ -7348,8 +7504,8 @@ ipcMain.handle('save-enriched-certs', async (event, certs) => {
       if (c.mintAddress) enrichedByMint[c.mintAddress] = c;
     }
     // Merge enrichment fields into existing certs (preserves certs not in the incoming set)
-    const ENRICH_KEYS = ['rfc3161Token','c2paManifest','hasRfc3161','hasC2pa','contentHash','exifHash',
-      'exifRawHash','exifBindingHash','cameraHash','storageType','encrypted','watermarked','license'];
+    const ENRICH_KEYS = ['rfc3161Token', 'c2paManifest', 'hasRfc3161', 'hasC2pa', 'contentHash', 'exifHash',
+      'exifRawHash', 'exifBindingHash', 'cameraHash', 'storageType', 'encrypted', 'watermarked', 'license'];
     for (const ec of existing) {
       const src = (ec.id ? enrichedById[ec.id] : null) || (ec.mintAddress ? enrichedByMint[ec.mintAddress] : null);
       if (!src) continue;
@@ -7380,8 +7536,8 @@ ipcMain.handle('get-certificates', async () => {
     const allCerts = [];
     const seenIds = new Set();
     const certById = {};
-    const ENRICH_FIELDS = ['rfc3161Token','c2paManifest','hasRfc3161','hasC2pa','contentHash','exifHash',
-      'exifRawHash','exifBindingHash','cameraHash','storageType','encrypted','watermarked','license','metadataUrl'];
+    const ENRICH_FIELDS = ['rfc3161Token', 'c2paManifest', 'hasRfc3161', 'hasC2pa', 'contentHash', 'exifHash',
+      'exifRawHash', 'exifBindingHash', 'cameraHash', 'storageType', 'encrypted', 'watermarked', 'license', 'metadataUrl'];
     // Helper: add cert or cross-enrich if duplicate
     const addOrEnrich = (c) => {
       if (!c.id) return;
@@ -7404,7 +7560,7 @@ ipcMain.handle('get-certificates', async () => {
         const certs = JSON.parse(fs.readFileSync(localPath, 'utf8'));
         for (const c of certs) addOrEnrich(c);
       }
-    } catch (_) {}
+    } catch (_) { }
     // 2. Server-side cert files (cloud/nft/<userKey>/certificates.json) — tray has direct access
     //    These disk files preserve rfc3161Token + c2paManifest (DISK_SAFE_KEYS on server)
     try {
@@ -7417,11 +7573,11 @@ ipcMain.handle('get-certificates', async () => {
             try {
               const certs = JSON.parse(fs.readFileSync(certFile, 'utf8'));
               for (const c of certs) addOrEnrich(c);
-            } catch (_) {}
+            } catch (_) { }
           }
         }
       }
-    } catch (_) {}
+    } catch (_) { }
     safeConsole('log', '[Certs IPC] readLocalCerts found', allCerts.length, 'total certs');
     return allCerts;
   }
@@ -7517,7 +7673,7 @@ ipcMain.handle('backup-certificates', async () => {
         const c = JSON.parse(fs.readFileSync(localPath, 'utf8'));
         for (const cert of c) { if (cert.id && !seenIds.has(cert.id)) { allCerts.push(cert); seenIds.add(cert.id); } }
       }
-    } catch (_) {}
+    } catch (_) { }
     // 2. Server-side cert files
     try {
       const nftBaseDir = path.join(app.getPath('userData'), 'cloud', 'nft');
@@ -7528,11 +7684,11 @@ ipcMain.handle('backup-certificates', async () => {
             try {
               const c = JSON.parse(fs.readFileSync(certFile, 'utf8'));
               for (const cert of c) { if (cert.id && !seenIds.has(cert.id)) { allCerts.push(cert); seenIds.add(cert.id); } }
-            } catch (_) {}
+            } catch (_) { }
           }
         }
       }
-    } catch (_) {}
+    } catch (_) { }
     const displayableCerts = await filterDisplayablePhotoLynkCertsForIPC(allCerts);
     if (displayableCerts.length === 0) return { success: true, count: 0 };
     const credentials = store.get('backupCredentials') || {};
@@ -7540,11 +7696,11 @@ ipcMain.handle('backup-certificates', async () => {
     const authHeader = String(credentials.token || '').startsWith('Bearer ') ? String(credentials.token) : `Bearer ${String(credentials.token)}`;
     const axios = require('axios');
     // Whitelist only slim fields to avoid 413 and prevent server-side bloat
-    const SLIM_KEYS = ['id','name','mintAddress','txSignature','creatorWallet','ownerAddress',
-      'issuedAt','createdAt','edition','license','contentHash','exifHash','cameraHash',
-      'exifRawHash','exifBindingHash','rfc3161Policy','mintedAt',
-      'hasRfc3161','hasC2pa','encrypted','watermarked','storageType','nftType','isCompressed',
-      'rfc3161Tsa','metadataUrl','description','version','type','imageUrl','certificationMode'];
+    const SLIM_KEYS = ['id', 'name', 'mintAddress', 'txSignature', 'creatorWallet', 'ownerAddress',
+      'issuedAt', 'createdAt', 'edition', 'license', 'contentHash', 'exifHash', 'cameraHash',
+      'exifRawHash', 'exifBindingHash', 'rfc3161Policy', 'mintedAt',
+      'hasRfc3161', 'hasC2pa', 'encrypted', 'watermarked', 'storageType', 'nftType', 'isCompressed',
+      'rfc3161Tsa', 'metadataUrl', 'description', 'version', 'type', 'imageUrl', 'certificationMode'];
     const lightCerts = displayableCerts.map(c => {
       const lc = {};
       for (const k of SLIM_KEYS) { if (c[k] !== undefined) lc[k] = c[k]; }
@@ -7597,7 +7753,7 @@ ipcMain.handle('confirm-transaction', async (event, signature) => {
     const { Connection } = require('@solana/web3.js');
     const rpcUrl = process.env.HELIUS_API_KEY ? `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}` : 'https://api.mainnet-beta.solana.com';
     const connection = new Connection(rpcUrl, 'confirmed');
-    
+
     const result = await connection.confirmTransaction(signature, 'confirmed');
     return { success: !result.value.err, error: result.value.err };
   } catch (e) {
@@ -7656,10 +7812,10 @@ function showBackupWindow() {
     backupWindow.focus();
     return;
   }
-  
+
   const credentials = store.get('backupCredentials') || {};
   const photoFolders = getPhotoFolders();
-  
+
   backupWindow = new BrowserWindow({
     width: 400,
     height: 580,
@@ -7675,7 +7831,7 @@ function showBackupWindow() {
       webSecurity: false
     }
   });
-  
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -7684,18 +7840,18 @@ function showBackupWindow() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     :root {
-      --bg-primary: #060608;
-      --bg-card: rgba(17, 17, 20, 0.9);
-      --bg-input: rgba(6, 6, 8, 0.9);
-      --accent: #03E1FF;           /* Ocean blue - main accent */
+      --bg-primary: #040406;
+      --bg-card: rgba(12, 12, 18, 0.96);
+      --bg-input: rgba(255, 255, 255, 0.04);
+      --accent: #03E1FF;
       --accent-hover: #02C4E0;
-      --text-primary: #F0F0F5;
+      --text-primary: #F4F4F8;
       --text-secondary: #8888A0;
-      --text-muted: #55556A;
-      --border: rgba(37, 37, 48, 0.8);
-      --success: #4ADE80;          /* Green for success */
-      --error: #F87171;            /* Red for errors */
-      --glow-accent: 0 2px 10px rgba(3, 225, 255, 0.25);
+      --text-muted: #5C5C72;
+      --border: rgba(255, 255, 255, 0.06);
+      --success: #00FFA3;
+      --error: #FF4466;
+      --glow-accent: 0 4px 16px rgba(3, 225, 255, 0.2);
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -8171,13 +8327,13 @@ function showBackupWindow() {
   </script>
 </body>
 </html>`;
-  
+
   backupWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-  
+
   backupWindow.on('closed', () => {
     backupWindow = null;
   });
-  
+
   backupWindow.setMenuBarVisibility(false);
 }
 
@@ -8189,30 +8345,32 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
   try {
     // Save credentials for next time (preserve pairing fields: device_uuid, mk_email, mk_password)
     const prevCreds = store.get('backupCredentials') || {};
+    const prevMkEmail = prevCreds.mk_email || prevCreds.email;
+    const prevMkPassword = prevCreds.mk_password || prevCreds.password;
     store.set('backupCredentials', {
       email: config.email,
       password: config.password,
       remoteAddress: config.remoteAddress,
       remotePort: config.remotePort,
       ...(prevCreds.device_uuid ? { device_uuid: prevCreds.device_uuid } : {}),
-      ...(prevCreds.mk_email ? { mk_email: prevCreds.mk_email } : {}),
-      ...(prevCreds.mk_password ? { mk_password: prevCreds.mk_password } : {}),
+      ...(prevMkEmail ? { mk_email: prevMkEmail } : {}),
+      ...(prevMkPassword ? { mk_password: prevMkPassword } : {}),
     });
     // Inject pairing fields into config so backup-client gets correct UUID + MK creds
     if (prevCreds.device_uuid && !config.device_uuid) config.device_uuid = prevCreds.device_uuid;
-    if (prevCreds.mk_email && !config.mk_email) config.mk_email = prevCreds.mk_email;
-    if (prevCreds.mk_password && !config.mk_password) config.mk_password = prevCreds.mk_password;
-    
+    if (prevMkEmail && !config.mk_email) config.mk_email = prevMkEmail;
+    if (prevMkPassword && !config.mk_password) config.mk_password = prevMkPassword;
+
     // For StealthCloud, check subscription first
     if (config.destination === 'stealthcloud') {
       const { DesktopBackupClient } = require('./backup-client');
       const checkClient = new DesktopBackupClient(config, (progress) => {
         event.reply('backup-progress', progress);
       });
-      
+
       // Login first to get token
       await checkClient.login();
-      
+
       // Store token and baseUrl for NFT StealthCloud uploads
       const stealthCloudBaseUrl = 'https://stealthlynk.io';
       store.set('backupCredentials', {
@@ -8221,10 +8379,10 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
         token: checkClient.token,
         deviceUuid: checkClient.deviceUuid,
       });
-      
+
       // Check subscription status
       const subStatus = await checkClient.checkSubscription();
-      
+
       if (!subStatus.allowed) {
         // Show branded notification about subscription
         try {
@@ -8236,33 +8394,33 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
         } catch (e) {
           // Notification may fail on some systems
         }
-        
-        event.reply('backup-error', { 
+
+        event.reply('backup-error', {
           message: subStatus.reason || 'Subscription required. Open PhotoLynk on your mobile device to subscribe.',
           code: 'SUBSCRIPTION_REQUIRED'
         });
         exifBackfillIdle();
         return;
       }
-      
+
       // Store subscription info for space check later
       config._subscriptionStatus = subStatus;
-      
+
       // Show subscription info
       const planLabel = subStatus.planGb === 1000 ? '1 TB' : (subStatus.planGb + ' GB');
-      event.reply('backup-progress', { 
-        message: `Subscription active (${planLabel} plan)`, 
-        progress: 0.04 
+      event.reply('backup-progress', {
+        message: `Subscription active (${planLabel} plan)`,
+        progress: 0.04
       });
     }
-    
+
     event.reply('backup-progress', { message: 'Scanning for photos and videos...', progress: 0.05 });
-    
+
     // Scan folders for media files
     const mediaFiles = [];
     const extensions = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.avif', '.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.rw2', '.orf', '.pef', '.srw', '.raw', '.psd', '.psb', '.exr', '.hdr',
-                        '.mp4', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.webm'];
-    
+      '.mp4', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.webm'];
+
     for (const folder of config.folders) {
       try {
         scanFolder(folder, mediaFiles, extensions);
@@ -8270,21 +8428,21 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
         safeConsole('error', 'Error scanning folder:', folder, e);
       }
     }
-    
-    event.reply('backup-progress', { 
-      message: 'Found ' + mediaFiles.length + ' files to backup...', 
-      progress: 0.1 
+
+    event.reply('backup-progress', {
+      message: 'Found ' + mediaFiles.length + ' files to backup...',
+      progress: 0.1
     });
-    
+
     if (mediaFiles.length === 0) {
       event.reply('backup-complete', { message: 'No media files found in selected folders.' });
       exifBackfillIdle();
       return;
     }
-    
+
     // Start actual backup with encryption and chunking
     const { DesktopBackupClient } = require('./backup-client');
-    
+
     activeBackupClient = new DesktopBackupClient(config, (progress) => {
       event.reply('backup-progress', progress);
     });
@@ -8296,20 +8454,20 @@ ipcMain.on('start-desktop-backup', async (event, config) => {
         progress: 0.11
       });
     }
-    
+
     const result = await activeBackupClient.backup(mediaFiles);
     activeBackupClient = null;
 
     stopBackupPowerSaveBlocker();
-    
+
     // Combine skipped + failed into single "Skipped" count for cleaner UI
     const totalSkipped = (result.skipped || 0) + (result.failed || 0);
     exifBackfillIdle();
-    event.reply('backup-complete', { 
+    event.reply('backup-complete', {
       message: `Backup Complete\nUploaded: ${result.uploaded}\nSkipped: ${totalSkipped}`
     });
     maybeStartExifBackfill();
-    
+
   } catch (error) {
     exifBackfillIdle();
     safeConsole('error', 'Backup error:', error);
@@ -8367,55 +8525,57 @@ ipcMain.on('start-desktop-sync', async (event, config) => {
   exifBackfillBusy();
   try {
     safeConsole('log', `[SYNC] Config received:`, JSON.stringify({ source: config.source, email: config.email, downloadPath: config.downloadPath, hasPassword: !!config.password }));
-    
+
     // Save credentials (preserve pairing fields: device_uuid, mk_email, mk_password)
     const prevSyncCreds = store.get('backupCredentials') || {};
+    const prevSyncMkEmail = prevSyncCreds.mk_email || prevSyncCreds.email;
+    const prevSyncMkPassword = prevSyncCreds.mk_password || prevSyncCreds.password;
     store.set('backupCredentials', {
       email: config.email,
       password: config.password,
       remoteAddress: config.remoteAddress,
       remotePort: config.remotePort,
       ...(prevSyncCreds.device_uuid ? { device_uuid: prevSyncCreds.device_uuid } : {}),
-      ...(prevSyncCreds.mk_email ? { mk_email: prevSyncCreds.mk_email } : {}),
-      ...(prevSyncCreds.mk_password ? { mk_password: prevSyncCreds.mk_password } : {}),
+      ...(prevSyncMkEmail ? { mk_email: prevSyncMkEmail } : {}),
+      ...(prevSyncMkPassword ? { mk_password: prevSyncMkPassword } : {}),
     });
     // Inject pairing fields into config so sync-client gets correct UUID + MK creds
     if (prevSyncCreds.device_uuid && !config.device_uuid) config.device_uuid = prevSyncCreds.device_uuid;
-    if (prevSyncCreds.mk_email && !config.mk_email) config.mk_email = prevSyncCreds.mk_email;
-    if (prevSyncCreds.mk_password && !config.mk_password) config.mk_password = prevSyncCreds.mk_password;
-    
+    if (prevSyncMkEmail && !config.mk_email) config.mk_email = prevSyncMkEmail;
+    if (prevSyncMkPassword && !config.mk_password) config.mk_password = prevSyncMkPassword;
+
     // Use device_uuid from pairing if available (critical for wallet-migrated users),
     // otherwise compute from email:password
     const userUuid = config.device_uuid || computeUserUuidSync(config.email, config.password);
     let downloadPath = config.downloadPath;
-    
+
     // If downloadPath doesn't already contain the UUID, append it
     if (userUuid && !downloadPath.includes(userUuid)) {
       downloadPath = path.join(uploadsPath, userUuid);
       safeConsole('log', `[SYNC] Computed user UUID: ${userUuid}`);
     }
-    
+
     safeConsole('log', `[SYNC] Saving to: ${downloadPath}`);
     store.set('syncDownloadPath', downloadPath);
-    
+
     // Update config with correct path
     config.downloadPath = downloadPath;
-    
+
     event.reply('sync-progress', { message: 'Connecting...', progress: 0.02 });
-    
+
     if (!fs.existsSync(downloadPath)) {
       fs.mkdirSync(downloadPath, { recursive: true });
     }
-    
+
     const { DesktopSyncClient } = require('./sync-client');
     activeSyncClient = new DesktopSyncClient(config, (progress) => {
       event.reply('sync-progress', progress);
     });
-    
+
     startBackupPowerSaveBlocker();
-    
+
     const result = await activeSyncClient.sync();
-    
+
     // Store credentials after sync for NFT StealthCloud uploads
     if (activeSyncClient.token) {
       const stealthCloudBaseUrl = 'https://stealthlynk.io';
@@ -8427,15 +8587,15 @@ ipcMain.on('start-desktop-sync', async (event, config) => {
       });
     }
     activeSyncClient = null;
-    
+
     stopBackupPowerSaveBlocker();
-    
+
     exifBackfillIdle();
     event.reply('sync-complete', {
       message: `Sync Complete\nDownloaded: ${result.downloaded}\nSkipped: ${result.skipped}`
     });
     maybeStartExifBackfill();
-    
+
   } catch (error) {
     exifBackfillIdle();
     safeConsole('error', 'Sync error:', error);
@@ -8455,12 +8615,12 @@ ipcMain.on('cancel-desktop-sync', () => {
 
 function scanFolder(folderPath, results, extensions, depth = 0) {
   if (depth > 5) return; // Limit recursion depth
-  
+
   try {
     const items = fs.readdirSync(folderPath);
     for (const item of items) {
       if (item.startsWith('.')) continue; // Skip hidden files
-      
+
       const fullPath = path.join(folderPath, item);
       try {
         const stat = fs.statSync(fullPath);
@@ -8489,23 +8649,23 @@ function scanFolder(folderPath, results, extensions, depth = 0) {
 function checkServerRunning(callback) {
   const net = require('net');
   const client = new net.Socket();
-  
+
   client.setTimeout(1000);
-  
+
   client.on('connect', () => {
     client.destroy();
     callback(true);
   });
-  
+
   client.on('error', () => {
     callback(false);
   });
-  
+
   client.on('timeout', () => {
     client.destroy();
     callback(false);
   });
-  
+
   client.connect(3000, '127.0.0.1');
 }
 
@@ -8518,10 +8678,10 @@ function updateTrayMenu() {
 
 app.whenReady().then(() => {
   initPaths();
-  
+
   // Start pairing server to receive credentials from mobile
   startPairingServer();
-  
+
   // Check if this is the first run and whether we've shown the welcome dialog
   const hasRunBefore = !!store.get('hasRunBefore');
   const welcomeShown = !!store.get('welcomeShown');
@@ -8530,7 +8690,7 @@ app.whenReady().then(() => {
   if (isFirstRun) {
     store.set('hasRunBefore', true);
   }
-  
+
   // Create tray icon
   let trayIcon;
   const isMac = process.platform === 'darwin';
@@ -8538,27 +8698,27 @@ app.whenReady().then(() => {
   const isLinux = process.platform === 'linux';
   const macVersion = isMac ? parseInt(require('os').release().split('.')[0], 10) : 0;
   const supportsDarkMode = isMac && macVersion >= 18; // macOS 10.14 Mojave = Darwin 18
-  
+
   try {
     if (supportsDarkMode) {
       // Template icon - macOS will auto-invert for dark/light mode
       const templatePath = path.join(__dirname, 'iconTemplate.png');
       safeConsole('log', '[Tray] Loading template icon from:', templatePath);
-      
+
       if (!fs.existsSync(templatePath)) {
         throw new Error(`Template icon not found at ${templatePath}`);
       }
-      
+
       const templateIcon = nativeImage.createFromPath(templatePath);
       if (templateIcon.isEmpty()) {
         throw new Error('Template icon loaded but is empty - file may be corrupted');
       }
-      
+
       trayIcon = templateIcon.resize({ width: 22, height: 22 });
       if (!trayIcon || trayIcon.isEmpty()) {
         throw new Error('Failed to resize template icon');
       }
-      
+
       trayIcon.setTemplateImage(true);
       safeConsole('log', '[Tray] Template icon created successfully');
     } else if (isWin) {
@@ -8574,7 +8734,7 @@ app.whenReady().then(() => {
       const icon = nativeImage.createFromPath(iconPath);
       trayIcon = icon.resize({ width: 22, height: 22 });
     }
-    
+
     if (!trayIcon || trayIcon.isEmpty()) {
       throw new Error('Tray icon is null or empty after creation');
     }
@@ -8594,20 +8754,20 @@ app.whenReady().then(() => {
     } catch (fallbackErr) {
       safeConsole('error', '[Tray] Fallback icon failed:', fallbackErr.message);
       // Last resort: show alert to user
-      dialog.showErrorBox('Tray Icon Error', 
+      dialog.showErrorBox('Tray Icon Error',
         `Failed to create tray icon: ${err.message}\n\n` +
         `Fallback also failed: ${fallbackErr.message}\n\n` +
         'The app will continue running but may not show in the menu bar.'
       );
     }
   }
-  
+
   try {
     tray = new Tray(trayIcon);
     safeConsole('log', '[Tray] Tray created successfully');
   } catch (err) {
     safeConsole('error', '[Tray] Failed to create Tray instance:', err.message);
-    dialog.showErrorBox('System Tray Error', 
+    dialog.showErrorBox('System Tray Error',
       `Failed to create system tray: ${err.message}\n\n` +
       'On macOS, this can happen if:\n' +
       '1. The icon file is corrupted\n' +
@@ -8617,29 +8777,29 @@ app.whenReady().then(() => {
     // Continue without tray - app will still run
   }
   tray.setToolTip('PhotoLynk Server');
-  
+
   // Build context menu for tray
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open PhotoLynk', click: showMainWindow },
     { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuitting = true; stopServer(); app.quit(); } }
   ]);
-  
+
   // Linux: must use setContextMenu as right-click event doesn't work reliably
   if (process.platform === 'linux') {
     tray.setContextMenu(contextMenu);
   }
-  
+
   // Left-click opens the main window (unified app UI)
   tray.on('click', () => {
     showMainWindow();
   });
-  
+
   // Right-click shows context menu (Windows/macOS)
   tray.on('right-click', () => {
     tray.popUpContextMenu(contextMenu);
   });
-  
+
   // Load startOnBoot setting and apply autostart configuration once
   startOnBoot = store.get('startOnBoot', false);
   setAutostart(startOnBoot);
@@ -8654,10 +8814,10 @@ app.whenReady().then(() => {
       tray.setToolTip(tooltip);
     });
   }, 5000);
-  
+
   // Start server automatically
   startServer();
-  
+
   // On first run (or if welcome never shown), open the main window and show system tray info
   if (isFirstRun || !welcomeShown) {
     setTimeout(() => {
@@ -8666,7 +8826,7 @@ app.whenReady().then(() => {
         mainWindow.show();
         mainWindow.focus();
       }
-      
+
       // Show platform-specific system tray info dialog once
       let trayLocation = '';
       if (isMac) {
@@ -8676,7 +8836,7 @@ app.whenReady().then(() => {
       } else {
         trayLocation = 'the system tray';
       }
-      
+
       const { dialog } = require('electron');
       dialog.showMessageBox(mainWindow, {
         type: 'info',
@@ -8700,7 +8860,7 @@ app.on('before-quit', () => {
   app.isQuitting = true;
   stopBackupPowerSaveBlocker();
   stopPairingServer();
-  
+
   // Synchronously kill server process on quit to ensure cleanup
   if (serverProcess) {
     try {
@@ -8715,7 +8875,7 @@ app.on('before-quit', () => {
     }
     serverProcess = null;
   }
-  
+
   // On Windows, also kill any orphaned PhotoLynk processes by name
   if (process.platform === 'win32') {
     try {
@@ -8725,7 +8885,7 @@ app.on('before-quit', () => {
       // Ignore - no processes found or already killed
     }
   }
-  
+
   // Also free port 3000 synchronously
   freePort3000ForPhotoLynk();
 });
