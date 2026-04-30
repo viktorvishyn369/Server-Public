@@ -2691,19 +2691,19 @@ function showMainWindow() {
       document.getElementById('inline-status-message').textContent = message;
     }
     
-    function hideInlineProgress(success, message) {
+    function hideInlineProgress(success, message, isBackup = false) {
       const hero = document.getElementById('status-hero');
       const progressTitle = document.getElementById('qs-progress-title');
       const statusMsg = document.getElementById('inline-status-message');
-      
+
       // Show completion message briefly
       if (success) {
         progressTitle.textContent = '✓ Complete!';
         progressTitle.className = 'qs-progress-title';
         progressTitle.style.color = '#10B981';
         document.getElementById('inline-progress-fill').style.width = '100%';
-        // Update last backup stat
-        updateLastBackupStat(message);
+        // Update last backup stat only for backup, not sync
+        if (isBackup) updateLastBackupStat(message);
       } else {
         progressTitle.textContent = '✕ Error';
         progressTitle.className = 'qs-progress-title';
@@ -2734,7 +2734,17 @@ function showMainWindow() {
       const hhmm = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
       el.textContent = hhmm;
       el.title = message || '';
+      try { localStorage.setItem('last_backup_time', hhmm); } catch (e) {}
     }
+
+    // Restore saved last backup time on UI load
+    try {
+      const savedBackupTime = localStorage.getItem('last_backup_time');
+      if (savedBackupTime) {
+        const el = document.getElementById('qs-backup');
+        if (el) el.textContent = savedBackupTime;
+      }
+    } catch (e) {}
 
     function updateQsNfts(count) {
       const el = document.getElementById('qs-nfts');
@@ -2770,10 +2780,10 @@ function showMainWindow() {
     }
     
     ipcRenderer.on('backup-progress', (e, d) => { updateInlineProgress(d.progress * 100, d.message); });
-    ipcRenderer.on('backup-complete', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(true, d.message); });
+    ipcRenderer.on('backup-complete', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(true, d.message, true); });
     ipcRenderer.on('backup-error', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(false, 'Error: ' + d.message); });
     ipcRenderer.on('sync-progress', (e, d) => { updateInlineProgress(d.progress * 100, d.message); });
-    ipcRenderer.on('sync-complete', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(true, d.message); });
+    ipcRenderer.on('sync-complete', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(true, d.message, false); });
     ipcRenderer.on('sync-error', (e, d) => { setActionButtonsDisabled(false); hideInlineProgress(false, 'Error: ' + d.message); });
     
     // IPFS Gateways — ipfs.io and gateway.pinata.cloud return 200 directly;
