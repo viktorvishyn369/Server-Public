@@ -315,7 +315,7 @@ function getCurrentFees() {
  * Each additional 1 MB above 3 MB adds +10% to the base.
  * Formula: fee = 0.72 × (1 + max(0, ceil(sizeMB − 3)) × 0.10)
  */
-const BASE_COMMISSION_USD = 0.72;
+const BASE_COMMISSION_USD = 0.36;
 const SIZE_THRESHOLD_MB = 3;
 const SIZE_SURCHARGE_PER_MB = 0.10;
 
