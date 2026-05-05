@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaceSeeker — Risk Disclosure</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            line-height: 1.7;
+            min-height: 100vh;
+            padding: 60px 24px;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        h1 { color: #EF4444; font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+        .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 40px; }
+        h2 { color: #fff; font-size: 1.2rem; font-weight: 700; margin-top: 32px; margin-bottom: 12px; }
+        p { color: #bbb; margin-bottom: 14px; font-size: 0.95rem; }
+        ul { color: #bbb; margin-bottom: 14px; padding-left: 24px; }
+        li { margin-bottom: 8px; font-size: 0.95rem; }
+        a { color: #C9A84C; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .updated { color: #666; font-size: 0.82rem; margin-top: 40px; border-top: 1px solid #2a2a2a; padding-top: 16px; }
+        strong { color: #fff; font-weight: 600; }
+        .warning { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 16px; margin-bottom: 24px; color: #fca5a5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Risk Disclosure</h1>
+        <p class="subtitle">PaceSeeker &mdash; Experimental Alpha Software</p>
+
+        <div class="warning">
+            <strong>Warning:</strong> Automated trading can result in the complete loss of funds. Only use LIVE mode with money you can afford to lose entirely. Past simulation results do not guarantee future performance.
+        </div>
+
+        <h2>1. Software Risk</h2>
+        <p>PaceSeeker is <strong>alpha-quality, experimental software</strong>. Bugs, errors, and unexpected behavior may occur at any time. There is no warranty, no insurance, and no guarantee of correctness. You assume all risks related to software defects.</p>
+
+        <h2>2. Market Risk</h2>
+        <ul>
+            <li><strong>Slippage</strong>: Actual execution prices may differ from quoted prices, especially for low-liquidity tokens or during volatile periods.</li>
+            <li><strong>Liquidity shocks</strong>: Pools may be drained, rug-pulled, or frozen while your trade is in flight.</li>
+            <li><strong>MEV</strong>: Your transactions may be frontrun, sandwiched, or otherwise exploited by MEV searchers, even with Jito bundles.</li>
+            <li><strong>RPC lag</strong>: Stale blockhashes, dropped transactions, or slow confirmation may cause unexpected outcomes.</li>
+        </ul>
+
+        <h2>3. Exchange Risk (CEX Mode)</h2>
+        <ul>
+            <li>CEX API keys with <strong>Trade</strong> permission can place real market orders. If one leg of an arbitrage fails, your position becomes <strong>unhedged</strong> and the bot will halt.</li>
+            <li>Exchanges may rate-limit, reject orders, or experience outages mid-trade.</li>
+            <li>API keys with <strong>Withdraw</strong> permission expose you to drain-on-compromise. PaceSeeker recommends Trade-only keys.</li>
+        </ul>
+
+        <h2>4. Smart Contract Risk</h2>
+        <p>All DEX trades interact with third-party smart contracts (Jupiter, Raydium, Orca, Meteora, etc.). These contracts may contain bugs or be upgraded in ways that break compatibility. PaceSeeker does not audit these contracts.</p>
+
+        <h2>5. Session Wallet Risk</h2>
+        <p>The session wallet is a temporary keypair stored on your device. If your device is compromised, an attacker may drain the session wallet balance. The session expires after 24 hours and should hold only the amount you are willing to trade in that window.</p>
+
+        <h2>6. Regulatory Risk</h2>
+        <p>Cryptocurrency regulation varies by jurisdiction. Automated trading may be subject to licensing, tax reporting, or other legal requirements in your location. It is your responsibility to comply with all applicable laws.</p>
+
+        <h2>7. No Recourse</h2>
+        <p>StealthLynk LLC is not a broker, investment adviser, or financial institution. We cannot reverse transactions, recover lost funds, or provide compensation for trading losses. All trades are final and non-reversible by design.</p>
+
+        <p class="updated">Last updated: May 2026</p>
+    </div>
+</body>
+</html>
