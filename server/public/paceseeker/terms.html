@@ -41,7 +41,18 @@
         <h2>3. Self-Custodial Model</h2>
         <p>Your Solana private keys and session keys are generated and stored <strong>on your device only</strong>. StealthLynk LLC does not have access to your funds, wallet, or trading activity. You are responsible for safeguarding your device and any backup phrases.</p>
 
-        <h2>4. Risk Disclosure</h2>
+        <h2>4. API Key Security Guarantee</h2>
+        <p>When you enter CEX API credentials into the App:</p>
+        <ul>
+            <li>Keys are stored in hardware-backed secure storage (iOS Keychain / Android Keystore) with <code>WHEN_UNLOCKED_THIS_DEVICE_ONLY</code> access. They cannot be extracted by other apps, are not synced to cloud, and are destroyed on uninstall.</li>
+            <li>The App communicates <strong>directly and exclusively</strong> with official exchange API endpoints. There is no StealthLynk relay, proxy, or backend server involved in any API call.</li>
+            <li>Your API secret <strong>never leaves your device</strong>. The App signs requests locally using HMAC-SHA256 and sends only the computed signature to the exchange.</li>
+            <li>StealthLynk LLC <strong>has zero ability</strong> to access, read, copy, or transmit your API keys at any time &mdash; during installation, during trading sessions, or at any other point.</li>
+            <li>The App contains <strong>no analytics, telemetry, crash reporting, or remote logging</strong> that could capture or leak sensitive credentials.</li>
+        </ul>
+        <p>We recommend creating API keys with <strong>Read + Trade only</strong> (no Withdraw) and enabling IP whitelist on supported exchanges for maximum protection.</p>
+
+        <h2>5. Risk Disclosure</h2>
         <ul>
             <li>Automated trading can lose money rapidly, including your entire balance.</li>
             <li>Market conditions, slippage, failed transactions, MEV, RPC lag, and smart-contract bugs can all cause losses.</li>
@@ -49,19 +60,21 @@
             <li>PaceSeeker does <strong>not guarantee profit</strong> and does not insure your funds.</li>
         </ul>
 
-        <h2>5. Simulation vs. Live Mode</h2>
+        <h2>6. Simulation vs. Live Mode</h2>
         <p>The App ships in <strong>SIM (simulation) mode</strong> by default. No real funds move in SIM. Enabling LIVE mode requires multiple explicit confirmations and is entirely at your own risk. Only enable LIVE with funds you can afford to lose completely.</p>
 
-        <h2>6. Prohibited Use</h2>
-        <p>You may not use PaceSeeker in any jurisdiction where automated trading or cryptocurrency use is unlawful. You may not use the App for market manipulation, money laundering, or any illegal activity.</p>
+        <h2>7. Restricted Jurisdictions</h2>
+        <p>PaceSeeker is <strong>NOT available</strong> to residents or citizens of, or persons accessing the App from: the United States, China (including Hong Kong and Macau), North Korea, Iran, Syria, Cuba, Russia, or any other jurisdiction where cryptocurrency trading or automated trading is prohibited or restricted by law.</p>
+        <p>By using the App, you represent and warrant that you are not located in, incorporated in, or a citizen or resident of any restricted jurisdiction. StealthLynk LLC reserves the right to restrict access from any jurisdiction at any time.</p>
+        <p>You may not use PaceSeeker for market manipulation, money laundering, sanctions evasion, or any other illegal activity.</p>
 
-        <h2>7. No Warranty</h2>
+        <h2>8. No Warranty</h2>
         <p>PaceSeeker is provided &ldquo;as is&rdquo; without warranties of any kind. StealthLynk LLC disclaims all liability for damages arising from use of the App, to the maximum extent permitted by law.</p>
 
-        <h2>8. Changes to Terms</h2>
+        <h2>9. Changes to Terms</h2>
         <p>We may update these terms at any time. Continued use after changes constitutes acceptance. The latest version is always available at this URL.</p>
 
-        <h2>9. Contact</h2>
+        <h2>10. Contact</h2>
         <p>For questions about these terms, contact <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
 
         <p class="updated">Last updated: May 2026</p>

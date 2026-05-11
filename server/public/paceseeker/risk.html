@@ -54,6 +54,7 @@
             <li>Exchanges may rate-limit, reject orders, or experience outages mid-trade.</li>
             <li>API keys with <strong>Withdraw</strong> permission expose you to drain-on-compromise. PaceSeeker recommends Trade-only keys.</li>
         </ul>
+        <p><strong>API Key Safety During Trading:</strong> During active trading sessions, your API keys remain in device secure storage and are loaded into memory only for the duration of the signed API call. They are transmitted <em>nowhere</em> other than the exchange that issued them (via HTTPS/TLS). PaceSeeker has no backend server, no analytics, and no telemetry — there is no mechanism by which keys could be exfiltrated. Even if network traffic is intercepted, only HMAC signatures (not your secret) are visible.</p>
 
         <h2>4. Smart Contract Risk</h2>
         <p>All DEX trades interact with third-party smart contracts (Jupiter, Raydium, Orca, Meteora, etc.). These contracts may contain bugs or be upgraded in ways that break compatibility. PaceSeeker does not audit these contracts.</p>

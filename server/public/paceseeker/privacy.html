@@ -58,10 +58,20 @@
         <h2>4. Blockchain Interactions</h2>
         <p>When you enable LIVE mode, transactions are submitted directly to public Solana RPC nodes (e.g., <code>solana-rpc.publicnode.com</code>, <code>api.mainnet-beta.solana.com</code>). These interactions are pseudonymous but publicly visible on the blockchain, as is true for all Solana transactions. We do not operate these RPC nodes and have no special visibility into your on-chain activity.</p>
 
-        <h2>5. Analytics and Telemetry</h2>
+        <h2>5. CEX API Key Handling</h2>
+        <p>If you enter CEX API keys for live trading, the following guarantees apply:</p>
+        <ul>
+            <li>API keys and secrets are stored <strong>exclusively in device secure storage</strong> (iOS Keychain / Android Keystore with <code>WHEN_UNLOCKED_THIS_DEVICE_ONLY</code> access level). They are never synced, backed up, or transmitted to StealthLynk.</li>
+            <li>The App communicates <strong>only with official exchange API endpoints</strong> (e.g., api.bybit.com, www.okx.com, api.mexc.com). There is no intermediary proxy or StealthLynk relay server.</li>
+            <li>Your API <strong>secret is never sent over the network</strong> &mdash; not even to the exchange. The App uses industry-standard HMAC-SHA256 signing: it computes a one-way hash of each request locally using your secret, and transmits only the resulting signature. The exchange verifies it against their stored copy.</li>
+            <li>API keys are used <strong>solely for balance reads and market order placement</strong>. The App never initiates withdrawals, internal transfers, or account changes unless you explicitly grant Withdraw permission for auto-rebalance.</li>
+            <li>Keys are <strong>immediately deleted from secure storage</strong> when you tap &ldquo;Remove&rdquo; in the App. There is no cache, log, or residual copy.</li>
+        </ul>
+
+        <h2>6. Analytics and Telemetry</h2>
         <p>PaceSeeker does <strong>not</strong> include third-party analytics, crash reporters, or advertising SDKs. Error logs, if any, remain on your device unless you manually share them with us for support.</p>
 
-        <h2>6. External Services</h2>
+        <h2>7. External Services</h2>
         <p>The App queries the following external services solely for market data and trade execution:</p>
         <ul>
             <li><strong>Jupiter Aggregator API</strong> &mdash; for DEX swap quotes and routing</li>
@@ -71,16 +81,16 @@
         </ul>
         <p>These services may log IP addresses and request data according to their own privacy policies. We do not control their data practices.</p>
 
-        <h2>7. Data Retention and Deletion</h2>
+        <h2>8. Data Retention and Deletion</h2>
         <p>Since we do not collect personal data centrally, there is nothing for us to retain or delete on our servers. To erase all PaceSeeker data, simply uninstall the App and, if applicable, revoke your session wallet to reclaim any rent SOL.</p>
 
-        <h2>8. Children</h2>
+        <h2>9. Children</h2>
         <p>PaceSeeker is not intended for users under 18. We do not knowingly collect data from children.</p>
 
-        <h2>9. Changes to This Policy</h2>
+        <h2>10. Changes to This Policy</h2>
         <p>We may update this Privacy Policy. Material changes will be noted in the App&rsquo;s release notes. The current version is always available at this URL.</p>
 
-        <h2>10. Contact</h2>
+        <h2>11. Contact</h2>
         <p>For privacy questions, contact <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
 
         <p class="updated">Last updated: May 2026</p>
