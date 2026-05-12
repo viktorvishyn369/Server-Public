@@ -12,6 +12,12 @@
             box-sizing: border-box;
         }
 
+        img,
+        svg,
+        table {
+            max-width: 100%;
+        }
+
         :root {
             --bg-primary: #0a0a0a;
             --bg-secondary: #111111;
@@ -376,6 +382,8 @@
             font-size: 0.95rem;
             transition: border-color 0.2s, background 0.2s;
             backdrop-filter: blur(8px);
+            max-width: 100%;
+            overflow-wrap: anywhere;
         }
 
         .github-link:hover {
@@ -528,6 +536,10 @@
             .dl-grid { grid-template-columns: 1fr; }
             .dl-row { flex-wrap: wrap; gap: 10px; }
             .dl-btn { width: 100%; justify-content: center; }
+            details.downloads-panel summary {
+                align-items: flex-start;
+                flex-direction: column;
+            }
             .sha-table th:first-child, .sha-table td:first-child { display: none; }
         }
 
@@ -588,12 +600,14 @@
             align-items: center;
             gap: 12px;
             font-weight: 700;
+            min-width: 0;
         }
         details.downloads-panel summary::-webkit-details-marker { display: none; }
         details.downloads-panel summary span {
             color: var(--text-muted);
             font-size: 0.82rem;
             font-weight: 400;
+            overflow-wrap: anywhere;
         }
         .downloads-panel-body { padding: 0 20px 20px; }
 
