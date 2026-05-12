@@ -21,14 +21,20 @@
             --text-secondary: #a0a0a0;
             --text-muted: #666666;
             --accent: #888888;
+            --accent-strong: #f5f5f5;
+            --success: #22c55e;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg-primary);
+            background:
+                radial-gradient(circle at top left, rgba(255,255,255,0.09), transparent 34rem),
+                radial-gradient(circle at 80% 0%, rgba(34,197,94,0.08), transparent 26rem),
+                var(--bg-primary);
             color: var(--text-primary);
             line-height: 1.7;
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
         .bg-fixed {
@@ -44,29 +50,92 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1180px;
             margin: 0 auto;
-            padding: 60px 24px;
+            padding: 28px 24px 60px;
             position: relative;
             z-index: 1;
+            width: 100%;
         }
 
         header {
-            text-align: center;
-            margin-bottom: 60px;
-            padding-bottom: 40px;
-            border-bottom: 1px solid var(--border-color);
-            background: rgba(10, 10, 10, 0.9);
-            padding: 40px 24px;
-            border-radius: 8px;
-            backdrop-filter: blur(8px);
+            text-align: left;
+            margin-bottom: 34px;
+            background: linear-gradient(135deg, rgba(22, 22, 22, 0.94), rgba(10, 10, 10, 0.88));
+            padding: clamp(28px, 6vw, 64px);
+            border-radius: 28px;
+            border: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(14px);
+            box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+            overflow: hidden;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: clamp(38px, 7vw, 88px);
+        }
+
+        .brand-mark {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-primary);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: var(--success);
+            box-shadow: 0 0 0 8px rgba(34,197,94,0.12);
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            padding: 8px 12px;
+            border-radius: 999px;
+            transition: color 0.2s, background 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.06);
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04);
+            padding: 7px 12px;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            margin-bottom: 18px;
         }
 
         .logo {
-            font-size: 2.5rem;
+            font-size: clamp(2.4rem, 7vw, 5.2rem);
             font-weight: 700;
             letter-spacing: -0.02em;
             margin-bottom: 8px;
+            line-height: 0.95;
         }
 
         .llc {
@@ -78,17 +147,124 @@
         }
 
         .tagline {
-            font-size: 1.1rem;
+            font-size: clamp(1.08rem, 2.2vw, 1.42rem);
             color: var(--text-secondary);
             margin-top: 20px;
             font-weight: 400;
+            max-width: 760px;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+
+        .primary-link,
+        .secondary-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 44px;
+            padding: 10px 18px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.92rem;
+            transition: transform 0.2s, opacity 0.2s, border-color 0.2s, background 0.2s;
+        }
+
+        .primary-link {
+            color: var(--bg-primary);
+            background: var(--accent-strong);
+        }
+
+        .secondary-link {
+            color: var(--text-primary);
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.04);
+        }
+
+        .primary-link:hover,
+        .secondary-link:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
         }
 
         .intro {
             color: var(--text-secondary);
-            font-size: 1rem;
-            margin-bottom: 50px;
-            text-align: center;
+            font-size: 1.05rem;
+            margin-bottom: 24px;
+            text-align: left;
+            max-width: 860px;
+        }
+
+        .section-heading {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 18px;
+        }
+
+        .section-kicker {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin: 0;
+            max-width: 580px;
+        }
+
+        .product-overview {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+            margin: 28px 0 46px;
+        }
+
+        .product-tile {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            min-width: 0;
+            background: rgba(22, 22, 22, 0.86);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 22px;
+            padding: 22px;
+            text-decoration: none;
+            color: var(--text-primary);
+            backdrop-filter: blur(12px);
+            transition: transform 0.2s, border-color 0.2s, background 0.2s;
+        }
+
+        .product-tile:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255,255,255,0.2);
+            background: rgba(28, 28, 28, 0.94);
+        }
+
+        .product-tile-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .product-tile h3 {
+            font-size: 1.15rem;
+            margin: 0;
+        }
+
+        .product-tile p {
+            margin: 0;
+            font-size: 0.94rem;
+        }
+
+        .product-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         section {
@@ -118,15 +294,17 @@
         .card {
             background: rgba(22, 22, 22, 0.95);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 24px;
-            margin-bottom: 16px;
+            border-radius: 24px;
+            padding: clamp(20px, 3vw, 30px);
+            margin-bottom: 18px;
             backdrop-filter: blur(8px);
+            overflow: hidden;
+            min-width: 0;
         }
 
         .feature-image {
             width: 100%;
-            height: 200px;
+            height: 180px;
             object-fit: cover;
             border-radius: 8px;
             margin-bottom: 16px;
@@ -142,7 +320,9 @@
         }
 
         .badge {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
             font-size: 0.75rem;
             color: var(--text-muted);
             background: var(--bg-secondary);
@@ -236,25 +416,45 @@
 
         @media (max-width: 600px) {
             .container {
-                padding: 40px 20px;
+                padding: 18px 14px 42px;
             }
 
             .logo {
-                font-size: 2rem;
+                font-size: 2.8rem;
             }
 
             .principles {
                 grid-template-columns: 1fr;
             }
+
+            .topbar,
+            .section-heading {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .nav-links {
+                justify-content: flex-start;
+            }
+
+            .product-overview {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-actions a {
+                width: 100%;
+            }
         }
 
         /* PhotoLynk Desktop Downloads */
-        .dl-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        .dl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; width: 100%; min-width: 0; }
         .dl-row {
             display: flex; align-items: center; gap: 14px;
             background: rgba(22, 22, 22, 0.95); border: 1px solid var(--border-color);
             border-radius: 8px; padding: 14px 16px; transition: border-color 0.2s;
             backdrop-filter: blur(8px);
+            width: 100%;
+            min-width: 0;
         }
         .dl-row:hover { border-color: #444; }
         .dl-row.unavailable { opacity: 0.4; pointer-events: none; }
@@ -266,7 +466,7 @@
         .dl-btn {
             display: inline-flex; align-items: center; gap: 5px;
             background: var(--text-primary); color: var(--bg-primary);
-            padding: 7px 16px; border-radius: 5px; border: none;
+            padding: 7px 14px; border-radius: 5px; border: none;
             font-size: 0.82rem; font-weight: 600; cursor: pointer;
             text-decoration: none; transition: opacity 0.2s; flex-shrink: 0;
         }
@@ -283,6 +483,7 @@
         .sha-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color); }
         .sha-section h4 { font-size: 0.88rem; font-weight: 600; margin-bottom: 10px; color: var(--text-secondary); }
         .sha-table { width: 100%; border-collapse: collapse; }
+        .sha-table { table-layout: fixed; }
         .sha-table th, .sha-table td { text-align: left; padding: 8px 10px; font-size: 0.78rem; border-bottom: 1px solid var(--border-color); }
         .sha-table th { color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.68rem; }
         .sha-table td { color: var(--text-secondary); }
@@ -291,6 +492,7 @@
             font-size: 0.68rem; word-break: break-all; color: var(--text-primary);
             background: rgba(255,255,255,0.03); padding: 3px 6px;
             border-radius: 3px; display: inline-block; cursor: pointer; position: relative;
+            max-width: 100%;
         }
         .sha-hash:hover { background: rgba(255,255,255,0.07); }
         .sha-toast {
@@ -307,23 +509,26 @@
             border-radius: 5px; padding: 8px 12px; margin-bottom: 8px;
             font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
             font-size: 0.72rem; color: #22c55e; overflow-x: auto;
+            white-space: nowrap;
         }
         .dl-loading { text-align: center; padding: 20px 0; color: var(--text-muted); font-size: 0.85rem; }
         .dl-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border-color); border-top-color: var(--text-secondary); border-radius: 50%; animation: dlspin 0.8s linear infinite; margin-right: 6px; vertical-align: middle; }
         @keyframes dlspin { to { transform: rotate(360deg); } }
         @media (max-width: 600px) {
             .app-grid { grid-template-columns: 1fr; }
+            .dl-grid { grid-template-columns: 1fr; }
             .dl-row { flex-wrap: wrap; gap: 10px; }
             .dl-btn { width: 100%; justify-content: center; }
             .sha-table th:first-child, .sha-table td:first-child { display: none; }
         }
 
         /* Mobile App Downloads */
-        .app-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+        .app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 20px; min-width: 0; }
         .app-card {
             background: rgba(22, 22, 22, 0.95); border: 1px solid var(--border-color);
             border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 10px;
             transition: border-color 0.2s; backdrop-filter: blur(8px);
+            min-width: 0;
         }
         .app-card:hover { border-color: #444; }
         .app-card-header { display: flex; align-items: center; gap: 10px; }
@@ -358,6 +563,30 @@
             font-size: 1rem; font-weight: 600; color: var(--text-primary);
             margin-top: 28px; margin-bottom: 4px; letter-spacing: -0.01em;
         }
+        details.downloads-panel {
+            margin-top: 22px;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            background: rgba(255,255,255,0.03);
+            overflow: hidden;
+        }
+        details.downloads-panel summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 18px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+        }
+        details.downloads-panel summary::-webkit-details-marker { display: none; }
+        details.downloads-panel summary span {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            font-weight: 400;
+        }
+        .downloads-panel-body { padding: 0 20px 20px; }
 
         .uptime-grid {
             display: grid;
@@ -419,16 +648,62 @@
     <div class="bg-fixed"></div>
     <div class="container">
         <header>
+            <div class="topbar">
+                <div class="brand-mark"><span class="brand-dot"></span> StealthLynk</div>
+                <nav class="nav-links" aria-label="Primary navigation">
+                    <a href="#products">Products</a>
+                    <a href="#downloads">Downloads</a>
+                    <a href="#principles">Principles</a>
+                    <a href="#status">Status</a>
+                </nav>
+            </div>
+            <div class="eyebrow">Secure software company · Privacy-first products</div>
             <div class="logo">StealthLynk</div>
-            <p class="tagline">Building secure, privacy-respecting infrastructure for real-world digital systems.</p>
+            <p class="tagline">Professional software for private media backup, self-custodial automation, and secure digital infrastructure.</p>
+            <div class="hero-actions">
+                <a href="#products" class="primary-link">View products</a>
+                <a href="#downloads" class="secondary-link">Get downloads</a>
+            </div>
         </header>
 
         <p class="intro">
             StealthLynk is a technology company focused on designing and engineering secure software solutions for practical, real-world use. Our work bridges modern cryptographic systems, decentralized technologies, and conventional infrastructure, with an emphasis on reliability, transparency, and regulatory awareness.
         </p>
 
-        <section>
-            <h2>What We Build</h2>
+        <div class="product-overview">
+            <a href="#photolynk" class="product-tile">
+                <div class="product-tile-top">
+                    <h3>PhotoLynk</h3>
+                    <span class="badge released">Released</span>
+                </div>
+                <p>Private photo and video backup with end-to-end encryption, integrity verification, desktop tools, and mobile apps.</p>
+                <div class="product-tags">
+                    <span class="platform-tag">iOS</span>
+                    <span class="platform-tag">Android</span>
+                    <span class="platform-tag">Desktop</span>
+                    <span class="platform-tag">StealthCloud</span>
+                </div>
+            </a>
+            <a href="#paceseeker" class="product-tile">
+                <div class="product-tile-top">
+                    <h3>PaceSeeker</h3>
+                    <span class="badge released">Released</span>
+                </div>
+                <p>Self-custodial Solana automation for DEX/CEX arbitrage simulations and controlled live execution.</p>
+                <div class="product-tags">
+                    <span class="platform-tag">Solana Mobile</span>
+                    <span class="platform-tag">DEX</span>
+                    <span class="platform-tag">CEX</span>
+                    <span class="platform-tag">SIM Mode</span>
+                </div>
+            </a>
+        </div>
+
+        <section id="products">
+            <div class="section-heading">
+                <h2>Products</h2>
+                <p class="section-kicker">A focused portfolio of released applications and secure infrastructure components.</p>
+            </div>
 
             <div class="card">
                 <img src="/images/developpers.png" alt="Development Team" class="feature-image">
@@ -438,7 +713,7 @@
                 </p>
             </div>
 
-            <div class="card">
+            <div class="card" id="photolynk">
                 <img src="/images/storage.png" alt="Secure Infrastructure" class="feature-image">
                 <span class="badge released">Released</span>
                 <h3>PhotoLynk</h3>
@@ -524,33 +799,34 @@
                     </div>
                 </div>
 
-                <!-- Desktop Downloads -->
-                <h3 class="desktop-heading">Desktop</h3>
-                <div id="photolynk-downloads">
-                    <div class="dl-version-pill" id="dl-version-pill">
-                        <span class="dl-version-dot"></span>
-                        <span id="dl-version-text">Loading...</span>
-                    </div>
-                    <div class="dl-grid" id="dl-grid">
-                        <div class="dl-loading"><span class="dl-spinner"></span> Loading builds...</div>
-                    </div>
-                    <div class="sha-section" id="sha-section">
-                        <h4>SHA-256 Integrity Verification</h4>
-                        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">After downloading, verify file integrity by comparing the checksum.</p>
-                        <div id="sha-table-container">
-                            <div class="dl-loading"><span class="dl-spinner"></span> Loading checksums...</div>
+                <details class="downloads-panel" id="downloads">
+                    <summary>PhotoLynk desktop downloads <span>macOS, Windows, Linux</span></summary>
+                    <div class="downloads-panel-body">
+                        <div class="dl-version-pill" id="dl-version-pill">
+                            <span class="dl-version-dot"></span>
+                            <span id="dl-version-text">Loading...</span>
                         </div>
-                        <div class="sha-cmds">
-                            <div class="cmd-label">macOS / Linux</div>
-                            <div class="cmd-block">shasum -a 256 ~/Downloads/PhotoLynk*.dmg</div>
-                            <div class="cmd-label">Windows (PowerShell)</div>
-                            <div class="cmd-block">Get-FileHash "$env:USERPROFILE\Downloads\PhotoLynk*.exe" -Algorithm SHA256</div>
+                        <div class="dl-grid" id="dl-grid">
+                            <div class="dl-loading"><span class="dl-spinner"></span> Loading builds...</div>
+                        </div>
+                        <div class="sha-section" id="sha-section">
+                            <h4>SHA-256 Integrity Verification</h4>
+                            <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">After downloading, verify file integrity by comparing the checksum.</p>
+                            <div id="sha-table-container">
+                                <div class="dl-loading"><span class="dl-spinner"></span> Loading checksums...</div>
+                            </div>
+                            <div class="sha-cmds">
+                                <div class="cmd-label">macOS / Linux</div>
+                                <div class="cmd-block">shasum -a 256 ~/Downloads/PhotoLynk*.dmg</div>
+                                <div class="cmd-label">Windows (PowerShell)</div>
+                                <div class="cmd-block">Get-FileHash "$env:USERPROFILE\Downloads\PhotoLynk*.exe" -Algorithm SHA256</div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </details>
             </div>
 
-            <div class="card">
+            <div class="card" id="paceseeker">
                 <span class="badge released">Released</span>
                 <h3>PaceSeeker</h3>
                 <p><strong>Self-custodial auto-trading for Solana.</strong> Simulate DEX and CEX arbitrage strategies risk-free in SIM mode, then optionally go LIVE with biometric-gated session keys. Your keys never leave your device.</p>
@@ -571,14 +847,13 @@
                     </div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:10px;margin:20px 0 0;">
-                    <a href="https://github.com/viktorvishyn369/PaceSeeker" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;text-decoration:none;color:var(--text-primary);transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);opacity:0.82;">
                         <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" style="flex-shrink:0;opacity:0.7;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
                         <div>
-                            <div style="font-weight:600;font-size:0.92rem;">Source Code</div>
-                            <div style="font-size:0.78rem;color:var(--text-secondary);">React Native &middot; Expo &middot; Solana &middot; Open Source</div>
+                            <div style="font-weight:600;font-size:0.92rem;">PaceSeeker Repository</div>
+                            <div style="font-size:0.78rem;color:var(--text-secondary);">Private repository &middot; release information available through Solana Mobile</div>
                         </div>
-                        <span style="margin-left:auto;font-size:1.1rem;opacity:0.5;">&rarr;</span>
-                    </a>
+                    </div>
                 </div>
             </div>
         </section>
@@ -597,7 +872,7 @@
 
         <div class="divider"></div>
 
-        <section>
+        <section id="principles">
             <h2>Engineering Principles</h2>
             <div class="principles">
                 <div class="principle">Security by design, not by marketing</div>
@@ -630,7 +905,7 @@
 
         <div class="divider"></div>
 
-        <section>
+        <section id="status">
             <h2>StealthCloud Uptime</h2>
             <div class="card">
                 <div class="uptime-pill" id="uptime-pill">
