@@ -18,6 +18,7 @@
         h1 { color: #C9A84C; font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
         .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 40px; }
         h2 { color: #fff; font-size: 1.2rem; font-weight: 700; margin-top: 32px; margin-bottom: 12px; }
+        h3 { color: #ccc; font-size: 1.05rem; font-weight: 600; margin-top: 20px; margin-bottom: 10px; }
         p { color: #bbb; margin-bottom: 14px; font-size: 0.95rem; }
         ul { color: #bbb; margin-bottom: 14px; padding-left: 24px; }
         li { margin-bottom: 8px; font-size: 0.95rem; }
@@ -25,95 +26,237 @@
         a:hover { text-decoration: underline; }
         .updated { color: #666; font-size: 0.82rem; margin-top: 40px; border-top: 1px solid #2a2a2a; padding-top: 16px; }
         strong { color: #fff; font-weight: 600; }
+        .banner {
+            background: rgba(201,168,76,0.08);
+            border: 1px solid rgba(201,168,76,0.2);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>PaceSeeker Terms of Service</h1>
-        <p class="subtitle">StealthLynk LLC &mdash; Self-custodial auto-trading tool for Solana</p>
+        <p class="subtitle">Last updated: June 10, 2026</p>
+
+        <div class="banner">
+            <strong>PaceSeeker is self-custodial software only</strong> — not a financial institution, exchange, broker, or investment advisor. We do not hold your funds, execute trades on your behalf, or have access to your private keys. All trading decisions are controlled entirely by you.
+        </div>
 
         <h2>1. Acceptance of Terms</h2>
-        <p>By downloading, installing, or using PaceSeeker (&ldquo;the App&rdquo;), you confirm you are at least 18 years old and agree to these Terms of Service. If you do not agree, do not use the App.</p>
+        <p>By downloading, installing, accessing, or using PaceSeeker ("the App," "the Software," "we," "us," or "our"), you ("User," "you," or "your") agree to be bound by these Terms of Service ("Terms"), the accompanying <a href="./risk.html">Risk Disclosure</a>, and the <a href="./privacy.html">Privacy Policy</a>. If you do not agree, do not use the App.</p>
 
-        <h2>2. Not Financial Advice &mdash; Not a Broker</h2>
-        <p>PaceSeeker is <strong>experimental alpha software</strong>. StealthLynk LLC is <strong>not</strong> a broker, dealer, exchange, custodian, investment adviser, financial planner, or any form of regulated financial service. The App does <strong>not</strong> provide financial advice, investment recommendations, or trading signals. All trading decisions are made by you. The App merely provides self-custodial automation tools and publicly available market data. <strong>You are solely responsible</strong> for any gains or losses resulting from your use of the App.</p>
-
-        <h2>3. Self-Custodial Model</h2>
-        <p>Your Solana private keys and session keys are generated and stored <strong>on your device only</strong>. StealthLynk LLC does not have access to your funds, wallet, or trading activity. You are responsible for safeguarding your device and any backup phrases.</p>
-
-        <h2>4. API Key Security Guarantee</h2>
-        <p>When you enter CEX API credentials into the App:</p>
+        <h2>2. Description of Service</h2>
+        <p>PaceSeeker is a self-custodial, on-device automated trading tool for the Solana ecosystem. It provides:</p>
         <ul>
-            <li>Keys are stored in hardware-backed secure storage (iOS Keychain / Android Keystore) with <code>WHEN_UNLOCKED_THIS_DEVICE_ONLY</code> access. They cannot be extracted by other apps, are not synced to cloud, and are destroyed on uninstall.</li>
-            <li>The App communicates <strong>directly and exclusively</strong> with official exchange API endpoints. There is no StealthLynk relay, proxy, or backend server involved in any API call.</li>
-            <li>Your API secret <strong>never leaves your device</strong>. The App signs requests locally using HMAC-SHA256 and sends only the computed signature to the exchange.</li>
-            <li>StealthLynk LLC <strong>has zero ability</strong> to access, read, copy, or transmit your API keys at any time &mdash; during installation, during trading sessions, or at any other point.</li>
-            <li>The App contains <strong>no analytics, telemetry, crash reporting, or remote logging</strong> that could capture or leak sensitive credentials.</li>
+            <li>A simulation mode ("SIM") for paper-trading two strategies (DEX arbitrage on Solana, and CEX arbitrage across major centralized exchanges).</li>
+            <li>A live mode ("LIVE") that can execute real USDC trades on Solana using a session key derived from your connected wallet.</li>
+            <li>Session-key management, trade history, CSV export, and configurable risk caps.</li>
         </ul>
-        <p>We recommend creating API keys with <strong>Read + Trade only</strong> (no Withdraw) and enabling IP whitelist on supported exchanges for maximum protection.</p>
+        <p>PaceSeeker is <strong>alpha software</strong>. It is provided for experimentation and evaluation. It is not a finished product.</p>
 
-        <h2>5. Risk Disclosure</h2>
+        <h2>3. Eligibility &amp; Prohibited Jurisdictions</h2>
+
+        <h3>3.1 Minimum Requirements</h3>
+        <p>You must be at least <strong>18 years old</strong> and legally capable of entering into binding contracts. By using PaceSeeker, you represent that you meet these requirements.</p>
+
+        <h3>3.2 Prohibited Jurisdictions &amp; Restricted Persons</h3>
+        <p>You <strong>explicitly represent and warrant</strong> that you are NOT a citizen, resident, tax resident, or entity organized under the laws of, or physically located in, any of the following categories:</p>
+
+        <p><strong>A. Absolute Crypto Bans</strong> — jurisdictions where cryptocurrency trading, possession, or use is entirely prohibited:</p>
         <ul>
-            <li>Automated trading can lose money rapidly, including your entire balance.</li>
-            <li>Market conditions, slippage, failed transactions, MEV, RPC lag, and smart-contract bugs can all cause losses.</li>
-            <li>CEX API keys with withdrawal permissions can expose funds to theft if your device is compromised.</li>
-            <li>PaceSeeker does <strong>not guarantee profit</strong> and does not insure your funds.</li>
+            <li><strong>People's Republic of China</strong> (including mainland China, Hong Kong SAR, and Macau SAR)</li>
+            <li>Afghanistan, Bangladesh, Nepal</li>
+            <li>Algeria, Egypt, Morocco</li>
+            <li>Bolivia, Ecuador</li>
+            <li>Qatar (for retail individuals)</li>
+            <li>Any other jurisdiction that imposes a blanket prohibition on digital asset activity after the date of these Terms</li>
         </ul>
 
-        <h2>6. Simulation vs. Live Mode</h2>
-        <p>The App ships in <strong>SIM (simulation) mode</strong> by default. No real funds move in SIM. Enabling LIVE mode requires multiple explicit confirmations and is entirely at your own risk. Only enable LIVE with funds you can afford to lose completely.</p>
+        <p><strong>B. Comprehensive Sanctions &amp; Embargoes</strong> — jurisdictions subject to international sanctions by the US (OFAC), EU, UK (HM Treasury / OFSI), UN, or other applicable regimes:</p>
+        <ul>
+            <li><strong>Russia</strong> (comprehensive sectoral sanctions on financial services)</li>
+            <li><strong>Iran, North Korea (DPRK), Syria, Cuba</strong></li>
+            <li><strong>Venezuela</strong> (government, state-owned entities, sanctioned individuals)</li>
+            <li><strong>Belarus</strong> (financial sector), <strong>Myanmar (Burma)</strong> (military-affiliated)</li>
+            <li>Specific occupied or disputed regions of <strong>Ukraine</strong> — Crimea, Donetsk, Luhansk, Kherson, Zaporizhzhia</li>
+            <li>Any territory controlled by sanctioned entities</li>
+            <li>Any jurisdiction added to sanctions lists after the date of these Terms</li>
+        </ul>
 
-        <h2>7. Restricted Jurisdictions</h2>
-        <p>PaceSeeker is <strong>NOT available</strong> to residents or citizens of, or persons accessing the App from: the United States, China (including Hong Kong and Macau), North Korea, Iran, Syria, Cuba, Russia, or any other jurisdiction where cryptocurrency trading or automated trading is prohibited or restricted by law.</p>
-        <p>By using the App, you represent and warrant that you are not located in, incorporated in, or a citizen or resident of any restricted jurisdiction. StealthLynk LLC reserves the right to restrict access from any jurisdiction at any time.</p>
-        <p>You may not use PaceSeeker for market manipulation, money laundering, sanctions evasion, or any other illegal activity.</p>
+        <p><strong>C. High-Risk Retail Restrictions</strong> — jurisdictions where providing automated trading software to retail investors requires registration or licensing that <strong>PaceSeeker has not obtained</strong>:</p>
+        <ul>
+            <li><strong>United States of America</strong> (all states, territories, possessions) — SEC, CFTC, state regulators</li>
+            <li><strong>United Kingdom</strong> — FCA authorization required</li>
+            <li><strong>European Union / EEA</strong> — MiCA regulation requires registration, KYC/AML compliance</li>
+            <li><strong>Canada</strong> — provincial securities registration</li>
+            <li><strong>Australia</strong> — ASIC licensing</li>
+            <li><strong>Singapore</strong> — MAS licensing under Payment Services Act</li>
+            <li><strong>Japan</strong> — FSA registration</li>
+            <li><strong>South Korea</strong> — FSC/FIU registration</li>
+            <li><strong>Switzerland</strong> — FINMA authorization</li>
+            <li><strong>New Zealand</strong> — FMA licensing</li>
+        </ul>
 
-        <h2>8. No Warranty &mdash; Limitation of Liability</h2>
-        <p>PaceSeeker is provided &ldquo;as is&rdquo; without warranties of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement.</p>
-        <p><strong>To the maximum extent permitted by law, StealthLynk LLC&rsquo;s total liability to you for any claim arising from or relating to these Terms or your use of the App shall not exceed the greater of (a) the total amount you have paid to StealthLynk LLC in the twelve (12) months preceding the claim, or (b) one hundred U.S. dollars ($100).</strong></p>
-        <p>StealthLynk LLC shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to lost profits, lost data, or business interruption, even if advised of the possibility of such damages.</p>
+        <h3>3.3 VPN &amp; Circumvention Prohibition</h3>
+        <p>You <strong>agree</strong> that you will <strong>NOT</strong> use any Virtual Private Network (VPN), proxy, Tor, remote desktop, or any other obfuscation technology to mask your location, bypass geofencing, or circumvent the prohibited jurisdiction restrictions. Any detected use of such technologies will result in immediate termination of access.</p>
 
-        <h2>9. Mandatory Binding Arbitration &mdash; Class Action Waiver</h2>
-        <p><strong>PLEASE READ THIS SECTION CAREFULLY. IT AFFECTS YOUR LEGAL RIGHTS.</strong></p>
-        <p><strong>Agreement to Arbitrate:</strong> You and StealthLynk LLC agree that any dispute, claim, or controversy arising out of or relating to these Terms, the App, or your use of the App (collectively, &ldquo;Disputes&rdquo;) shall be resolved exclusively through final and binding arbitration administered by the American Arbitration Association (AAA) under its Commercial Arbitration Rules, rather than in court.</p>
-        <p><strong>Class Action Waiver:</strong> YOU AGREE THAT ANY ARBITRATION OR LEGAL PROCEEDING WILL BE CONDUCTED ONLY ON AN INDIVIDUAL BASIS AND NOT IN A CLASS, CONSOLIDATED, OR REPRESENTATIVE ACTION. YOU WAIVE ANY RIGHT TO PARTICIPATE IN A CLASS ACTION AGAINST STEALTHLYNK LLC. If a court or arbitrator determines that the class action waiver is unenforceable for any reason, the arbitration clause shall be severed and the remaining portions shall remain in full force.</p>
-        <p><strong>Arbitration Location &amp; Law:</strong> The arbitration shall be conducted in Cheyenne, Wyoming, USA, unless both parties agree to a different location. The arbitrator shall apply Wyoming law, without regard to conflict-of-law principles. The arbitrator&rsquo;s decision shall be final and binding, and judgment on the award may be entered in any court of competent jurisdiction.</p>
-        <p><strong>Costs:</strong> Each party shall bear its own costs in arbitration, except that the prevailing party shall be entitled to recover reasonable attorneys&rsquo; fees and costs. If you demonstrate that you are unable to pay the arbitration filing fee, StealthLynk LLC will pay it.</p>
-        <p><strong>Small Claims Exception:</strong> Notwithstanding the above, either party may bring an individual action in small claims court for disputes within the jurisdiction&rsquo;s monetary limit.</p>
-        <p><strong>Injunctive Relief:</strong> Either party may seek injunctive or other equitable relief in a court of competent jurisdiction in Wyoming to prevent irreparable harm pending the completion of arbitration.</p>
+        <h3>3.4 OFAC / SDN List Compliance</h3>
+        <p>You represent that you are not on, and are not owned or controlled by any person or entity on, the US Treasury Department's Specially Designated Nationals and Blocked Persons (SDN) List, the EU Consolidated Financial Sanctions List, the UK Sanctions List, or any other applicable sanctions or denied parties list.</p>
 
-        <h2>10. Governing Law &amp; Jurisdiction</h2>
-        <p>These Terms are governed by and construed in accordance with the laws of the State of Wyoming, United States, without regard to its conflict-of-law principles. Any legal action or proceeding arising out of or relating to these Terms that is not subject to arbitration shall be brought exclusively in the state or federal courts located in Cheyenne, Wyoming. You consent to the personal jurisdiction and venue of such courts.</p>
+        <h2>4. Alpha / Experimental Status</h2>
+        <p>You acknowledge that PaceSeeker is <strong>experimental alpha software</strong>. Features may change, break, or be removed. The App has not undergone formal third-party audit. You agree to use it with funds you can afford to lose entirely.</p>
 
-        <h2>11. Indemnification</h2>
-        <p>You agree to indemnify, defend, and hold harmless StealthLynk LLC, its members, officers, employees, and agents from and against any and all claims, liabilities, damages, losses, costs, and expenses (including reasonable attorneys&rsquo; fees) arising out of or in any way connected with: (a) your use of the App; (b) your violation of these Terms; (c) your violation of any applicable law or regulation; (d) your infringement of any third-party right; or (e) any trading losses, device compromise, or unauthorized transactions resulting from your failure to secure your device, API keys, or wallet credentials.</p>
+        <h2>5. Not a Broker-Dealer, Exchange, or Money Transmitter</h2>
+        <p>PaceSeeker is <strong>not</strong> a registered broker-dealer, investment adviser, money services business, money transmitter, or exchange in any jurisdiction. We do not:</p>
+        <ul>
+            <li>Match orders or operate an order book</li>
+            <li>Facilitate peer-to-peer trading between users</li>
+            <li>Hold, custody, or control user funds</li>
+            <li>Execute trades on behalf of users</li>
+            <li>Access private keys or seed phrases</li>
+            <li>Provide investment advice, recommendations, or guarantees of any kind</li>
+        </ul>
+        <p>Nothing in the App or these Terms constitutes investment, financial, trading, legal, or tax advice. All decisions are made solely by you.</p>
 
-        <h2>12. Termination &amp; License Revocation</h2>
-        <p>StealthLynk LLC may suspend or terminate your access to the App at any time, with or without notice, for any reason, including but not limited to violation of these Terms, use from a restricted jurisdiction, or conduct that StealthLynk LLC determines to be harmful to the App or other users. Upon termination, all licenses granted to you herein shall immediately cease.</p>
+        <h3>5.1 Educational Content</h3>
+        <p>Any examples, calculations, preset recommendations, trade size guidance, or explanatory content presented within the App or its documentation are provided for <strong>educational and informational purposes only</strong>. They do not constitute investment advice, trading recommendations, or personalized financial guidance. We are not financial advisors, brokers, or registered investment professionals. All trading decisions are yours alone.</p>
 
-        <h2>13. Force Majeure</h2>
-        <p>StealthLynk LLC shall not be liable for any failure or delay in performing its obligations under these Terms where such failure or delay results from causes beyond its reasonable control, including but not limited to: acts of God, war, terrorism, riots, embargoes, acts of civil or military authorities, fire, floods, accidents, strikes, shortages of transportation, facilities, fuel, energy, labor, or materials, exchange outages, blockchain network failures, or governmental actions.</p>
+        <h2>6. Self-Custody</h2>
+        <p>PaceSeeker is <strong>self-custodial</strong>:</p>
+        <ul>
+            <li>Your private keys never leave your device.</li>
+            <li>Session keys are stored locally in your device's secure hardware-backed storage.</li>
+            <li>PaceSeeker developers have no access to your wallet, session keys, funds, or transactions beyond what is visible on the public Solana blockchain.</li>
+            <li>PaceSeeker cannot recover your wallet or session key if lost.</li>
+        </ul>
 
-        <h2>14. Severability</h2>
-        <p>If any provision of these Terms is held to be invalid, illegal, or unenforceable by a court of competent jurisdiction, such provision shall be modified to the minimum extent necessary to make it valid and enforceable, or if modification is not possible, severed from these Terms. The remaining provisions shall continue in full force and effect.</p>
+        <h2>7. User Responsibilities</h2>
+        <p>You are solely responsible for:</p>
+        <ul>
+            <li>Securing your device, wallet, seed phrase, and session keys.</li>
+            <li>Securing any CEX API keys you add, creating those keys with withdrawal disabled, and deleting or rotating those keys if your device is lost or compromised.</li>
+            <li>Complying with all laws and regulations applicable to you (including securities, AML, KYC, tax, and sanctions laws).</li>
+            <li>Setting risk caps conservative enough for your financial tolerance.</li>
+            <li>Monitoring the App while LIVE mode is enabled.</li>
+            <li>Tax reporting in your jurisdiction(s).</li>
+            <li>Any gains, losses, fees, taxes, or other consequences arising from your use of the App.</li>
+        </ul>
 
-        <h2>15. Entire Agreement</h2>
-        <p>These Terms, together with the Privacy Policy and Risk Disclosure, constitute the entire agreement between you and StealthLynk LLC regarding the App and supersede all prior or contemporaneous agreements, understandings, or representations, whether oral or written.</p>
+        <h2>8. Prohibited Uses</h2>
+        <p>You agree <strong>NOT</strong> to use PaceSeeker to:</p>
+        <ul>
+            <li>Launder money or conceal the origin of funds</li>
+            <li>Facilitate terrorist financing or sanctions evasion</li>
+            <li>Manipulate markets, spoof orders, or engage in wash trading</li>
+            <li>Circumvent exchange terms of service or geographic restrictions</li>
+            <li>Harass, abuse, or interfere with other users or systems</li>
+            <li>Reverse engineer, decompile, or create derivative works from the Software</li>
+            <li>Distribute malware, exploits, or security vulnerabilities</li>
+            <li>Operate the software in a jurisdiction where doing so is illegal</li>
+        </ul>
 
-        <h2>16. Electronic Consent</h2>
-        <p>By using the App, you consent to receive electronic communications from StealthLynk LLC. You agree that all agreements, notices, disclosures, and other communications provided electronically satisfy any legal requirement that such communications be in writing.</p>
+        <h2>9. LIVE Mode</h2>
+        <p>LIVE mode is opt-in. By enabling it, you acknowledge:</p>
+        <ul>
+            <li>DEX LIVE may transfer real USDC from your session wallet by the bot.</li>
+            <li>CEX LIVE may place real exchange market orders using API keys you provide.</li>
+            <li>Transactions and exchange orders are irreversible once submitted.</li>
+            <li>Network fees, Jito tips, exchange fees, and slippage costs may be paid from your wallet or exchange account.</li>
+            <li>CEX LIVE can leave you unhedged if only one leg of a two-exchange arbitrage fills.</li>
+            <li>You may lose some or all of the funds exposed to LIVE mode.</li>
+        </ul>
 
-        <h2>17. Assignment</h2>
-        <p>You may not assign or transfer these Terms or any rights or obligations hereunder without the prior written consent of StealthLynk LLC. StealthLynk LLC may assign these Terms without restriction.</p>
+        <h2>10. Fees &amp; Payments</h2>
 
-        <h2>18. Changes to Terms</h2>
-        <p>We may update these terms at any time. Material changes will be noted in the App&rsquo;s release notes. Continued use after changes constitutes acceptance. The latest version is always available at this URL.</p>
+        <h3>10.1 Performance Fee (DEX)</h3>
+        <p>For profitable DEX trades, PaceSeeker charges a <strong>10% performance fee</strong> on realized profit only. This fee:</p>
+        <ul>
+            <li>Is deducted from the winning trade's profit, <strong>never from your principal</strong></li>
+            <li>Is <strong>NOT</strong> reduced by losing trades</li>
+            <li>Is collected via an on-chain instruction included in the transaction you sign</li>
+            <li>Is transparent: you see the exact fee before confirming any transaction</li>
+        </ul>
 
-        <h2>19. Contact</h2>
-        <p>For questions about these terms, contact <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
-        <p>StealthLynk LLC<br>Wyoming, USA</p>
+        <h3>10.2 Subscription Fee (CEX Live Trading)</h3>
+        <p>CEX live trading requires an active subscription (monthly or yearly). Payment is made on-chain in SOL, USDT, or SKR. Subscription fees are non-refundable except where required by law.</p>
 
-        <p class="updated">Last updated: June 2026</p>
+        <h3>10.3 Network Fees</h3>
+        <p>You are responsible for all blockchain gas fees (SOL), exchange withdrawal/deposit fees, and any other third-party charges. These are separate from PaceSeeker fees.</p>
+
+        <h3>10.4 No Hidden Fees</h3>
+        <p>All fees are disclosed before any transaction requiring your signature. We do not charge account maintenance, inactivity, withdrawal, or deposit fees.</p>
+
+        <h2>11. Intellectual Property</h2>
+        <p>All content, code, design, and branding of PaceSeeker are the property of StealthLynk. You are granted a limited, non-exclusive, non-transferable license to use the Software for personal trading purposes only. You may not copy, modify, distribute, sell, or lease the Software; remove copyright notices or proprietary markings; or use our trademarks without written permission.</p>
+        <p>Third-party libraries used by PaceSeeker remain the property of their respective owners and are used under their respective licenses.</p>
+
+        <h2>12. No Warranty</h2>
+        <p>THE APP IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, ACCURACY OF RESULTS, UNINTERRUPTED OPERATION, OR FREEDOM FROM BUGS.</p>
+
+        <h2>13. Limitation of Liability</h2>
+        <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, STEALTHLYNK, ITS OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, AND AFFILIATES SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF FUNDS, LOSS OF PROFIT, LOSS OF DATA, OR LOSS OF OPPORTUNITY, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+        <p><strong>OUR TOTAL CUMULATIVE LIABILITY IS CAPPED AT THE GREATER OF:</strong></p>
+        <ul>
+            <li>The total fees you paid to us in the 12 months preceding the claim</li>
+            <li>USD $100</li>
+        </ul>
+        <p>This limitation applies regardless of the theory of liability (contract, tort, negligence, strict liability, or otherwise).</p>
+
+        <h2>14. Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless StealthLynk and its affiliates from any claims, damages, losses, liabilities, costs, and expenses (including reasonable attorneys' fees) arising from:</p>
+        <ul>
+            <li>Your use of the Software</li>
+            <li>Your violation of these Terms</li>
+            <li>Your violation of any third-party rights (including exchange ToS)</li>
+            <li>Your trading activity or tax obligations</li>
+            <li>Any regulatory action or investigation related to your use of the Software</li>
+        </ul>
+
+        <h2>15. Termination</h2>
+        <p>You may stop using the App at any time by revoking your session key and uninstalling. We reserve the right to suspend or terminate your access, without notice, if we:</p>
+        <ul>
+            <li>Determine you are accessing from a prohibited jurisdiction</li>
+            <li>Detect VPN or circumvention tool usage</li>
+            <li>Suspect fraud, money laundering, sanctions violations, or illegal activity</li>
+            <li>Receive valid legal process requiring restriction</li>
+            <li>Believe continued access poses legal or reputational risk</li>
+        </ul>
+        <p>Termination does not absolve you of obligations incurred prior to termination.</p>
+
+        <h2>16. Modifications</h2>
+        <p>We may update these Terms at any time. Material changes will be indicated by an updated "Last updated" date at the top. Your continued use after changes constitutes acceptance. If you do not agree to updated Terms, you must cease using the Software immediately.</p>
+
+        <h2>17. Governing Law &amp; Dispute Resolution</h2>
+
+        <h3>17.1 Governing Law</h3>
+        <p>These Terms shall be governed by and construed in accordance with the laws of the <strong>Republic of Seychelles</strong>, without regard to conflict of law principles.</p>
+
+        <h3>17.2 Dispute Resolution</h3>
+        <p>Any dispute arising from these Terms shall first be addressed through good-faith negotiation. If unresolved within 60 days, disputes shall be resolved through <strong>binding arbitration</strong> administered by the International Chamber of Commerce (ICC) under its Arbitration Rules, seated in <strong>Singapore</strong>, with proceedings conducted in English.</p>
+
+        <h3>17.3 Class Action Waiver</h3>
+        <p><strong>YOU AGREE TO RESOLVE DISPUTES ON AN INDIVIDUAL BASIS AND WAIVE ANY RIGHT TO PARTICIPATE IN CLASS ACTIONS, CLASS ARBITRATIONS, OR REPRESENTATIVE ACTIONS.</strong></p>
+
+        <h3>17.4 Jurisdiction</h3>
+        <p>You irrevocably submit to the exclusive jurisdiction of the courts of Seychelles for the enforcement of arbitration awards.</p>
+
+        <h2>18. Severability</h2>
+        <p>If any provision of these Terms is held invalid, illegal, or unenforceable by a court of competent jurisdiction, such provision shall be modified to the minimum extent necessary to make it enforceable, and the remaining provisions shall continue in full force and effect.</p>
+
+        <h2>19. Entire Agreement</h2>
+        <p>These Terms, together with our Privacy Policy and Risk Disclosure, constitute the entire agreement between you and StealthLynk regarding the Software. No waiver of any provision shall be effective unless in writing signed by an authorized representative.</p>
+
+        <h2>20. Contact</h2>
+        <p>For legal inquiries, compliance questions, or termination requests:</p>
+        <p><a href="mailto:legal@stealthlynk.com">legal@stealthlynk.com</a></p>
+        <p>Response time: 5-7 business days.</p>
+
+        <p class="updated">BY TAPPING "I AGREE" OR BY CONTINUING TO USE PACESEEKER, YOU ACKNOWLEDGE THAT YOU HAVE READ, UNDERSTOOD, AND AGREE TO BE BOUND BY THESE TERMS OF SERVICE.</p>
+        <p class="updated">Last updated: June 10, 2026</p>
     </div>
 </body>
 </html>
