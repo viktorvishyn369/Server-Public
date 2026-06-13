@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PaceSeeker — Risk Disclosure</title>
+    <title>PaceSeeker — Important Information</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -15,7 +15,7 @@
             padding: 60px 24px;
         }
         .container { max-width: 720px; margin: 0 auto; }
-        h1 { color: #EF4444; font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+        h1 { color: #C9A84C; font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
         .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 40px; }
         h2 { color: #fff; font-size: 1.2rem; font-weight: 700; margin-top: 32px; margin-bottom: 12px; }
         p { color: #bbb; margin-bottom: 14px; font-size: 0.95rem; }
@@ -25,71 +25,64 @@
         a:hover { text-decoration: underline; }
         .updated { color: #666; font-size: 0.82rem; margin-top: 40px; border-top: 1px solid #2a2a2a; padding-top: 16px; }
         strong { color: #fff; font-weight: 600; }
-        .warning { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 16px; margin-bottom: 24px; color: #fca5a5; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Risk Disclosure</h1>
+        <h1>Important Information</h1>
         <p class="subtitle">PaceSeeker &mdash; Experimental Alpha Software</p>
 
-        <div class="warning">
-            <strong>Warning:</strong> Automated trading can result in the complete loss of funds. Only use LIVE mode with money you can afford to lose entirely. Past simulation results do not guarantee future performance.
-        </div>
+        <p>PaceSeeker is experimental alpha software. Automated trading carries risk of loss. SIM mode is available to observe behavior without risking real funds.</p>
 
-        <h2>1. Software Risk</h2>
-        <p>PaceSeeker is <strong>alpha-quality, experimental software</strong>. Bugs, errors, and unexpected behavior may occur at any time. There is no warranty, no insurance, and no guarantee of correctness. You assume all risks related to software defects.</p>
+        <h2>1. Software</h2>
+        <p>PaceSeeker is alpha-quality, experimental software. Bugs and unexpected behavior may occur. There is no warranty or guarantee of correctness. SIM mode is available to test functionality without using real funds.</p>
 
-        <h2>2. Market Risk</h2>
+        <h2>2. Market Conditions</h2>
         <ul>
-            <li><strong>Slippage</strong>: Actual execution prices may differ from quoted prices, especially for low-liquidity tokens or during volatile periods.</li>
-            <li><strong>Liquidity shocks</strong>: Pools may be drained, rug-pulled, or frozen while your trade is in flight.</li>
-            <li><strong>MEV</strong>: Your transactions may be frontrun, sandwiched, or otherwise exploited by MEV searchers, even with Jito bundles.</li>
-            <li><strong>RPC lag</strong>: Stale blockhashes, dropped transactions, or slow confirmation may cause unexpected outcomes.</li>
+            <li><strong>Slippage</strong>: Actual execution prices may differ from quoted prices, especially for low-liquidity tokens or during volatile periods. PaceSeeker lets you set a slippage limit.</li>
+            <li><strong>Liquidity</strong>: Thin pools can move against you between quote and execution.</li>
+            <li><strong>MEV</strong>: All transactions on Solana are visible in the mempool before confirmation. This is how public blockchains work. PaceSeeker uses Jito bundles and slippage guards as mitigations.</li>
+            <li><strong>Network</strong>: Stale blockhashes, dropped transactions, or slow confirmation may affect outcomes.</li>
         </ul>
 
-        <h2>3. Exchange Risk (CEX Mode)</h2>
+        <h2>3. CEX Trading</h2>
         <ul>
-            <li>CEX API keys with <strong>Trade</strong> permission can place real market orders. If one leg of an arbitrage fails, your position becomes <strong>unhedged</strong> and the bot will halt.</li>
+            <li>CEX API keys with Trade permission can place real market orders.</li>
+            <li>If one leg of an arbitrage fails, your position becomes unhedged and PaceSeeker halts automatically.</li>
             <li>Exchanges may rate-limit, reject orders, or experience outages mid-trade.</li>
-            <li>API keys with <strong>Withdraw</strong> permission expose you to drain-on-compromise. PaceSeeker recommends Trade-only keys.</li>
+            <li>API keys with Withdraw permission can move funds. Use Trade-only keys if you do not need auto-rebalance.</li>
         </ul>
-        <p><strong>API Key Safety During Trading:</strong> During active trading sessions, your API keys remain in device secure storage and are loaded into memory only for the duration of the signed API call. They are transmitted <em>nowhere</em> other than the exchange that issued them (via HTTPS/TLS). PaceSeeker has no backend server, no analytics, and no telemetry — there is no mechanism by which keys could be exfiltrated. Even if network traffic is intercepted, only HMAC signatures (not your secret) are visible.</p>
+        <p>API keys remain in device secure storage and are loaded into memory only for the duration of the signed API call. They are transmitted only to the exchange that issued them (via HTTPS/TLS). PaceSeeker has no backend server and no telemetry. Even if network traffic is intercepted, only HMAC signatures are visible.</p>
 
-        <h2>4. Smart Contract Risk</h2>
-        <p>All DEX trades interact with third-party smart contracts (Jupiter, Raydium, Orca, Meteora, etc.). These contracts may contain bugs or be upgraded in ways that break compatibility. PaceSeeker does not audit these contracts.</p>
+        <h2>4. Smart Contracts</h2>
+        <p>DEX trades route through third-party smart contracts (Jupiter, Raydium, Orca, Meteora, etc.). PaceSeeker does not audit these contracts. Jupiter is the industry-standard router used by millions of wallets.</p>
 
-        <h2>5. Session Wallet Risk</h2>
-        <p>The session wallet is a temporary keypair stored on your device. If your device is compromised, an attacker may drain the session wallet balance. The session expires after 24 hours and should hold only the amount you are willing to trade in that window.</p>
+        <h2>5. Session Wallet</h2>
+        <p>The session wallet is a temporary keypair stored locally on your device in encrypted secure storage. It auto-expires after 24 hours of inactivity. Keep only the amount you intend to trade in the session wallet.</p>
 
-        <h2>6. Regulatory Risk</h2>
-        <p>Cryptocurrency regulation varies by jurisdiction. Automated trading may be subject to licensing, tax reporting, or other legal requirements in your location. It is your responsibility to comply with all applicable laws.</p>
+        <h2>6. Device Security</h2>
+        <p>PaceSeeker implements security measures: biometric gatekeeping, screenshot blocking, root detection, and a background security monitor. You are responsible for maintaining your device&rsquo;s physical and digital security: use a lock screen PIN/biometric, do not install apps from unknown sources, and keep your operating system updated.</p>
 
-        <h2>7. Device Compromise Risk</h2>
-        <p>If your device is lost, stolen, rooted, jailbroken, or infected with malware, an attacker may gain access to your session wallet, API keys, or wallet credentials. PaceSeeker implements security measures (biometric protection, screenshot blocking, security monitor) but cannot prevent attacks that exploit vulnerabilities in your device&rsquo;s operating system, other installed apps, or physical access by an adversary. You are solely responsible for maintaining the physical and digital security of your device.</p>
-
-        <h2>8. Third-Party Dependency Risk</h2>
-        <p>PaceSeeker relies on third-party services and infrastructure that we do not control:</p>
+        <h2>7. Third-Party Dependencies</h2>
+        <p>PaceSeeker relies on third-party infrastructure that StealthLynk does not control:</p>
         <ul>
-            <li><strong>Solana network:</strong> Congestion, validator issues, or protocol upgrades may delay or fail transactions.</li>
-            <li><strong>Jupiter Aggregator:</strong> Routing algorithm changes or API downtime may affect quote accuracy and execution.</li>
-            <li><strong>Jito Block Engine:</strong> Bundle rejection, tip estimation errors, or engine downtime may prevent transaction inclusion.</li>
-            <li><strong>Centralized exchanges:</strong> API outages, rate limits, maintenance windows, or policy changes may halt trading or cause missed executions.</li>
-            <li><strong>RPC providers:</strong> Stale data, dropped connections, or provider downtime may cause the bot to act on outdated information.</li>
+            <li><strong>Solana network:</strong> Congestion, validator issues, or protocol upgrades may affect transaction confirmation.</li>
+            <li><strong>Jupiter Aggregator:</strong> Routing algorithm changes or API downtime may affect quote accuracy.</li>
+            <li><strong>Jito Block Engine:</strong> Bundle rejection or engine downtime may prevent transaction inclusion.</li>
+            <li><strong>Centralized exchanges:</strong> API outages, rate limits, or policy changes may affect trading.</li>
+            <li><strong>RPC providers:</strong> Stale data or provider downtime may affect the bot&rsquo;s view of the chain.</li>
         </ul>
-        <p>We do not operate these services and bear no liability for their failures or changes.</p>
+        <p>StealthLynk does not operate these services and is not liable for their failures or changes.</p>
 
-        <h2>9. Force Majeure</h2>
-        <p>StealthLynk LLC shall not be liable for any failure or delay in performing its obligations where such failure or delay results from causes beyond its reasonable control, including but not limited to: acts of God, war, terrorism, riots, embargoes, acts of civil or military authorities, fire, floods, accidents, strikes, shortages of transportation, facilities, fuel, energy, labor, or materials, exchange outages, blockchain network failures, internet service provider failures, cyberattacks, or governmental actions.</p>
+        <h2>8. Taxes and Regulations</h2>
+        <p>Cryptocurrency trading may trigger tax obligations, licensing requirements, or reporting obligations in your jurisdiction. You are responsible for understanding and complying with all applicable laws. StealthLynk does not provide tax advice and does not report your trading activity to any tax authority.</p>
 
-        <h2>10. Tax and Regulatory Risk</h2>
-        <p>Cryptocurrency trading may trigger tax obligations, licensing requirements, or reporting obligations in your jurisdiction. You are solely responsible for understanding and complying with all applicable tax, securities, and financial regulations. StealthLynk LLC does not provide tax advice and does not report your trading activity to any tax authority.</p>
+        <h2>9. No Control</h2>
+        <p>StealthLynk has no technical ability to terminate, disable, or revoke your access to PaceSeeker. The app runs entirely on your device with no remote server, licensing mechanism, or kill switch. Once installed, PaceSeeker continues to function independently of StealthLynk.</p>
+        <p>StealthLynk cannot reverse transactions, recover lost funds, or provide compensation for trading losses. All blockchain trades are final by design. StealthLynk is a software developer, not a broker, investment adviser, or financial institution.</p>
 
-        <h2>11. No Recourse</h2>
-        <p>StealthLynk LLC is not a broker, investment adviser, or financial institution. We cannot reverse transactions, recover lost funds, or provide compensation for trading losses. All trades are final and non-reversible by design. There is no insurance, no guarantee, and no recourse for losses.</p>
-
-        <h2>12. Educational Content Only</h2>
-        <p>Any examples, calculations, preset recommendations, trade size guidance, or explanatory content presented within the App or its documentation are provided for <strong>educational and informational purposes only</strong>. They do not constitute investment advice, trading recommendations, or personalized financial guidance. We are not financial advisors, brokers, or registered investment professionals. All trading decisions are yours alone.</p>
+        <h2>10. Informational Content</h2>
+        <p>All examples, calculations, preset values, and explanatory content are provided for educational and informational purposes only. They do not constitute investment advice, trading recommendations, or personalized financial guidance. StealthLynk is a software developer, not a financial advisor, broker, or investment professional. All trading decisions are yours alone.</p>
 
         <p class="updated">Last updated: June 2026</p>
     </div>
