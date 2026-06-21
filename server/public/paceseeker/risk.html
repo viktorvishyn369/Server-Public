@@ -52,7 +52,7 @@
             <li>Exchanges may rate-limit, reject orders, or experience outages mid-trade.</li>
             <li>API keys with Withdraw permission can move funds. Use Trade-only keys if you do not need auto-rebalance.</li>
         </ul>
-        <p>API keys remain in device secure storage and are loaded into memory only for the duration of the signed API call. They are transmitted only to the exchange that issued them (via HTTPS/TLS). PaceSeeker has no backend server and no telemetry. Even if network traffic is intercepted, only HMAC signatures are visible.</p>
+        <p>API keys remain in device secure storage and are loaded into memory only for the duration of the signed API call. They are transmitted only to the exchange that issued them (via HTTPS/TLS). PaceSeeker has no telemetry and does not track your trading activity. The only server interaction is a lightweight endpoint that receives a SHA-256 hash of an invite code when you redeem it to unlock LIVE mode — used solely for counting redemptions. Even if network traffic is intercepted, only HMAC signatures are visible.</p>
 
         <h2>4. Smart Contracts</h2>
         <p>DEX trades route through third-party smart contracts (Jupiter, Raydium, Orca, Meteora, etc.). PaceSeeker does not audit these contracts. Jupiter is the industry-standard router used by millions of wallets.</p>
@@ -78,7 +78,7 @@
         <p>Cryptocurrency trading may trigger tax obligations, licensing requirements, or reporting obligations in your jurisdiction. You are responsible for understanding and complying with all applicable laws. StealthLynk does not provide tax advice and does not report your trading activity to any tax authority.</p>
 
         <h2>9. No Control</h2>
-        <p>StealthLynk has no technical ability to terminate, disable, or revoke your access to PaceSeeker. The app runs entirely on your device with no remote server, licensing mechanism, or kill switch. Once installed, PaceSeeker continues to function independently of StealthLynk.</p>
+        <p>StealthLynk has no technical ability to terminate, disable, or revoke your access to PaceSeeker. The app runs entirely on your device with no licensing mechanism or kill switch. Once installed, PaceSeeker continues to function independently of StealthLynk.</p>
         <p>StealthLynk cannot reverse transactions, recover lost funds, or provide compensation for trading losses. All blockchain trades are final by design. StealthLynk is a software developer, not a broker, investment adviser, or financial institution.</p>
 
         <h2>10. Informational Content</h2>
