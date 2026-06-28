@@ -29,78 +29,70 @@
 </head>
 <body>
     <div class="container">
-        <h1>PaceSeeker Privacy Policy</h1>
-        <p class="subtitle">StealthLynk &mdash; Your data stays on your device</p>
+        <h1>PaceSeeker Privacy</h1>
+        <p class="subtitle">Your data stays on your device</p>
 
-        <h2>1. Overview</h2>
-        <p>PaceSeeker is designed with a <strong>privacy-first, self-custodial</strong> architecture. StealthLynk does not centrally collect, store, or process your personal data. All sensitive information remains on your device.</p>
+        <h2>Overview</h2>
+        <p>PaceSeeker is built with a <strong>privacy-first, self-custodial</strong> architecture. StealthLynk does not centrally collect, store, or process your personal data. All sensitive information remains on your device.</p>
 
-        <h2>2. Information StealthLynk Does NOT Collect</h2>
+        <h2>What StealthLynk Does NOT Collect</h2>
         <ul>
             <li>Your Solana private keys or seed phrases</li>
-            <li>Your wallet addresses (unless you voluntarily connect a wallet)</li>
-            <li>Your trading history or balances</li>
+            <li>Your wallet addresses or balances</li>
+            <li>Your trading history</li>
             <li>Your CEX API secrets (stored locally, encrypted)</li>
-            <li>Your personal identity documents</li>
+            <li>Your identity documents</li>
             <li>Photos, contacts, or device media</li>
         </ul>
 
-        <h2>3. Information Stored on Your Device Only</h2>
-        <p>All sensitive data is stored <strong>locally on your device</strong> using platform secure storage (iOS Keychain / Android Keystore via Expo SecureStore):</p>
+        <h2>What Is Stored on Your Device Only</h2>
+        <p>All sensitive data is stored <strong>locally on your device</strong> using Android Keystore or iOS Keychain via Expo SecureStore:</p>
         <ul>
-            <li>Session keypairs (encrypted, 24-hour expiry)</li>
+            <li>Session keypairs (encrypted; generated sessions expire after 24 hours, imported and hardware wallet sessions persist until revoked)</li>
             <li>CEX API keys (if you choose to enter them)</li>
             <li>App settings and trading preferences</li>
             <li>Local trade history (CSV exportable by you)</li>
         </ul>
         <p>StealthLynk cannot access this data. If you uninstall the App, this data is permanently deleted.</p>
 
-        <h2>4. Blockchain Interactions</h2>
-        <p>When you enable LIVE mode, transactions are submitted directly to public Solana RPC nodes (e.g., <code>solana-rpc.publicnode.com</code>, <code>api.mainnet-beta.solana.com</code>). These interactions are pseudonymous but publicly visible on the blockchain, as is true for all Solana transactions. StealthLynk does not operate these RPC nodes and has no special visibility into your on-chain activity.</p>
+        <h2>Blockchain Interactions</h2>
+        <p>When you enable LIVE mode, transactions are submitted directly to public Solana RPC nodes. These interactions are pseudonymous but publicly visible on the blockchain, as is true for all Solana transactions. StealthLynk does not operate these RPC nodes and has no special visibility into your on-chain activity.</p>
 
-        <h2>5. CEX API Key Handling</h2>
-        <p>If you enter CEX API keys for live trading, the following applies:</p>
+        <h2>CEX API Key Handling</h2>
+        <p>If you enter CEX API keys for live trading:</p>
         <ul>
-            <li>API keys and secrets are stored <strong>exclusively in device secure storage</strong> (iOS Keychain / Android Keystore with <code>WHEN_UNLOCKED_THIS_DEVICE_ONLY</code> access level). They are never synced, backed up, or transmitted to StealthLynk.</li>
-            <li>The App communicates <strong>only with official exchange API endpoints</strong> (e.g., api.bybit.com, www.okx.com, api.mexc.com). There is no intermediary proxy or StealthLynk relay server.</li>
-            <li>Your API <strong>secret is never sent over the network</strong> &mdash; not even to the exchange. The App uses industry-standard HMAC-SHA256 signing: it computes a one-way hash of each request locally using your secret, and transmits only the resulting signature. The exchange verifies it against their stored copy.</li>
-            <li>API keys are used <strong>solely for balance reads and market order placement</strong>. The App never initiates withdrawals, internal transfers, or account changes unless you explicitly grant Withdraw permission for auto-rebalance.</li>
-            <li>Keys are <strong>immediately deleted from secure storage</strong> when you tap &ldquo;Remove&rdquo; in the App. There is no cache, log, or residual copy.</li>
+            <li>API keys and secrets are stored <strong>exclusively in device secure storage</strong> (Android Keystore or iOS Keychain via Expo SecureStore). They are never synced, backed up, or transmitted to StealthLynk.</li>
+            <li>The App communicates <strong>only with official exchange API endpoints</strong>. There is no intermediary proxy or StealthLynk relay server.</li>
+            <li>Your API <strong>secret is never sent over the network</strong>. The App uses HMAC-SHA256 signing locally and transmits only the resulting signature.</li>
+            <li>API keys are used <strong>only for balance reads and market order placement</strong>. The App never initiates withdrawals unless you explicitly grant Withdraw permission for auto-rebalance.</li>
+            <li>Keys are <strong>immediately deleted from secure storage</strong> when you tap Remove in the App.</li>
         </ul>
 
-        <h2>6. Invite Code Redemption</h2>
-        <p>When you successfully unlock LIVE mode using an invite code, a <strong>SHA-256 hash</strong> of the code is sent to a lightweight PaceSeeker endpoint. This is used solely to count how many invite codes have been redeemed. The raw code itself is <strong>not</strong> stored server-side. No wallet addresses, trading history, or personal data are transmitted.</p>
-
-        <h2>7. Analytics and Telemetry</h2>
-        <p>PaceSeeker does <strong>not</strong> include third-party analytics, crash reporters, or advertising SDKs. Error logs, if any, remain on your device unless you manually share them with StealthLynk for support.</p>
-
-        <h2>8. External Services</h2>
-        <p>The App queries the following external services solely for market data and trade execution:</p>
+        <h2>Server Interactions</h2>
+        <p>The App contacts PaceSeeker infrastructure for two purposes:</p>
         <ul>
-            <li><strong>Jupiter Aggregator API</strong> &mdash; for DEX swap quotes and routing</li>
-            <li><strong>Jito Block Engine</strong> &mdash; for MEV-protected bundle submission</li>
-            <li><strong>Public CEX APIs</strong> &mdash; for price feeds (no authentication required)</li>
-            <li><strong>Solana RPC endpoints</strong> &mdash; for on-chain state and transaction submission</li>
+            <li><strong>Remote configuration</strong> — fetched on startup from a PaceSeeker endpoint. Contains RPC URLs, Jupiter API keys, feature flags, and update checks. The response is verified via Ed25519 signature or SHA-256 hash before use.</li>
+            <li><strong>Invite code redemption</strong> — when you unlock LIVE mode, the invite code is sent to a lightweight PaceSeeker endpoint to count redemptions. No wallet addresses, trading history, or personal data are transmitted.</li>
+        </ul>
+
+        <h2>Analytics and Telemetry</h2>
+        <p>PaceSeeker does <strong>not</strong> include third-party analytics, crash reporters, or advertising SDKs. Error logs remain on your device unless you manually share them with StealthLynk for support.</p>
+
+        <h2>External Services</h2>
+        <p>The App queries the following external services for market data and trade execution:</p>
+        <ul>
+            <li><strong>Jupiter Aggregator API</strong> — for DEX swap quotes and routing</li>
+            <li><strong>Jito Block Engine</strong> — for bundle submission</li>
+            <li><strong>Public CEX APIs</strong> — for price feeds (no authentication required)</li>
+            <li><strong>Solana RPC endpoints</strong> — for on-chain state and transaction submission</li>
         </ul>
         <p>These services may log IP addresses and request data according to their own privacy policies. StealthLynk does not control their data practices.</p>
 
-        <h2>9. Data Retention and Deletion</h2>
-        <p>StealthLynk does not collect personal data centrally. Invite code hashes are the only data stored server-side; they contain no personally identifying information and cannot be reversed to reveal the original code. To erase all PaceSeeker data from your device, simply uninstall the App and, if applicable, revoke your session wallet to reclaim any rent SOL.</p>
+        <h2>Data Retention and Deletion</h2>
+        <p>StealthLynk does not centrally collect your private keys, wallet addresses, balances, or trading history. Invite code redemption records and remote config access logs are the only server-side data; they contain no personally identifying information. To erase all PaceSeeker data from your device, simply uninstall the App and, if applicable, revoke your session wallet to reclaim any rent SOL.</p>
 
-        <h2>10. Your Privacy Rights</h2>
-        <p>Even though PaceSeeker does not centrally collect personal data, you retain privacy rights under applicable law. Because all sensitive data is stored locally on your device, StealthLynk does not have access to it and cannot act on requests to access, delete, or modify your data centrally. You can view and manage your locally stored data within the App settings, and you can delete all data by uninstalling the App.</p>
-        <p>StealthLynk does not sell, rent, or share your personal information with third parties. StealthLynk does not use your data for targeted advertising.</p>
-
-        <h2>11. Children</h2>
-        <p>PaceSeeker is not intended for users under 18. StealthLynk does not knowingly collect data from children. If you believe data from a child has been inadvertently collected, contact support@stealthlynk.io.</p>
-
-        <h2>12. Changes to This Policy</h2>
-        <p>This Privacy Policy may be updated as new versions of the app are released. The current version is always available at this URL.</p>
-
-        <h2>13. Contact</h2>
+        <h2>Contact</h2>
         <p>For privacy questions, contact <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
-
-        <p class="updated">Last updated: June 2026</p>
     </div>
 </body>
 </html>

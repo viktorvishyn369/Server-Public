@@ -30,61 +30,56 @@
 <body>
     <div class="container">
         <h1>Important Information</h1>
-        <p class="subtitle">PaceSeeker &mdash; Experimental Alpha Software</p>
+        <p class="subtitle">PaceSeeker — Self-Custody Trading Tool</p>
 
-        <p>PaceSeeker is experimental alpha software. Automated trading carries risk of loss. SIM mode is available to observe behavior without risking real funds.</p>
+        <p>PaceSeeker is automated trading software built with multiple layers of protection. SIM mode is available to observe behavior without using real funds.</p>
 
         <h2>1. Software</h2>
-        <p>PaceSeeker is alpha-quality, experimental software. Bugs and unexpected behavior may occur. There is no warranty or guarantee of correctness. SIM mode is available to test functionality without using real funds.</p>
+        <p>PaceSeeker is actively developed software. Like any software that interacts with live markets, behavior may vary. SIM mode is available to test functionality without using real funds.</p>
 
         <h2>2. Market Conditions</h2>
         <ul>
             <li><strong>Slippage</strong>: Actual execution prices may differ from quoted prices, especially for low-liquidity tokens or during volatile periods. PaceSeeker lets you set a slippage limit.</li>
-            <li><strong>Liquidity</strong>: Thin pools can move against you between quote and execution.</li>
-            <li><strong>MEV</strong>: All transactions on Solana are visible in the mempool before confirmation. This is how public blockchains work. PaceSeeker uses Jito bundles and slippage guards as mitigations.</li>
+            <li><strong>Liquidity</strong>: Thin pools can move between quote and execution.</li>
             <li><strong>Network</strong>: Stale blockhashes, dropped transactions, or slow confirmation may affect outcomes.</li>
         </ul>
 
         <h2>3. CEX Trading</h2>
         <ul>
             <li>CEX API keys with Trade permission can place real market orders.</li>
-            <li>If one leg of an arbitrage fails, your position becomes unhedged and PaceSeeker halts automatically.</li>
+            <li>If one leg of an arbitrage fails, your position becomes unhedged and PaceSeeker pauses automatically.</li>
             <li>Exchanges may rate-limit, reject orders, or experience outages mid-trade.</li>
             <li>API keys with Withdraw permission can move funds. Use Trade-only keys if you do not need auto-rebalance.</li>
         </ul>
-        <p>API keys remain in device secure storage and are loaded into memory only for the duration of the signed API call. They are transmitted only to the exchange that issued them (via HTTPS/TLS). PaceSeeker has no telemetry and does not track your trading activity. The only server interaction is a lightweight endpoint that receives a SHA-256 hash of an invite code when you redeem it to unlock LIVE mode — used solely for counting redemptions. Even if network traffic is intercepted, only HMAC signatures are visible.</p>
+        <p>API keys remain in device secure storage and are loaded into memory only for the duration of the signed API call. They are transmitted only to the exchange that issued them (via HTTPS/TLS). PaceSeeker has no telemetry and does not track your trading activity. Server interactions are limited to: (1) remote configuration fetched on startup (RPC URLs, Jupiter keys, feature flags — verified via Ed25519 signature or SHA-256 hash), and (2) a lightweight endpoint that receives the invite code when you redeem it to unlock LIVE mode — used for counting redemptions.</p>
 
-        <h2>4. Smart Contracts</h2>
-        <p>DEX trades route through third-party smart contracts (Jupiter, Raydium, Orca, Meteora, etc.). PaceSeeker does not audit these contracts. Jupiter is the industry-standard router used by millions of wallets.</p>
+        <h2>4. Smart Contracts and Token Safety</h2>
+        <p>DEX trades route through industry-standard smart contracts (Jupiter, Raydium, Orca, Meteora, etc.) that are widely used. PaceSeeker validates every transaction before signing through its transaction safety layer, which checks instructions for unexpected operations.</p>
+        <p>The default token list is sourced from Jupiter's verified directory and filtered by liquidity and trading activity. Tokens you add manually via Token Scanner are your explicit choice. Always verify the mint address and liquidity of any token you add.</p>
 
         <h2>5. Session Wallet</h2>
-        <p>The session wallet is a temporary keypair stored locally on your device in encrypted secure storage. It auto-expires after 24 hours of inactivity. Keep only the amount you intend to trade in the session wallet.</p>
+        <p>The session wallet is a keypair stored locally on your device in encrypted secure storage. Generated sessions expire after 24 hours from creation; imported private keys and hardware wallet sessions persist until you revoke them.</p>
 
         <h2>6. Device Security</h2>
-        <p>PaceSeeker implements security measures: biometric gatekeeping, screenshot blocking, root detection, and a background security monitor. You are responsible for maintaining your device&rsquo;s physical and digital security: use a lock screen PIN/biometric, do not install apps from unknown sources, and keep your operating system updated.</p>
+        <p>PaceSeeker implements security measures: biometric gatekeeping, screenshot blocking, root detection, and a background security monitor. Keep your device secure with a lock screen PIN or biometric, and keep your operating system updated.</p>
 
         <h2>7. Third-Party Dependencies</h2>
-        <p>PaceSeeker relies on third-party infrastructure that StealthLynk does not control:</p>
+        <p>PaceSeeker relies on third-party infrastructure:</p>
         <ul>
             <li><strong>Solana network:</strong> Congestion, validator issues, or protocol upgrades may affect transaction confirmation.</li>
-            <li><strong>Jupiter Aggregator:</strong> Routing algorithm changes or API downtime may affect quote accuracy.</li>
+            <li><strong>Jupiter Aggregator:</strong> Routing changes or API downtime may affect quote accuracy.</li>
             <li><strong>Jito Block Engine:</strong> Bundle rejection or engine downtime may prevent transaction inclusion.</li>
             <li><strong>Centralized exchanges:</strong> API outages, rate limits, or policy changes may affect trading.</li>
-            <li><strong>RPC providers:</strong> Stale data or provider downtime may affect the bot&rsquo;s view of the chain.</li>
+            <li><strong>RPC providers:</strong> Stale data or provider downtime may affect the bot's view of the chain.</li>
         </ul>
-        <p>StealthLynk does not operate these services and is not liable for their failures or changes.</p>
+        <p>StealthLynk does not operate these services.</p>
 
-        <h2>8. Taxes and Regulations</h2>
-        <p>Cryptocurrency trading may trigger tax obligations, licensing requirements, or reporting obligations in your jurisdiction. You are responsible for understanding and complying with all applicable laws. StealthLynk does not provide tax advice and does not report your trading activity to any tax authority.</p>
+        <h2>8. No Control</h2>
+        <p>StealthLynk has no technical ability to shut down, disable, or revoke your access to PaceSeeker. The app runs entirely on your device with no licensing mechanism or kill switch. Once installed, PaceSeeker continues to function independently of StealthLynk.</p>
+        <p>StealthLynk is a software developer, not a broker or financial institution.</p>
 
-        <h2>9. No Control</h2>
-        <p>StealthLynk has no technical ability to terminate, disable, or revoke your access to PaceSeeker. The app runs entirely on your device with no licensing mechanism or kill switch. Once installed, PaceSeeker continues to function independently of StealthLynk.</p>
-        <p>StealthLynk cannot reverse transactions, recover lost funds, or provide compensation for trading losses. All blockchain trades are final by design. StealthLynk is a software developer, not a broker, investment adviser, or financial institution.</p>
-
-        <h2>10. Informational Content</h2>
-        <p>All examples, calculations, preset values, and explanatory content are provided for educational and informational purposes only. They do not constitute investment advice, trading recommendations, or personalized financial guidance. StealthLynk is a software developer, not a financial advisor, broker, or investment professional. All trading decisions are yours alone.</p>
-
-        <p class="updated">Last updated: June 2026</p>
+        <h2>9. Informational Content</h2>
+        <p>All examples, calculations, preset values, and explanatory content are provided for educational and informational purposes only. They do not constitute investment advice or personalized financial guidance. StealthLynk is a software developer, not a financial advisor. All trading decisions are yours.</p>
     </div>
 </body>
 </html>
