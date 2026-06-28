@@ -282,6 +282,7 @@ function startServer() {
   const env = {
     ...process.env,
     NODE_PATH: nodePath,
+    HOST: '0.0.0.0', // Allow phone on same WiFi to reach the desktop server
     UPLOAD_DIR: uploadsPath,
     DB_PATH: dbPath,
     CLOUD_DIR: path.join(getDataRoot(), 'cloud')
@@ -1136,6 +1137,48 @@ function stopPairingServer() {
 }
 
 // ============================================================================
+// RENDERER DATA INJECTION - Pass config to external HTML renderer
+// ============================================================================
+
+function injectRendererData(qrImage) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const credentials = store.get('backupCredentials') || {};
+  const photoFolders = store.get('backupFolders') || [];
+  const uploadsPath = getDataRoot() ? path.join(getDataRoot(), 'uploads') : '';
+  let initialUploadsPath = uploadsPath;
+  if (credentials.device_uuid) {
+    initialUploadsPath = path.join(uploadsPath, credentials.device_uuid);
+  } else if (credentials.email && credentials.password) {
+    const userUuid = computeUserUuidSync(credentials.email, credentials.password);
+    if (userUuid) initialUploadsPath = path.join(uploadsPath, userUuid);
+  }
+  const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim();
+  const pairingData = getPairingData();
+
+  const payload = JSON.stringify({
+    version: currentVersion,
+    email: credentials.email || '',
+    password: credentials.password || '',
+    photoFolders: photoFolders,
+    uploadsPath: initialUploadsPath || uploadsPath || '',
+    baseUploadsPath: uploadsPath || '',
+    qrImage: qrImage || '',
+    pairingIp: pairingData.ip || '127.0.0.1',
+    pairingPort: pairingData.port || 3000,
+    pairingToken: pairingData.token || '',
+    serverName: pairingData.name || 'PhotoLynk Server',
+    deviceUuid: credentials.device_uuid || '',
+  });
+
+  mainWindow.webContents.executeJavaScript(`
+    window.__PHOTOLYNK_DATA__ = ${payload};
+    if (typeof window.onRendererDataInjected === 'function') {
+      window.onRendererDataInjected();
+    }
+  `).catch(e => safeConsole('error', 'injectRendererData failed:', e.message));
+}
+
+// ============================================================================
 // UNIFIED MAIN WINDOW - Album-style desktop app (replaces dropdown menu)
 // ============================================================================
 
@@ -1176,13 +1219,13 @@ function showMainWindow() {
   const currentVersion = (app && typeof app.getVersion === 'function' ? app.getVersion() : '1.0.0').trim();
 
   mainWindow = new BrowserWindow({
-    width: 472,
-    height: 802,
-    minWidth: 360,
+    width: 1100,
+    height: 740,
+    minWidth: 900,
     minHeight: 600,
     resizable: true,
     minimizable: true,
-    maximizable: false,
+    maximizable: true,
     show: false,
     title: 'PhotoLynk',
     webPreferences: {
@@ -1204,7 +1247,13 @@ function showMainWindow() {
 
   QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
     const qrImage = err ? '' : qrUrl;
+    injectRendererData(qrImage);
+  });
 
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Legacy inline HTML below - restructured into renderer/ folder
+  if (false) {
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -6252,7 +6301,7 @@ function showMainWindow() {
 </html>`;
 
     mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-  });
+  }
 
   mainWindow.on('close', (e) => {
     if (!app.isQuitting) {
