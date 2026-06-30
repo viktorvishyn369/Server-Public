@@ -1,6 +1,6 @@
 {
   "name": "photolynk-server-tray",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "PhotoLynk Server - System Tray Manager",
   "license": "MIT",
   "homepage": "https://github.com/viktorvishyn369/PhotoLynk",
@@ -38,6 +38,7 @@
       "iconTemplate.png",
       "iconTemplate@2x.png",
       "assets/**/*",
+      "renderer/**/*",
       "package.json",
       "node_modules/**/*",
       "LICENSE"
