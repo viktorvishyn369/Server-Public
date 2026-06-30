@@ -20,7 +20,7 @@
     "rebuild-native": "electron-builder install-app-deps && npm run rebuild-nft-service",
     "rebuild-native:x64": "npm_config_arch=x64 npm_config_target_arch=x64 electron-builder install-app-deps && npm run rebuild-nft-service",
     "rebuild-native:arm64": "npm_config_arch=arm64 npm_config_target_arch=arm64 electron-builder install-app-deps && npm run rebuild-nft-service",
-    "rebuild-nft-service": "cd ../nft-service && npm rebuild better-sqlite3 --runtime=electron --target=28.3.3 --disturl=https://electronjs.org/headers --build-from-source"
+    "rebuild-nft-service": "node -e \"const d=require('path').resolve(__dirname,'../nft-service'); if(require('fs').existsSync(d)){process.chdir(d);const r=require('child_process').spawnSync('npm',['rebuild','better-sqlite3','--runtime=electron','--target=28.3.3','--disturl=https://electronjs.org/headers','--build-from-source'],{stdio:'inherit',shell:true});process.exit(r.status||0);}else{console.log('[skip] nft-service not found');}\""
   },
   "build": {
     "appId": "com.photolynk.server.tray",
