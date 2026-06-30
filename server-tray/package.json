@@ -77,7 +77,6 @@
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-      "notarize": false,
       "target": [
         {
           "target": "dmg"

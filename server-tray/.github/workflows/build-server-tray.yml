@@ -55,6 +55,17 @@ jobs:
           PY
           echo "APPLE_API_KEY=$HOME/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8" >> "$GITHUB_ENV"
 
+      - name: Diagnose notarytool auth
+        if: ${{ env.APPLE_API_KEY != '' }}
+        continue-on-error: true
+        run: |
+          echo "=== Notarytool credential test ==="
+          xcrun notarytool history \
+            --key "$APPLE_API_KEY" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            2>&1 || echo "=== Notary auth failed (see above) ==="
+
       - name: Build macOS x64 DMG
         run: |
           cd server-tray
@@ -128,6 +139,17 @@ jobs:
           out.write_bytes(base64.b64decode(key_b64.encode('utf-8')))
           PY
           echo "APPLE_API_KEY=$HOME/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8" >> "$GITHUB_ENV"
+
+      - name: Diagnose notarytool auth
+        if: ${{ env.APPLE_API_KEY != '' }}
+        continue-on-error: true
+        run: |
+          echo "=== Notarytool credential test ==="
+          xcrun notarytool history \
+            --key "$APPLE_API_KEY" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            2>&1 || echo "=== Notary auth failed (see above) ==="
 
       - name: Build macOS arm64 DMG
         run: |
