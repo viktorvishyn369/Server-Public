@@ -1,6 +1,6 @@
 {
   "name": "photolynk-server-tray",
-  "version": "2.2.1",
+  "version": "2.2.0",
   "description": "PhotoLynk Server - System Tray Manager",
   "license": "MIT",
   "homepage": "https://github.com/viktorvishyn369/PhotoLynk",
@@ -78,7 +78,7 @@
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-      "notarize": false,
+      "notarize": true,
       "target": [
         {
           "target": "dmg"
@@ -94,7 +94,9 @@
           ]
         }
       ],
-      "icon": "icon.png"
+      "icon": "icon.png",
+      "publisherName": "PhotoLynk",
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": true,
