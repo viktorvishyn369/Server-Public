@@ -1,0 +1,361 @@
+/* ============================================================
+   PhotoLynk Desktop - Professional Desktop Layout Overrides
+   ============================================================ */
+
+/* --- Base Layout --- */
+html, body {
+  overflow: hidden;
+  height: 100vh;
+}
+
+body {
+  flex-direction: column !important;
+  background: #0f0f14;
+}
+
+/* --- Hide Old Sidebar --- */
+.tab-bar { display: none !important; }
+
+/* --- Top Navigation --- */
+.top-nav {
+  display: flex;
+  gap: 0;
+  padding: 0 28px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+
+.top-nav-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255,255,255,0.4);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.top-nav-btn:hover {
+  color: rgba(255,255,255,0.7);
+}
+
+.top-nav-btn.active {
+  color: #03E1FF;
+  border-bottom-color: #03E1FF;
+}
+
+/* --- Main Content Area (full width) --- */
+#main-view {
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  padding-left: 0;
+}
+
+/* Content area scrolls internally when visible */
+.content {
+  flex: 1;
+  overflow-y: auto !important;
+  min-height: 0;
+}
+
+/* Settings overlay fills remaining space and scrolls */
+.settings-overlay {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  min-height: 0;
+  padding: 0 28px 28px !important;
+}
+
+.settings-overlay.open {
+  display: flex !important;
+}
+
+/* Ensure settings cards don't clip their content */
+.settings-overlay .card {
+  overflow: visible !important;
+  padding: 16px !important;
+}
+
+.settings-overlay .folder-list {
+  max-height: none !important;
+  overflow-y: visible !important;
+}
+
+.settings-overlay .folder-actions {
+  margin-top: 12px;
+}
+
+.settings-overlay .form-group {
+  margin-bottom: 12px !important;
+}
+
+.settings-overlay .form-group:last-child {
+  margin-bottom: 0 !important;
+}
+
+.settings-overlay .section-title {
+  margin: 20px 0 10px 0 !important;
+}
+
+.settings-overlay .section-title:first-of-type {
+  margin-top: 0 !important;
+}
+
+/* Header stays compact */
+.header {
+  padding: 20px 28px !important;
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+}
+
+.quick-stats {
+  margin: 0 28px 20px !important;
+  flex-shrink: 0;
+}
+
+.quick-stats-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+}
+
+.qs-cell {
+  padding: 14px 16px !important;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  padding: 0 28px 28px !important;
+  gap: 14px !important;
+}
+
+/* --- Desktop Action Buttons --- */
+.action-row {
+  max-width: none;
+  margin-bottom: 6px;
+}
+
+.action-btn {
+  padding: 14px 20px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  background: rgba(255,255,255,0.02) !important;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background: rgba(255,255,255,0.05) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+  transform: translateX(2px);
+}
+
+.action-btn-icon {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.action-btn-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.action-btn.primary .action-btn-icon {
+  background: rgba(0,255,163,0.08) !important;
+  color: #00FFA3 !important;
+}
+
+.action-btn.secondary .action-btn-icon {
+  background: rgba(99,102,241,0.08) !important;
+  color: #6366F1 !important;
+}
+
+.action-btn.nft .action-btn-icon {
+  background: rgba(153,69,255,0.08) !important;
+  color: #9945FF !important;
+}
+
+.action-btn-text {
+  flex: 1;
+}
+
+.action-btn-title {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  margin-bottom: 2px !important;
+}
+
+.action-btn-subtitle {
+  font-size: 12px !important;
+  color: var(--text-muted) !important;
+}
+
+.action-btn-arrow {
+  font-size: 18px !important;
+  color: rgba(255,255,255,0.2) !important;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover .action-btn-arrow {
+  color: rgba(255,255,255,0.5) !important;
+  transform: translateX(3px);
+}
+
+/* --- Feature Cards --- */
+.feature-card-row {
+  max-width: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.feature-card {
+  padding: 20px !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,0.02) !important;
+  border: 1px solid rgba(255,255,255,0.05) !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.feature-card:hover {
+  background: rgba(255,255,255,0.04) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+.feature-card-icon {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 10px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-card.album .feature-card-icon {
+  background: rgba(153,69,255,0.1) !important;
+  color: #9945FF !important;
+}
+
+.feature-card.certs .feature-card-icon {
+  background: rgba(245,158,11,0.1) !important;
+  color: #f59e0b !important;
+}
+
+.feature-card-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  margin-bottom: 2px !important;
+}
+
+.feature-card-sub {
+  font-size: 12px !important;
+  color: var(--text-muted) !important;
+}
+
+/* --- Section Headers --- */
+.section-header-row {
+  margin: 20px 0 10px 0 !important;
+}
+
+.section-header-label {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 1.5px !important;
+}
+
+.section-header-sub {
+  font-size: 12px !important;
+  margin-top: 2px !important;
+}
+
+/* --- Settings Panel matches Home content area --- */
+.settings-overlay {
+  padding: 0 28px 28px !important;
+  flex: 1;
+  overflow-y: auto !important;
+  background: #0f0f14;
+}
+
+.settings-overlay .section-title {
+  margin: 20px 0 10px 0;
+}
+
+.settings-overlay .card {
+  max-width: none;
+}
+
+.settings-overlay .server-option {
+  max-width: none;
+}
+
+.settings-overlay .form-row {
+  max-width: none;
+}
+
+.settings-overlay .folder-actions {
+  max-width: none;
+}
+
+/* --- Overlays --- */
+.qr-overlay, .progress-overlay, .nft-album-overlay,
+.nft-detail-overlay, .nft-mint-section, .nft-transfer-modal, .nft-guide-overlay {
+  position: fixed !important;
+}
+
+/* --- NFT Grid Desktop --- */
+.nft-grid {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+}
+
+/* --- Scrollbar Styling --- */
+.content::-webkit-scrollbar,
+.settings-overlay::-webkit-scrollbar,
+.nft-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.content::-webkit-scrollbar-track,
+.settings-overlay::-webkit-scrollbar-track,
+.nft-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-thumb,
+.settings-overlay::-webkit-scrollbar-thumb,
+.nft-grid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+}
+
+/* --- Coming Soon Cards --- */
+.coming-soon-card {
+  max-width: none;
+}
+
+/* --- Responsive --- */
+@media (max-width: 1000px) {
+  .quick-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}

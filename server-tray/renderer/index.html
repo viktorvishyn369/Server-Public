@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="desktop.css">
+</head>
+<body>
+<div id="file-picker-overlay">
+    <div class="gradient-spinner">
+      <div class="gs-petal" style="background:#03E1FF;opacity:0.60;transform:rotate(0deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00FFA3;opacity:0.65;transform:rotate(45deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#02C4E0;opacity:0.70;transform:rotate(90deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00CC88;opacity:0.75;transform:rotate(135deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#03E1FF;opacity:0.80;transform:rotate(180deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00FFA3;opacity:0.85;transform:rotate(225deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#02C4E0;opacity:0.90;transform:rotate(270deg) translateY(-16px)"></div>
+      <div class="gs-petal" style="background:#00CC88;opacity:1.00;transform:rotate(315deg) translateY(-16px)"></div>
+      <div class="gs-center"></div>
+    </div>
+    <div class="fp-label">Preparing...</div>
+    <div class="fp-sub">Please wait</div>
+  </div>
+  <!-- MAIN VIEW -->
+  <div id="main-view" class="view active">
+    <div class="header">
+      <div class="header-left">
+        <div class="app-title">PhotoLynk <span class="version-badge">v2.2.0</span></div>
+        <div class="server-badge">
+          <div class="server-badge-dot" id="server-dot"></div>
+          <span class="server-badge-text" id="server-status">Local Vault</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" onclick="openPairModal()" title="Pair Mobile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button class="header-btn" id="autostart-btn" onclick="toggleAutoStart()" title="Start on Boot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><rect x="1" y="5" width="22" height="14" rx="7" ry="7"/><circle cx="16" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Top Navigation -->
+    <div class="top-nav">
+      <button class="top-nav-btn active" data-tab="home" onclick="switchTab('home')">Home</button>
+      <button class="top-nav-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+    </div>
+    
+    <div class="quick-stats" id="status-hero">
+      <div class="quick-stats-grid" id="qs-grid">
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(3,225,255,0.12);">👤</div>
+          <div class="qs-text">
+            <div class="qs-label">Account</div>
+            <div class="qs-value" id="qs-account">Not paired</div>
+          </div>
+        </div>
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(16,185,129,0.12);">
+            <div class="qs-dot green" id="qs-server-dot"></div>
+          </div>
+          <div class="qs-text">
+            <div class="qs-label">Server</div>
+            <div class="qs-value" id="qs-server">Starting...</div>
+          </div>
+        </div>
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(99,102,241,0.12);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
+          <div class="qs-text">
+            <div class="qs-label">Last Backup</div>
+            <div class="qs-value" id="qs-backup">—</div>
+          </div>
+        </div>
+        <div class="qs-cell">
+          <div class="qs-icon" style="background:rgba(153,69,255,0.12);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9945FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div class="qs-text">
+            <div class="qs-label">Photos</div>
+            <div class="qs-value" id="qs-nfts">—</div>
+          </div>
+        </div>
+      </div>
+      <!-- Inline Progress (hidden by default, shown during operations) -->
+      <div class="qs-progress" id="qs-progress">
+        <div class="qs-progress-title" id="qs-progress-title">Processing...</div>
+        <div class="inline-progress" id="inline-progress" style="display:flex;">
+          <div class="inline-progress-bar">
+            <div class="inline-progress-fill" id="inline-progress-fill"></div>
+          </div>
+          <div class="inline-progress-text" id="inline-progress-text">0%</div>
+        </div>
+        <div class="inline-status-message" id="inline-status-message"></div>
+      </div>
+    </div>
+    
+    <div class="content">
+      <!-- ═══ TAB: HOME ═══ -->
+      <div class="tab-panel active" id="tab-home">
+        <div class="section-header-row">
+          <div class="section-dot" style="background:#03E1FF;"></div>
+          <div><div class="section-header-label" style="color:#03E1FF;">SECURE VAULT</div></div>
+        </div>
+        <div class="action-row">
+          <div class="action-btn primary" onclick="startBackup()">
+            <div class="action-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg></div>
+            <div class="action-btn-text">
+              <div class="action-btn-title">Backup Library</div>
+              <div class="action-btn-subtitle">Encrypted media backup</div>
+            </div>
+            <div class="action-btn-arrow">›</div>
+          </div>
+        </div>
+        <div class="action-row">
+          <div class="action-btn secondary" onclick="startSync()">
+            <div class="action-btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 21v-9"/><path d="m8 17 4 4 4-4"/></svg></div>
+            <div class="action-btn-text">
+              <div class="action-btn-title">Restore Library</div>
+              <div class="action-btn-subtitle">Restore from vault</div>
+            </div>
+            <div class="action-btn-arrow">›</div>
+          </div>
+        </div>
+
+        <div class="section-header-row">
+          <div class="section-dot" style="background:#9945FF;"></div>
+          <div><div class="section-header-label" style="color:#9945FF;">AUTHENTICITY</div><div class="section-header-sub">Tamper-proof certified photos</div></div>
+        </div>
+        <div class="action-row">
+          <div class="action-btn nft" onclick="openNFTMint()">
+            <div class="action-btn-icon nft-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+            <div class="action-btn-text">
+              <div class="action-btn-title nft-title">Certify Photo</div>
+              <div class="action-btn-subtitle nft-subtitle">Create a permanent authenticity record</div>
+            </div>
+            <div class="action-btn-arrow nft-arrow">›</div>
+          </div>
+        </div>
+        <div class="feature-card-row">
+          <div class="feature-card album" onclick="openNFTAlbum()">
+            <div class="feature-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
+            <div class="feature-card-title">Photos</div>
+            <div class="feature-card-sub">Verified photos</div>
+          </div>
+          <div class="feature-card certs" onclick="openCertificates()">
+            <div class="feature-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg></div>
+            <div class="feature-card-title">Proofs</div>
+            <div class="feature-card-sub">Proof records</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ TAB: TOOLS (AI Detector only) ═══ -->
+      <div class="tab-panel" id="tab-tools">
+        <div class="section-header-row">
+          <div class="section-dot" style="background:#D4AF37;"></div>
+          <div><div class="section-header-label" style="color:#D4AF37;">AI IMAGE DETECTOR</div><div class="section-header-sub">Coming soon</div></div>
+        </div>
+        <div class="coming-soon-card">
+          <div class="coming-soon-icon" style="background:rgba(212,175,55,0.12);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2" style="width:24px;height:24px;"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v3"/><path d="M15 1v3"/><path d="M9 20v3"/><path d="M15 20v3"/><path d="M20 9h3"/><path d="M20 14h3"/><path d="M1 9h3"/><path d="M1 14h3"/></svg>
+          </div>
+          <div class="coming-soon-title">Detect AI-Generated Images</div>
+          <div class="coming-soon-sub">Identify synthetic photos in your library using on-device analysis</div>
+        </div>
+      </div>
+
+      <!-- ═══ TAB: SHARE ═══ -->
+      <div class="tab-panel" id="tab-share">
+        <div class="section-header-row">
+          <div class="section-dot" style="background:#00FFA3;"></div>
+          <div><div class="section-header-label" style="color:#00FFA3;">P2P SHARING</div><div class="section-header-sub">End-to-end encrypted</div></div>
+        </div>
+        <div class="coming-soon-card">
+          <div class="coming-soon-icon" style="background:rgba(0,255,163,0.12);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#00FFA3" stroke-width="2" style="width:24px;height:24px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div class="coming-soon-title">Encrypted P2P Sharing</div>
+          <div class="coming-soon-sub">Share photos & videos with other PhotoLynk users via encrypted key exchange through Encrypted Cloud</div>
+        </div>
+      </div>
+      
+      <!-- NFT Album Overlay (separate window on top) -->
+      <div id="nft-album-overlay" class="nft-album-overlay">
+        <div class="nft-album-header">
+          <button class="nft-close-btn" onclick="closeNFTAlbum()">✕</button>
+          <span class="nft-album-title">Photo Album</span>
+          <button class="nft-refresh-btn" onclick="refreshNFTAlbum()">↻</button>
+        </div>
+        <div class="nft-search-bar">
+          <span style="color:var(--text-secondary);font-size:14px;">🔍</span>
+          <input id="nft-search-input" class="nft-search-input" type="text" placeholder="Search photos..." oninput="onNFTSearchInput(this.value)">
+          <button id="nft-search-clear" class="nft-search-clear" onclick="clearNFTSearch()">✕</button>
+        </div>
+        <div id="nft-search-results" class="nft-search-results"></div>
+        <div class="nft-filter-bar">
+          <button id="nft-filter-all" class="nft-filter-btn active-all" onclick="setNFTFilter('all')">⬡ All</button>
+          <button id="nft-filter-public" class="nft-filter-btn" onclick="setNFTFilter('public')">🌍 Public</button>
+          <button id="nft-filter-private" class="nft-filter-btn" onclick="setNFTFilter('private')">🔐 Private</button>
+        </div>
+        <div class="nft-album-content">
+          <div id="nft-grid" class="nft-grid"></div>
+          <div id="nft-loading" class="nft-loading" style="display: none;">
+            <div class="nft-spinner"></div>
+            <span>Loading photos...</span>
+          </div>
+          <div id="nft-empty" class="nft-empty" style="display: none;">
+            <span>No certified photos yet. Certify your first photo!</span>
+          </div>
+          <div id="nft-nav" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-shrink:0;"></div>
+        </div>
+      </div>
+      
+      <!-- Certificates Overlay -->
+      <div id="certs-overlay" class="nft-album-overlay">
+        <div class="nft-album-header">
+          <button class="nft-close-btn" onclick="closeCertificates()">✕</button>
+          <span class="nft-album-title" style="color:#f59e0b;">Proof Records</span>
+          <button class="nft-refresh-btn" onclick="loadCertificates()">↻</button>
+        </div>
+        <div class="nft-album-content" style="overflow-y:auto;">
+          <div id="certs-loading" style="display:none;text-align:center;padding:40px;color:#f59e0b;">
+            <div style="width:28px;height:28px;border:3px solid rgba(245,158,11,0.15);border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px;"></div>
+            <span style="font-size:12px;color:#b8860b;">Loading proof records...</span>
+          </div>
+          <div id="certs-empty" style="display:none;text-align:center;padding:40px;color:#888;">
+            <div style="font-size:32px;margin-bottom:8px;">🏆</div>
+            <div style="font-weight:600;color:#fff;margin-bottom:4px;">No Proof Records Yet</div>
+            <div style="font-size:12px;">Certify a photo to receive a Certificate of Authenticity</div>
+          </div>
+          <div id="certs-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+      </div>
+      
+      <!-- NFT Detail View Overlay -->
+      <div id="nft-detail-overlay" class="nft-detail-overlay">
+        <div class="nft-detail-header">
+          <div class="nft-detail-header-left">
+            <div id="nft-detail-title" class="nft-detail-title-name"></div>
+          </div>
+          <button class="nft-detail-close" onclick="closeNFTDetail()">✕</button>
+        </div>
+        <div class="nft-detail-content">
+          <div class="nft-detail-badge-row" id="nft-detail-badge-row"></div>
+          <div id="nft-detail-image" class="nft-detail-image">
+            <img id="nft-detail-img" src="" alt="">
+          </div>
+
+          <div class="nft-section">
+            <div class="nft-section-label">OWNER</div>
+            <div id="nft-detail-owner-full" class="nft-owner-address"></div>
+          </div>
+
+          <div class="nft-divider"></div>
+
+          <div class="nft-action-row">
+            <button id="nft-action-left" class="nft-mini-btn" onclick="openNFTTokenView()"></button>
+            <button id="nft-action-right" class="nft-mini-btn" onclick="openNFTStorageView()"></button>
+          </div>
+
+          <button id="nft-transfer-main-btn" class="nft-transfer-main" onclick="openNFTTransfer()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            Transfer Photo
+          </button>
+        </div>
+      </div>
+      
+      <!-- NFT Transfer Modal -->
+      <div id="nft-transfer-modal" class="nft-transfer-modal">
+        <div class="nft-transfer-content">
+          <div class="nft-transfer-header">
+            <span class="nft-transfer-title">Transfer Photo</span>
+            <button class="nft-transfer-close" onclick="closeNFTTransfer()">✕</button>
+          </div>
+          <div class="nft-transfer-body">
+            <div class="nft-transfer-preview">
+              <img id="nft-transfer-img" src="" alt="">
+              <div class="nft-transfer-preview-info">
+                <div id="nft-transfer-name" class="nft-transfer-preview-name"></div>
+                <div id="nft-transfer-type" class="nft-transfer-preview-type"></div>
+              </div>
+            </div>
+            <div class="nft-transfer-input-group">
+              <label class="nft-transfer-label">Recipient Address</label>
+              <input type="text" id="nft-transfer-recipient" class="nft-transfer-input" placeholder="Enter recipient address...">
+            </div>
+            <div class="nft-transfer-cost">
+              <span class="nft-transfer-cost-label">Estimated Cost</span>
+              <span id="nft-transfer-cost" class="nft-transfer-cost-value">~0.00001 SOL</span>
+            </div>
+            <div class="nft-transfer-actions">
+              <button class="nft-action-btn secondary" onclick="closeNFTTransfer()">Cancel</button>
+              <button class="nft-action-btn primary" onclick="confirmNFTTransfer()">Confirm Transfer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- NFT Mint Panel (full-screen overlay) -->
+      <div id="nft-mint-section" class="nft-mint-section" style="display: none;">
+        <div class="nft-mint-header">
+          <div class="nft-mint-title">Certify Photo</div>
+          <button class="nft-mint-close" onclick="closeNFTMint()">✕</button>
+        </div>
+        
+        <div id="nft-promo-banner" class="nft-promo-banner" style="display: none;">
+          Launch Special - <span id="promo-days">30</span> Days Left! Up to 90% off!
+        </div>
+        
+        <!-- 1. Select Photo (moved to top for immediate engagement) -->
+        <div class="nft-option-group">
+          <div class="nft-photo-select" id="nft-photo-select" onclick="selectNFTPhoto()">
+            <div class="nft-photo-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
+            <div class="nft-photo-text">Click to open folder and drag a photo here</div>
+          </div>
+          <div class="nft-photo-preview" id="nft-photo-preview">
+            <img id="nft-preview-img" src="">
+            <button class="nft-photo-remove" onclick="removeNFTPhoto()">✕</button>
+          </div>
+        </div>
+        
+        <!-- 2. Name -->
+        <div class="nft-option-group">
+          <input type="text" class="nft-input" id="nft-name-input" placeholder="Name (e.g., My Photo)">
+          <input type="text" class="nft-input" id="nft-desc-input" placeholder="Description (optional)" style="display:none">
+        </div>
+        
+        <!-- 3. Certification Mode: Private vs Public -->
+        <div class="nft-cert-section">
+          <div class="nft-option-label">Certification Mode</div>
+          <div class="nft-cert-section-desc">Create a tamper-proof certification. Choose your privacy level.</div>
+          <div class="nft-cert-options">
+            <div class="nft-cert-card selected" onclick="selectCertificationMode('private', this)">
+              <div class="nft-cert-card-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span class="nft-cert-card-name">Private Certified</span>
+              </div>
+              <div class="nft-cert-card-desc">Encrypted on your device before upload. Only you can decrypt and view the photo.</div>
+              <div class="nft-cert-card-chips">
+                <span class="cert-chip green">Full quality</span>
+                <span class="cert-chip green">Zero-knowledge</span>
+                <span class="cert-chip green">EXIF preserved</span>
+                <span class="cert-chip green">Transferable</span>
+                <span class="cert-chip green">Privacy-first</span>
+              </div>
+            </div>
+            <div class="nft-cert-card" onclick="selectCertificationMode('public', this)">
+              <div class="nft-cert-card-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span class="nft-cert-card-name">Public Certified</span>
+              </div>
+              <div class="nft-cert-card-desc">Unencrypted, publicly viewable. Stored on secure infrastructure. Ideal for portfolios.</div>
+              <div class="nft-cert-card-chips">
+                <span class="cert-chip green">Full quality</span>
+                <span class="cert-chip amber">Publicly visible</span>
+                <span class="cert-chip green">Transferable</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Optional watermark (Public mode only) - HIDDEN for now -->
+        <div class="nft-option-group" id="watermark-option" style="display:none !important;">
+          <label class="nft-toggle-row">
+            <div class="nft-toggle-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+              <div>
+                <div class="nft-toggle-title">Add Watermark</div>
+                <div class="nft-toggle-desc">Protect your public photo with a visible watermark</div>
+              </div>
+            </div>
+            <input type="checkbox" id="nft-watermark-public" class="nft-toggle-check">
+          </label>
+        </div>
+        
+        <!-- Strip EXIF toggle -->
+        <div class="nft-option-group" id="strip-exif-option">
+          <label class="nft-toggle-row">
+            <div class="nft-toggle-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <div>
+                <div class="nft-toggle-title">Remove Private Data (EXIF)</div>
+                <div class="nft-toggle-desc" id="nft-strip-exif-desc">Strip location, camera info, and other metadata</div>
+              </div>
+            </div>
+            <input type="checkbox" id="nft-strip-exif-toggle" class="nft-toggle-check" onchange="selectedStripExif = this.checked">
+          </label>
+        </div>
+        
+        <!-- 4. License -->
+        <div class="nft-option-group">
+          <div class="nft-option-label">License</div>
+          <select class="nft-input" id="nft-license-select">
+            <option value="arr" selected>All Rights Reserved</option>
+            <option value="cc-by">CC BY 4.0</option>
+            <option value="cc-by-sa">CC BY-SA 4.0</option>
+            <option value="cc-by-nc">CC BY-NC 4.0</option>
+            <option value="cc-by-nc-sa">CC BY-NC-SA 4.0</option>
+            <option value="cc-by-nd">CC BY-ND 4.0</option>
+            <option value="cc-by-nc-nd">CC BY-NC-ND 4.0</option>
+            <option value="cc0">CC0 1.0 (Public Domain)</option>
+            <option value="commercial">Commercial License</option>
+          </select>
+        </div>
+        
+        <!-- Cost Display -->
+        <div class="nft-cost-display">
+          <span class="nft-cost-label">Estimated Cost</span>
+          <strong id="nft-simple-cost" class="nft-cost-value">~$0.07</strong>
+        </div>
+        
+        <!-- Wallet Connection -->
+        <div class="nft-wallet-row">
+          <div class="nft-wallet-dot disconnected" id="mint-wallet-dot"></div>
+          <span id="mint-wallet-text">No credentials connected</span>
+          <button class="nft-wallet-connect" onclick="connectNFTWallet()">Connect</button>
+        </div>
+        <div id="wallet-connect-hint" style="display:none;margin-top:6px;padding:8px 10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;font-size:11px;color:#a5b4fc;line-height:1.5;">A browser tab just opened. Approve the connection in your browser to link your credentials.</div>
+        
+        <!-- Certify Button -->
+        <button class="nft-mint-btn" id="nft-mint-btn" disabled onclick="doMintNFT()">
+          Certify Photo
+        </button>
+        
+        <!-- HIDDEN: Internal state checkboxes read by JS — not shown to user -->
+        <div style="display:none;">
+          <input type="checkbox" id="nft-encrypt-check">
+          <input type="checkbox" id="nft-watermark-check">
+          <span id="cnft-price"></span>
+          <span id="nft-price"></span>
+          <span id="storage-fee"></span>
+          <span id="cloud-fee"></span>
+          <div id="nft-cost-breakdown"><div id="nft-cost-total"></div></div>
+          <div id="nft-storage-group"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- SETTINGS PANEL (replaces hero+content when active) -->
+    <div id="settings-overlay" class="settings-overlay">
+      <div class="section-title">BACKUP DESTINATION</div>
+      <div class="card">
+        <div class="server-option selected" onclick="selectDestination('stealthcloud', this)">
+          <div class="server-option-icon">☁️</div>
+          <div class="server-option-text">
+            <div class="server-option-title">Encrypted Cloud</div>
+            <div class="server-option-subtitle">StealthLynk.io zero-knowledge storage</div>
+          </div>
+        </div>
+        <div class="server-option" onclick="selectDestination('remote', this)">
+          <div class="server-option-icon">🌐</div>
+          <div class="server-option-text">
+            <div class="server-option-title">Remote Server</div>
+            <div class="server-option-subtitle">Internet connection</div>
+          </div>
+        </div>
+        <div id="remote-config">
+          <div class="form-row" style="margin-top: 12px;">
+            <div class="form-group"><input class="form-input" type="text" id="remote-address" placeholder="Server address" value=""></div>
+            <div class="form-group" style="flex: 0.4;"><input class="form-input" type="text" id="remote-port" placeholder="3000" value="3000"></div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="section-toggle" onclick="toggleCredentials()">
+        <div class="section-title" style="margin:0;">CREDENTIALS</div>
+        <span class="section-toggle-arrow" id="cred-arrow">▾</span>
+      </div>
+      <div class="collapsible" id="cred-section">
+        <div class="card">
+          <div class="form-group">
+            <input class="form-input" type="text" id="email" placeholder="Email, nickname, or name.skr" value="">
+          </div>
+          <div class="form-group">
+            <input class="form-input" type="password" id="password" placeholder="Password" value="">
+          </div>
+          <input type="hidden" id="destination" value="stealthcloud">
+        </div>
+      </div>
+      
+      <div class="section-title">SOURCE FOLDERS</div>
+      <div class="card">
+        <div class="folder-list" id="folder-list"><div style="color: var(--text-muted); padding: 12px; text-align: center; font-size: 12px;">No folders selected</div></div>
+        <div class="folder-actions">
+          <button class="folder-btn" onclick="addFolder()">+ Add Folder</button>
+          <button class="folder-btn" onclick="clearFolders()">Clear All</button>
+        </div>
+      </div>
+      
+      <div class="section-title">LOCAL STORAGE</div>
+      <div class="card">
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;"><input class="form-input" type="text" id="uploads-path" value="" readonly style="font-size: 11px; cursor: text;"></div>
+        </div>
+        <div class="folder-actions" style="margin-top: 10px;">
+          <button class="folder-btn" onclick="copyUploadsPath()">📋 Copy</button>
+          <button class="folder-btn" onclick="openUploadsFolder()">📂 Open</button>
+          <button class="folder-btn" onclick="addUploadsToSources()">➕ Add to Sources</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ BOTTOM TAB BAR ═══ -->
+    <div class="tab-bar">
+      <div class="tab-item active" data-tab="home" onclick="switchTab('home')">
+        <div class="tab-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
+        <div class="tab-item-label">Home</div>
+      </div>
+      <div class="tab-item" data-tab="settings" onclick="switchTab('settings')">
+        <div class="tab-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+        <div class="tab-item-label">Settings</div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- NFT Welcome/Guide Modal -->
+  <div id="nft-guide-overlay" class="nft-guide-overlay" style="display: none !important;">
+    <div class="nft-guide-modal">
+      <div class="nft-guide-header">
+        <div style="font-size:14px;font-weight:700;color:#fff;">Certifying Your Photos</div>
+        <button class="nft-mint-close" onclick="closeNFTGuide()">✕</button>
+      </div>
+      <div class="nft-guide-scroll">
+
+        <!-- ── 3 USE-CASE EXAMPLES ── -->
+        <div class="nft-guide-label">Choose your scenario</div>
+
+        <!-- Example 1: Fully Public -->
+        <div class="nft-guide-example">
+          <div class="nft-guide-ex-head">
+            <span class="nft-guide-ex-tag" style="background:rgba(34,197,94,0.15);color:#4ade80;">Public</span>
+            <span class="nft-guide-ex-name">Share, sell, or use as avatar</span>
+          </div>
+          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Open Edition + Decentralized Storage + Unencrypted.</span> Your photo is uploaded to decentralized storage — a network no one controls. Metadata is permanently recorded. Anyone can view the image. Ideal for portfolios, social profiles, or selling prints.</div>
+          <div class="nft-guide-ex-row">
+            <span class="nft-guide-chip green">Image 100% preserved</span>
+            <span class="nft-guide-chip green">EXIF kept by default</span>
+            <span class="nft-guide-chip amber">Publicly visible</span>
+          </div>
+          <div class="nft-guide-detail" onclick="this.classList.toggle('open')">
+            <div class="nft-guide-detail-toggle"><span>Details</span><span class="arrow">›</span></div>
+            <div class="nft-guide-detail-body"><div class="nft-guide-detail-inner">
+              <div class="nft-guide-pro">Viewable in any compatible app, marketplace, or browser</div>
+              <div class="nft-guide-pro">Photo quality — no compression, no re-encoding</div>
+              <div class="nft-guide-pro">Optional watermark to protect your work</div>
+              <div class="nft-guide-pro">Transferable and sellable on any compatible marketplace</div>
+              <div class="nft-guide-con">Image is publicly accessible via storage gateway</div>
+              <div class="nft-guide-con">EXIF (location, camera) visible unless you strip it</div>
+            </div></div>
+          </div>
+        </div>
+
+        <!-- Example 2: Encrypted Private -->
+        <div class="nft-guide-example">
+          <div class="nft-guide-ex-head">
+            <span class="nft-guide-ex-tag" style="background:rgba(99,102,241,0.15);color:#818cf8;">Private</span>
+            <span class="nft-guide-ex-name">Encrypted backup — only you can view</span>
+          </div>
+          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Open Edition + Decentralized Storage + Encrypted.</span> Same as above, but the image is encrypted on your device before upload. The file in storage is unreadable without your credentials. Your private key never leaves your device — the app only requests a signature, never extracts anything. Ownership permanently recorded, image stays private.</div>
+          <div class="nft-guide-ex-row">
+            <span class="nft-guide-chip green">Image 100% preserved</span>
+            <span class="nft-guide-chip green">Encrypted on device</span>
+            <span class="nft-guide-chip green">Only you can decrypt</span>
+          </div>
+          <div class="nft-guide-detail" onclick="this.classList.toggle('open')">
+            <div class="nft-guide-detail-toggle"><span>Details</span><span class="arrow">›</span></div>
+            <div class="nft-guide-detail-body"><div class="nft-guide-detail-inner">
+              <div class="nft-guide-pro">AES-256-GCM encryption — military-grade, done locally</div>
+              <div class="nft-guide-pro">Decryption key sealed to your credentials — the app never touches your private key, only requests a signature</div>
+              <div class="nft-guide-pro">EXIF stripped automatically for privacy</div>
+              <div class="nft-guide-pro">Stored on decentralized storage — no company can delete it</div>
+              <div class="nft-guide-con">Others see an encrypted blob, not the image</div>
+              <div class="nft-guide-con">Cannot be used as a public avatar or sold as-is</div>
+            </div></div>
+          </div>
+        </div>
+
+        <!-- Example 3: Limited On-Chain Certificate -->
+        <div class="nft-guide-example">
+          <div class="nft-guide-ex-head">
+            <span class="nft-guide-ex-tag" style="background:rgba(245,158,11,0.15);color:#fbbf24;">Certificate</span>
+            <span class="nft-guide-ex-name">Copyright proof with legal timestamps</span>
+          </div>
+          <div class="nft-guide-ex-desc"><span class="nft-guide-hl">Limited Edition + Embedded in Record + Encrypted.</span> Your photo and metadata are stored directly inside the authenticity record (not in a separate location — think of it as a permanent file attached to your certificate). No external storage, no links that can break. Includes SHA-256 hashes of image + EXIF + camera serial, an <span class="nft-guide-hl">RFC 3161 trusted timestamp</span> (court-admissible), and a <span class="nft-guide-hl">C2PA provenance manifest</span> (Adobe/Microsoft standard).</div>
+          <div class="nft-guide-ex-row">
+            <span class="nft-guide-chip green">Image embedded in record</span>
+            <span class="nft-guide-chip green">Encrypted</span>
+            <span class="nft-guide-chip green">Legally timestamped</span>
+          </div>
+          <div class="nft-guide-detail" onclick="this.classList.toggle('open')">
+            <div class="nft-guide-detail-toggle"><span>Details</span><span class="arrow">›</span></div>
+            <div class="nft-guide-detail-body"><div class="nft-guide-detail-inner">
+              <div class="nft-guide-pro">No external dependencies — image is stored inside the record, not on a separate server</div>
+              <div class="nft-guide-pro">RFC 3161 timestamp from FreeTSA.org — accepted in legal proceedings</div>
+              <div class="nft-guide-pro">C2PA manifest — industry standard used by Adobe, Microsoft, BBC</div>
+              <div class="nft-guide-pro">Certificate of Authenticity — proves you took the photo, when, and with what camera</div>
+              <div class="nft-guide-pro">Permanent and tamper-proof — no pinning services, no cloud subscription</div>
+              <div class="nft-guide-con">Larger metadata — costs more than a simple storage upload</div>
+              <div class="nft-guide-con">Not viewable as a regular image in apps (encrypted data)</div>
+            </div></div>
+          </div>
+        </div>
+
+        <!-- ── KEY FACTS ── -->
+        <div class="nft-guide-label">Key facts</div>
+
+        <div class="nft-guide-note">
+          <strong>Image quality:</strong> Your photo is never compressed or re-encoded. The record type refers to how the <em>authenticity record</em> is stored on-chain — your image stays pixel-perfect. All records have identical ownership rights regardless of storage method.
+        </div>
+
+        <div class="nft-guide-note" style="margin-top:4px;">
+          <strong>EXIF data:</strong> Date, GPS, camera model, and serial number are preserved by default. You can strip EXIF before certification for privacy. Limited Edition always hashes EXIF for proof without exposing it.
+        </div>
+
+        <div class="nft-guide-note" style="margin-top:4px;">
+          <strong>Encryption:</strong> Done on your device with AES-256-GCM before anything is uploaded. The decryption key is sealed to your credentials via a signature request — your private key never leaves your device. No server ever sees the photo.
+        </div>
+
+        <div class="nft-guide-note" style="margin-top:4px;">
+          <strong>What makes your image public:</strong> Only unencrypted decentralized storage or unencrypted cloud. Everything else — encrypted storage, encrypted embedded, or Limited Edition — keeps your image private.
+        </div>
+
+      </div>
+      <div style="padding:0 16px 8px;display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="document.getElementById('nft-guide-dontshow').checked=!document.getElementById('nft-guide-dontshow').checked;">
+        <input type="checkbox" id="nft-guide-dontshow" style="accent-color:#9945FF;cursor:pointer;" onclick="event.stopPropagation();">
+        <span style="font-size:12px;color:#52525b;">Don't show again</span>
+      </div>
+      <button class="nft-guide-close-btn" onclick="closeNFTGuide()">Got It</button>
+    </div>
+    </div>
+  </div>
+  
+  
+  <!-- Progress Overlay -->
+  <div class="progress-overlay" id="progress-overlay">
+    <div class="progress-box">
+      <div class="progress-title" id="progress-title">Processing...</div>
+      <div class="progress-text" id="progress-text">Preparing...</div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <button class="progress-cancel" onclick="cancelOperation()">Cancel</button>
+    </div>
+  </div>
+  
+  <!-- QR Pairing Modal -->
+  <div class="qr-overlay" id="qr-overlay" onclick="if(event.target===this)closePairModal()">
+    <div class="qr-modal">
+      <div class="qr-modal-close" onclick="closePairModal()">&times;</div>
+      <h3>📱 Pair Mobile</h3>
+      <p>Scan with PhotoLynk app to connect and sync credentials</p>
+      <div class="qr-container">
+        <img class="qr-code" src="" alt="QR Code">
+      </div>
+      <div class="ip-badge">🔗 <span>127.0.0.1:3000</span></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
