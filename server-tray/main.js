@@ -1245,12 +1245,16 @@ function showMainWindow() {
   const iconBase64 = ''; // Temporarily disable to reduce data URL size
   const iconDataUrl = '';
 
-  QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
-    const qrImage = err ? '' : qrUrl;
-    injectRendererData(qrImage);
-  });
-
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Inject renderer data AFTER the page finishes loading — otherwise
+  // window.__PHOTOLYNK_DATA__ is lost when loadFile navigates to the page.
+  mainWindow.webContents.once('did-finish-load', () => {
+    QRCode.toDataURL(qrDataString, { width: 180, margin: 2 }, (err, qrUrl) => {
+      const qrImage = err ? '' : qrUrl;
+      injectRendererData(qrImage);
+    });
+  });
 
   // Legacy inline HTML below - restructured into renderer/ folder
   if (false) {

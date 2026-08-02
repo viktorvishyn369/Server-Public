@@ -46,6 +46,28 @@
       if (data.deviceUuid) {
         window.__PHOTOLYNK_DATA__.deviceUuid = data.deviceUuid;
       }
+      // Update path variables that were empty at parse time
+      if (data.baseUploadsPath) {
+        baseUploadsPath = data.baseUploadsPath;
+      }
+      if (data.uploadsPath && data.uploadsPath !== data.baseUploadsPath) {
+        const pathSep = data.uploadsPath.includes('\\') ? '\\' : '/';
+        const segments = data.uploadsPath.split(pathSep);
+        const lastSegment = segments[segments.length - 1];
+        if (lastSegment && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lastSegment)) {
+          cachedUuid = lastSegment;
+          console.log('[UUID] Set from injected data:', cachedUuid);
+        }
+      }
+      if (data.deviceUuid) {
+        uuidLocked = true;
+        if (!cachedUuid) cachedUuid = data.deviceUuid;
+        console.log('[UUID] Locked from injected device_uuid:', cachedUuid);
+      }
+      // Update uploads path display
+      if (typeof updateUploadsPathDisplay === 'function') {
+        updateUploadsPathDisplay();
+      }
     }
     window.onRendererDataInjected = applyRendererData;
     
@@ -175,7 +197,7 @@
     }
     function removeFolder(i) { selectedFolders.splice(i, 1); ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
     function clearFolders() { selectedFolders = []; ipcRenderer.send('save-backup-folders', selectedFolders); renderFolders(); }
-    const baseUploadsPath = (window.__PHOTOLYNK_DATA__ || {}).baseUploadsPath || '';
+    let baseUploadsPath = (window.__PHOTOLYNK_DATA__ || {}).baseUploadsPath || '';
     
     // Compute UUID v5 from email:password using Node.js crypto (crypto.subtle is blocked in data: URL context)
     function computeUserUuid(email, password) {
