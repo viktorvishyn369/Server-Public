@@ -75,10 +75,11 @@
       "category": "public.app-category.utilities",
       "icon": "icon.png",
       "minimumSystemVersion": "10.15.0",
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-      "notarize": true,
+      "notarize": false,
+      "identity": null,
       "target": [
         {
           "target": "dmg"
