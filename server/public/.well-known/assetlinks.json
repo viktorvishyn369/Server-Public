@@ -1,0 +1,22 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.photosync.app",
+      "sha256_cert_fingerprints": [
+        "0D:B2:F0:1D:BD:14:CF:10:FB:B8:71:BF:25:1E:56:8D:59:39:25:75:BA:79:01:5D:01:59:C9:1E:0C:72:7C:70"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.photolynk.solana",
+      "sha256_cert_fingerprints": [
+        "BB:3F:56:90:B5:DE:89:82:D5:A7:86:CC:B1:AC:80:18:2B:ED:A3:1F:EB:DD:75:52:B3:69:53:30:0D:90:11:A6"
+      ]
+    }
+  }
+]
