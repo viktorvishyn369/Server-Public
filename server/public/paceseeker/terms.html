@@ -41,13 +41,20 @@
     <div class="container">
         <h1>PaceSeeker</h1>
         <p class="subtitle">Self-custodial trading software</p>
+        <p class="updated" style="border: none; padding: 0; margin-bottom: 24px;">Last Updated: August 29, 2026</p>
 
         <div class="banner">
             <strong>PaceSeeker is self-custodial software</strong> — not a financial institution, exchange, broker, or investment advisor. StealthLynk does not hold your funds, execute trades on your behalf, or have access to your private keys. All trading decisions are controlled by you.
         </div>
 
         <h2>1. About PaceSeeker</h2>
-        <p>PaceSeeker is a <strong>non-custodial, client-side software utility</strong> that runs locally on your device. It is not a financial institution, exchange, broker-dealer, investment adviser, or money services business. PaceSeeker does not:</p>
+        <p>PaceSeeker is a <strong>non-custodial, client-side software utility</strong> that runs locally on your device. It supports three trading strategies:</p>
+        <ul>
+            <li><strong>DEX Arbitrage</strong> — Sandwich and atomic arbitrage on Solana DEXs via Jupiter Aggregator</li>
+            <li><strong>CEX Arbitrage</strong> — Cross-exchange arbitrage using your CEX API keys</li>
+            <li><strong>DCA Bot</strong> — Dollar-cost averaging bot with AI-driven multi-timeframe analysis, take profit, stop loss, and safety orders on Solana</li>
+        </ul>
+        <p>It is not a financial institution, exchange, broker-dealer, investment adviser, or money services business. PaceSeeker does not:</p>
         <ul>
             <li>Hold, custody, or control your funds or digital assets</li>
             <li>Match orders or operate an order book</li>
@@ -70,11 +77,13 @@
         <h2>3. LIVE Mode</h2>
         <p>LIVE mode is opt-in. By enabling it, you acknowledge:</p>
         <ul>
-            <li>DEX LIVE may transfer real USDC from your session wallet via transactions signed by you.</li>
-            <li>CEX LIVE may place real exchange market orders using API keys you provide.</li>
+            <li><strong>DEX LIVE</strong> may transfer real USDC from your session wallet via transactions signed by you.</li>
+            <li><strong>CEX LIVE</strong> may place real exchange market orders using API keys you provide.</li>
+            <li><strong>DCA LIVE</strong> may execute real buy and sell swaps on Solana via Jupiter Aggregator based on the bot's AI-driven signals and your configured parameters (deposit amount, buy percentage, take profit, stop loss, safety orders).</li>
             <li>Transactions and exchange orders are irreversible once submitted.</li>
             <li>Network fees, Jito tips, exchange fees, and slippage costs may be paid from your wallet or exchange account.</li>
             <li>CEX LIVE can leave you unhedged if only one leg of a two-exchange arbitrage fills.</li>
+            <li>DCA LIVE may accumulate positions during downtrends. Stop-loss is not guaranteed to execute at the configured price due to slippage and network conditions.</li>
             <li>Trades in LIVE mode use real funds and can result in profit or loss.</li>
         </ul>
 
@@ -149,6 +158,8 @@
         <h2>10. Contact</h2>
         <p>For questions:</p>
         <p><a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a></p>
+
+        <p class="updated">Last Updated: August 29, 2026</p>
     </div>
 </body>
 </html>
