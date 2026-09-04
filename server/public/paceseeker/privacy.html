@@ -40,7 +40,7 @@
     <div class="container">
         <h1>PaceSeeker Privacy Policy</h1>
         <p class="subtitle">Your data stays on your device</p>
-        <p class="updated" style="border: none; padding: 0; margin-bottom: 24px;">Last Updated: August 29, 2026</p>
+        <p class="updated" style="border: none; padding: 0; margin-bottom: 24px;">Last Updated: September 4, 2026</p>
 
         <div class="banner">
             <strong>PaceSeeker is self-custodial software</strong> — StealthLynk does not hold your funds, access your private keys, or collect your personal data. All sensitive information remains on your device.
@@ -106,7 +106,34 @@
             <li><strong>Invite code redemption</strong> — when you unlock LIVE mode, the invite code is sent to a lightweight PaceSeeker endpoint to count redemptions. No wallet addresses, trading history, or personal data are transmitted.</li>
         </ul>
 
-        <h2>8. External Services</h2>
+        <h2>8. AI Federation Data Sharing (Opt-In)</h2>
+        <p>PaceSeeker includes an optional <strong>AI Federation</strong> feature that shares anonymized AI learning data with StealthLynk to improve future app releases. This feature is <strong>enabled by default</strong> but can be turned off at any time via <strong>Tune &gt; DCA Settings &gt; AI Federation</strong>.</p>
+        <h3>8.1 What is Shared</h3>
+        <p>When the AI Federation feature is enabled and you have closed at least one LIVE trade, the app periodically (every 6 hours) uploads the following <strong>anonymized learning data</strong> to StealthLynk servers:</p>
+        <ul>
+            <li><strong>Learned indicator weights</strong> (relative numeric values for RSI, MACD, Bollinger Bands, etc.)</li>
+            <li><strong>Pattern memory entries</strong> (anonymized market condition snapshots with outcome labels — no trade amounts)</li>
+            <li><strong>Trade outcome statistics</strong> (aggregate win/loss counts and PnL percentages — not individual trade details)</li>
+            <li><strong>Learning parameters</strong> (dynamic thresholds, exit learning, safety order learning, regime transition learning, streak multipliers)</li>
+            <li><strong>Token mint address and symbol</strong> (public on-chain identifiers, used to organize data per-token)</li>
+            <li><strong>App version code</strong> (integer, for tracking learning progress across releases)</li>
+        </ul>
+        <h3>8.2 What is NOT Shared</h3>
+        <ul>
+            <li><strong>Wallet addresses</strong> — neither your owner wallet, session wallet, nor any Solana address is transmitted</li>
+            <li><strong>Private keys or seed phrases</strong> — never leave your device</li>
+            <li><strong>Trade amounts</strong> — no USD, USDC, SOL, or token amounts are included</li>
+            <li><strong>Transaction signatures or hashes</strong> — no on-chain transaction identifiers</li>
+            <li><strong>IP addresses</strong> — not collected or stored by the AI Federation system</li>
+            <li><strong>Device identifiers</strong> — no device ID, advertising ID, or hardware fingerprint</li>
+            <li><strong>Personally identifiable information</strong> — no name, email, phone, location, or any other PII</li>
+        </ul>
+        <h3>8.3 How Data is Stored and Used</h3>
+        <p>Uploaded data is stored on StealthLynk servers in per-token directories (identified by a SHA-256 hash of the token mint address). The server performs a <strong>second sanitization pass</strong> on all incoming data to ensure no PII is stored. Data is aggregated across all users using trade-count-weighted averaging to produce <strong>pre-trained AI bundles</strong> that are bundled into future app releases, giving new users a crowd-trained AI starting point.</p>
+        <h3>8.4 Opting Out</h3>
+        <p>You can disable AI Federation data sharing at any time by toggling <strong>Share AI Analytics OFF</strong> in Tune &gt; DCA Settings &gt; AI Federation. When disabled, no data is uploaded. Previously uploaded anonymized data remains on the server but is not associated with your identity or wallet.</p>
+
+        <h2>9. External Services</h2>
         <p>The App queries the following external services for market data and trade execution. No personally identifiable data is included in any request; only your public wallet address is transmitted when required for on-chain queries:</p>
         <ul>
             <li><strong>Solana RPC endpoints</strong> — for on-chain state, balance queries, and transaction submission</li>
@@ -118,10 +145,10 @@
         </ul>
         <p>These services may log IP addresses and request data according to their own privacy policies. StealthLynk does not control their data practices. Your use of these endpoints is subject to the respective provider's privacy policies.</p>
 
-        <h2>9. Analytics and Telemetry</h2>
+        <h2>10. Analytics and Telemetry</h2>
         <p>PaceSeeker does <strong>not</strong> include third-party analytics, crash reporters, or advertising SDKs. Error logs remain on your device unless you manually share them with StealthLynk for support.</p>
 
-        <h2>10. Data Retention and Deletion</h2>
+        <h2>11. Data Retention and Deletion</h2>
         <p>StealthLynk does not centrally collect your private keys, wallet addresses, balances, or trading history. Invite code redemption records and remote config access logs are the only server-side data; they contain no personally identifying information.</p>
         <p><strong>To delete all PaceSeeker data from your device:</strong></p>
         <ul>
@@ -131,10 +158,10 @@
         </ul>
         <p>There is no server-side account or data to delete. Uninstalling the App permanently erases all local data. See our <a href="delete-data.html">Data Deletion page</a> for detailed instructions.</p>
 
-        <h2>11. Children's Privacy</h2>
+        <h2>12. Children's Privacy</h2>
         <p>PaceSeeker is intended for users <strong>18 years or older</strong> only, as described in the Terms of Service. The App involves financial trading and is not designed for or directed at children. We do not knowingly collect data from minors. If you believe a minor has provided information to us, please contact us and we will take appropriate action.</p>
 
-        <h2>12. Your Privacy Rights</h2>
+        <h2>13. Your Privacy Rights</h2>
         <p>Depending on your jurisdiction (e.g., EU/EEA/UK GDPR, California CCPA), you may have the following rights regarding your personal data:</p>
         <ul>
             <li><strong>Access</strong> — request information about data we hold about you</li>
@@ -145,13 +172,13 @@
         </ul>
         <p>Since PaceSeeker stores all data locally on your device and does not maintain server-side user accounts, you can exercise these rights directly by managing or deleting data on your device. For any server-side data (invite code redemptions), contact us at <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
 
-        <h2>13. Changes to This Policy</h2>
+        <h2>14. Changes to This Policy</h2>
         <p>We may update this Privacy Policy from time to time. The updated version will be indicated by the "Last Updated" date at the top. Continued use after changes constitutes acceptance of the updated policy.</p>
 
-        <h2>14. Contact</h2>
+        <h2>15. Contact</h2>
         <p>For privacy questions or concerns, contact <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
 
-        <p class="updated">Last Updated: August 29, 2026</p>
+        <p class="updated">Last Updated: September 4, 2026</p>
     </div>
 </body>
 </html>
