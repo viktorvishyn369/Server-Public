@@ -48,7 +48,7 @@
         <h2>3. CEX Trading</h2>
         <ul>
             <li>CEX API keys with Trade permission can place real market orders.</li>
-            <li>If one leg of an arbitrage fails, your position becomes unhedged and PaceSeeker pauses automatically.</li>
+            <li>If one leg of an arbitrage fails, your position becomes unhedged — PaceSeeker automatically attempts a one-shot closing order on the filled exchange to restore neutrality, and halts for manual review if that recovery cannot complete.</li>
             <li>Exchanges may rate-limit, reject orders, or experience outages mid-trade.</li>
             <li>API keys with Withdraw permission can move funds. Use Trade-only keys if you do not need auto-rebalance.</li>
         </ul>
@@ -63,7 +63,7 @@
             <li>The bot runs as a foreground service and continues trading while the app is in the background. You are responsible for monitoring the bot's activity and available USDC balance.</li>
             <li>If the RPC endpoint is rate-limited or down, the bot cannot fetch market data or execute trades, potentially missing buy or sell opportunities.</li>
             <li>DCA position state (average entry, total spent, trade markers) is stored locally on your device. If you uninstall the app or clear data, this state is lost and the bot cannot resume the previous position.</li>
-            <li><strong>AI Federation:</strong> When Share AI Analytics is enabled (default), the bot uploads anonymized learning data (weights, patterns, outcome stats — no personal data) to StealthLynk servers every 6 hours. This does not affect trading performance. You can disable it in Tune &gt; DCA Settings &gt; AI Federation.</li>
+            <li><strong>AI Federation:</strong> When Share AI Data is enabled (default), the bot uploads anonymized learning data (weights, patterns, outcome stats — no personal data) to StealthLynk servers every 6 hours. This does not affect trading performance. You can disable it in Tune &gt; DCA Settings &gt; Data Sharing.</li>
         </ul>
 
         <h2>4. Smart Contracts and Token Safety</h2>

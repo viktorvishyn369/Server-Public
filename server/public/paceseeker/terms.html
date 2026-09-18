@@ -99,7 +99,7 @@
         <p>StealthLynk does not operate these services.</p>
 
         <h2>5. Fees</h2>
-        <p>DEX trades incur a 0.01 USDC flat fee per transaction and a 10% performance fee on winning trades only. No PaceSeeker app fees apply to CEX trading. You pay blockchain gas fees (SOL), exchange withdrawal/deposit fees, and any other third-party charges. All fees are disclosed before any transaction requiring your signature. StealthLynk does not charge account maintenance, inactivity, withdrawal, or deposit fees.</p>
+        <p>On-chain trades (DEX and DCA) incur a 10% performance fee on net realized profit from winning trades only. No fee is charged on losing trades, buys, failed transactions, or flat activity. No PaceSeeker app fees apply to CEX trading. You pay blockchain gas fees (SOL), exchange withdrawal/deposit fees, and any other third-party charges. All fees are disclosed before any transaction requiring your signature. StealthLynk does not charge account maintenance, inactivity, withdrawal, or deposit fees.</p>
 
         <h2>6. Subscription</h2>
         <p>PaceSeeker offers an optional monthly subscription that unlocks all premium features. The subscription can be activated at any time — there is no waiting period, season gate, or rollout restriction.</p>
@@ -119,26 +119,19 @@
             <li><strong>DEX Atomic mode:</strong> Both swaps bundled into one all-or-nothing transaction</li>
             <li><strong>DEX Auto mode:</strong> Automatic preset switching based on configured hours or market sentiment</li>
             <li><strong>CEX LIVE trading:</strong> Real cross-exchange arbitrage via your API keys</li>
-            <li><strong>Zero PaceSeeker app fees on all DEX trades:</strong> The 0.01 USDC flat fee and 10% performance fee are both waived for subscribers. Solana network fees and exchange fees still apply</li>
+            <li><strong>DCA LIVE trading:</strong> Real on-chain DCA buys and sells via Jupiter</li>
+            <li><strong>Zero PaceSeeker app fees on all on-chain trades:</strong> The 10% performance fee is waived for subscribers on DEX and DCA trades. Solana network fees and exchange fees still apply</li>
         </ul>
 
-        <h3>6.3 Free Trial</h3>
-        <ul>
-            <li>A 24-hour free trial starts automatically on your first trade (SIM or LIVE)</li>
-            <li>The trial grants full premium access — all features unlocked, all fees waived</li>
-            <li>The trial is device-bound: uninstalling clears the record; reinstalling starts a fresh trial</li>
-            <li>No wallet address or payment is required for the trial</li>
-        </ul>
-
-        <h3>6.4 Expiry and Renewal</h3>
+        <h3>6.3 Expiry and Renewal</h3>
         <ul>
             <li>A subscription is active until the expiresAt timestamp (30 days from payment)</li>
-            <li>When it expires, premium features revert to free modes: Atomic and Auto fall back to Sandwich, CEX LIVE is disabled, and DEX app fees resume</li>
+            <li>When it expires, premium features revert to free modes: Atomic and Auto fall back to Sandwich, CEX LIVE and DCA LIVE are disabled, and the performance fee resumes on profitable on-chain trades</li>
             <li>The subscription does <strong>not</strong> auto-renew. You must manually re-subscribe to restore premium access</li>
             <li>SIM mode continues to work without any subscription</li>
         </ul>
 
-        <h3>6.5 Recovery</h3>
+        <h3>6.4 Recovery</h3>
         <ul>
             <li>If you uninstall the app or clear storage, the device-bound subscription record is lost</li>
             <li>On reinstall, connect the original billing wallet — the app scans the blockchain for your payment memo and restores the subscription for the remaining time</li>
@@ -152,7 +145,7 @@
         <ul>
             <li><strong>No personal data</strong> is shared — no wallet addresses, private keys, trade amounts, transaction signatures, device identifiers, or personally identifiable information.</li>
             <li>The feature is <strong>enabled by default</strong> and uploads only when you have closed at least one LIVE trade.</li>
-            <li>You can <strong>opt out</strong> at any time via Tune &gt; DCA Settings &gt; AI Federation &gt; Share AI Analytics.</li>
+            <li>You can <strong>opt out</strong> at any time via Tune &gt; DCA Settings &gt; Data Sharing &gt; Share AI Data.</li>
             <li>See the <a href="privacy.html">Privacy Policy</a> for full details on what data is collected and how it is handled.</li>
         </ul>
 
