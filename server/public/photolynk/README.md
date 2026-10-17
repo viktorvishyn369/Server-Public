@@ -79,7 +79,7 @@ PhotoLynk is a cross-platform mobile application for photo and video backup with
 PhotoLynk is available on Google Play and the Solana Mobile dApp Store:
 
 - **Android**: [Download on Google Play](https://play.google.com/store/apps/details?id=com.photosync.app)
-- **Solana Mobile**: [Solana dApp Store](https://solanadappstore.com/details?id=com.photolynk.solana)
+- **Solana Mobile**: `solanadappstore://details?id=com.photolynk.solana` (deep link — opens the listing on Seeker devices)
 
 Android only — no iOS version is planned. Apple's restrictions on cryptocurrency payments and wallet usage are incompatible with how the app pays, binds wallets, and verifies on-chain.
 
