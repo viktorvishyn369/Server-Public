@@ -360,6 +360,28 @@
         }
 
 
+        .principles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .principle {
+            background: rgba(22, 22, 22, 0.95);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 16px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            backdrop-filter: blur(8px);
+        }
+
+        .principle::before {
+            content: "—";
+            color: var(--text-muted);
+            margin-right: 8px;
+        }
+
         .github-link {
             display: inline-flex;
             align-items: center;
@@ -429,6 +451,10 @@
             .brand-logo {
                 width: 36px;
                 height: 36px;
+            }
+
+            .principles {
+                grid-template-columns: 1fr;
             }
 
             .topbar,
@@ -673,6 +699,7 @@
                 <nav class="nav-links" aria-label="Primary navigation">
                     <a href="#products">Products</a>
                     <a href="#downloads">Downloads</a>
+                    <a href="#principles">Principles</a>
                     <a href="#status">Status</a>
                 </nav>
             </div>
@@ -918,6 +945,19 @@
                 <p>
                     We build iteratively — shipping released products while engineering the next generation of tools in parallel. New projects are announced when they reach public availability.
                 </p>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <section id="principles">
+            <h2>Engineering Principles</h2>
+            <div class="principles">
+                <div class="principle">Security by design, not by marketing</div>
+                <div class="principle">Client-side control where feasible</div>
+                <div class="principle">Clear trust boundaries</div>
+                <div class="principle">Regulatory awareness</div>
+                <div class="principle">Explicit tradeoffs instead of vague guarantees</div>
             </div>
         </section>
 
