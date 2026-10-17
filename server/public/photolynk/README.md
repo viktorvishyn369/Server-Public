@@ -1,5 +1,7 @@
 # PhotoLynk — Photo & Video Backup with Digital Proof of Authenticity
 
+<img src="../images/logo_photolynk.png" alt="PhotoLynk" width="120">
+
 > **⚠️ INTELLECTUAL PROPERTY NOTICE**  
 > This repository is licensed under **CC BY-NC-ND 4.0**. The code, ideas, logic, algorithms, and implementation patterns are **proprietary intellectual property**. You may view and study the code, but you **MAY NOT** use any part of it (including concepts, logic, or algorithms) in commercial products, listings, or production systems without explicit written permission from Viktor Pavlyshyn (support@photolynk.io). See [LICENSE](LICENSE) for full terms.
 
@@ -225,14 +227,10 @@ This project is licensed under CC BY-NC-ND 4.0. Pull requests may be accepted at
 
 ## Legal Documentation
 
-Policy files for the Solana Mobile dApp Store, App Store, and Google Play Store are located in the `public/` folder:
+- [Terms of Service](https://viktorvishyn369.github.io/PhotoLynk/terms.html)
+- [Privacy Policy](https://viktorvishyn369.github.io/PhotoLynk/privacy-policy.html)
 
-| Document | Path | Hosted URL |
-|----------|------|------------|
-| Terms of Service | `public/terms.html` | `https://your-domain.com/solana-seeker/terms.html` |
-| Privacy Policy | `public/privacy-policy.html` | `https://your-domain.com/solana-seeker/privacy-policy.html` |
-
-These files include Solana-specific disclosures for blockchain payments, NFT minting, and wallet security. They must be deployed to a publicly accessible web server for dApp store compliance. Update the URLs in `app.json` and your store listing configuration to point to your deployed location.
+These pages include Solana-specific disclosures for blockchain payments, NFT minting, and wallet security, and are hosted for Google Play and Solana dApp Store compliance.
 
 ---
 

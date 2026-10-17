@@ -568,6 +568,8 @@
         .app-card-header { display: flex; align-items: center; gap: 10px; }
         .app-card-icon { width: 40px; height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border-radius: 10px; }
         .app-card-icon svg { width: 24px; height: 24px; fill: var(--text-secondary); }
+        .app-card-icon img { width: 40px; height: 40px; border-radius: 10px; display: block; }
+        .card-logo { width: 34px; height: 34px; border-radius: 8px; vertical-align: -8px; margin-right: 10px; }
         .app-card-title { font-size: 0.92rem; font-weight: 600; color: var(--text-primary); }
         .app-card-subtitle { font-size: 0.78rem; color: var(--text-muted); }
         .app-card-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; flex: 1; }
@@ -719,7 +721,7 @@
         <div class="product-overview">
             <a href="#photolynk" class="product-tile">
                 <div class="product-tile-top">
-                    <h3>PhotoLynk</h3>
+                    <h3><img class="card-logo" src="/images/logo_photolynk.png" alt="">PhotoLynk</h3>
                     <span class="badge released">Released</span>
                 </div>
                 <p>Private photo and video backup with end-to-end encryption, NFT minting with onchain proof of ownership, duplicate cleaner, and desktop tools.</p>
@@ -731,7 +733,7 @@
             </a>
             <a href="#paceseeker" class="product-tile">
                 <div class="product-tile-top">
-                    <h3>PaceSeeker</h3>
+                    <h3><img class="card-logo" src="/images/logo_paceseeker.png" alt="">PaceSeeker</h3>
                     <span class="badge released">Released</span>
                 </div>
                 <p>Self-custodial Solana auto-trading with three strategies: DEX arbitrage, CEX arbitrage, and DCA AI bot with 37 technical indicators.</p>
@@ -745,7 +747,7 @@
             </a>
             <a href="#lane" class="product-tile">
                 <div class="product-tile-top">
-                    <h3>Lane</h3>
+                    <h3><img class="card-logo" src="/images/logo_lane.png" alt="">Lane</h3>
                     <span class="badge coming">Coming Soon</span>
                 </div>
                 <p>A voice companion that runs entirely on your phone — on-device language model, offline speech recognition, and private by default.</p>
@@ -774,7 +776,7 @@
             <div class="card" id="photolynk">
                 <img src="/images/storage.png" alt="Secure Infrastructure" class="feature-image">
                 <span class="badge released">Released</span>
-                <h3>PhotoLynk</h3>
+                <h3><img class="card-logo" src="/images/logo_photolynk.png" alt="">PhotoLynk</h3>
                 <p><strong>Backup Your Photos &amp; Videos Securely.</strong> Preserve full-resolution media with no compression, keep every EXIF field intact, ingest RAW and pro formats, and run byte-level integrity checks before anything leaves the device. Encryption is end-to-end, so only you ever see the data.</p>
                 <p><strong>Sync &amp; Restore Across Devices.</strong> Pair phones, tablets, and desktops by QR code, mirror entire libraries on demand, and choose between self-hosted servers (free on GitHub) or StealthCloud’s managed infrastructure.</p>
                 <p><strong>Ultimate Privacy &amp; Ownership Protection.</strong> Zero-knowledge StealthCloud storage, cryptographic hashes, authenticity certificates, duplicate cleanup, and a strict promise of no ads, tracking, or data resale.</p>
@@ -817,7 +819,7 @@
                     <!-- Android -->
                     <div class="app-card">
                         <div class="app-card-header">
-                            <div class="app-card-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.523 2.237a.625.625 0 00-.856.228l-1.363 2.39A8.164 8.164 0 0012 4.088c-1.16 0-2.267.263-3.304.767L7.333 2.465a.625.625 0 10-1.084.628l1.3 2.282A8.175 8.175 0 003.77 10.5h16.46a8.175 8.175 0 00-3.479-5.125l1.3-2.282a.625.625 0 00-.228-.856zM8.25 8.625a.875.875 0 110-1.75.875.875 0 010 1.75zm7.5 0a.875.875 0 110-1.75.875.875 0 010 1.75zM3.75 12a.75.75 0 01.75.75v5.5a2.25 2.25 0 002.25 2.25h.5v2.75a.75.75 0 001.5 0V20.5h6v2.75a.75.75 0 001.5 0V20.5h.5a2.25 2.25 0 002.25-2.25v-5.5a.75.75 0 011.5 0v5.5a3.75 3.75 0 01-3.75 3.75H6.75A3.75 3.75 0 013 18.25v-5.5a.75.75 0 01.75-.75z"/></svg></div>
+                            <div class="app-card-icon"><img src="/images/logo_photolynk.png" alt="PhotoLynk logo"></div>
                             <div>
                                 <div class="app-card-title">PhotoLynk for Android</div>
                                 <div class="app-card-subtitle">Phone & Tablet</div>
@@ -833,7 +835,7 @@
                     <!-- Solana Seeker -->
                     <div class="app-card">
                         <div class="app-card-header">
-                            <div class="app-card-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.523 2.237a.625.625 0 00-.856.228l-1.363 2.39A8.164 8.164 0 0012 4.088c-1.16 0-2.267.263-3.304.767L7.333 2.465a.625.625 0 10-1.084.628l1.3 2.282A8.175 8.175 0 003.77 10.5h16.46a8.175 8.175 0 00-3.479-5.125l1.3-2.282a.625.625 0 00-.228-.856zM8.25 8.625a.875.875 0 110-1.75.875.875 0 010 1.75zm7.5 0a.875.875 0 110-1.75.875.875 0 010 1.75zM3.75 12a.75.75 0 01.75.75v5.5a2.25 2.25 0 002.25 2.25h.5v2.75a.75.75 0 001.5 0V20.5h6v2.75a.75.75 0 001.5 0V20.5h.5a2.25 2.25 0 002.25-2.25v-5.5a.75.75 0 011.5 0v5.5a3.75 3.75 0 01-3.75 3.75H6.75A3.75 3.75 0 013 18.25v-5.5a.75.75 0 01.75-.75z"/></svg></div>
+                            <div class="app-card-icon"><img src="/images/logo_photolynk.png" alt="PhotoLynk logo"></div>
                             <div>
                                 <div class="app-card-title">PhotoLynk Solana Seeker</div>
                                 <div class="app-card-subtitle">Solana Mobile (Android)</div>
@@ -869,11 +871,21 @@
                         </div>
                     </div>
                 </details>
+                <div style="display:flex;flex-direction:column;gap:10px;margin:20px 0 0;">
+                    <a href="https://github.com/viktorvishyn369/PhotoLynk" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);text-decoration:none;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border-color)'">
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" style="flex-shrink:0;opacity:0.7;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        <div>
+                            <div style="font-weight:600;font-size:0.92rem;">PhotoLynk Repository</div>
+                            <div style="font-size:0.78rem;color:var(--text-secondary);">github.com/viktorvishyn369/PhotoLynk &middot; Open Source</div>
+                        </div>
+                        <span style="margin-left:auto;font-size:1.1rem;opacity:0.5;">&rarr;</span>
+                    </a>
+                </div>
             </div>
 
             <div class="card" id="paceseeker">
                 <span class="badge released">Released</span>
-                <h3>PaceSeeker</h3>
+                <h3><img class="card-logo" src="/images/logo_paceseeker.png" alt="">PaceSeeker</h3>
                 <p><strong>Self-custodial auto-trading for Solana.</strong> Three strategies: DEX arbitrage, CEX arbitrage, and DCA AI bot with 37 technical indicators. Simulate risk-free in SIM mode, then optionally go LIVE with biometric-gated session keys. Your keys never leave your device.</p>
                 <p><strong>Three Strategies.</strong> DEX arbitrage scans Raydium, Orca, Meteora and other Solana DEXes for cross-pool price differences via Jupiter. CEX arbitrage monitors 7 exchanges (Bybit, OKX, MEXC, Gate.io, KuCoin, BingX, Bitget) for cross-exchange spreads, with real market orders in LIVE mode. DCA AI uses 37 technical indicators across three timeframes plus a daily macro overlay to accumulate verified Solana tokens with self-learning adaptive weights.</p>
                 <p><strong>Safety First.</strong> Daily loss caps, consecutive-loss halts, tight Jupiter slippage guards, and a 24-hour expiring session wallet. Revoke anytime to reclaim all USDC, ATA rent, and SOL.</p>
@@ -883,7 +895,7 @@
                 <div class="app-grid" style="margin-top: 20px;">
                     <div class="app-card">
                         <div class="app-card-header">
-                            <div class="app-card-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.523 2.237a.625.625 0 00-.856.228l-1.363 2.39A8.164 8.164 0 0012 4.088c-1.16 0-2.267.263-3.304.767L7.333 2.465a.625.625 0 10-1.084.628l1.3 2.282A8.175 8.175 0 003.77 10.5h16.46a8.175 8.175 0 00-3.479-5.125l1.3-2.282a.625.625 0 00-.228-.856zM8.25 8.625a.875.875 0 110-1.75.875.875 0 010 1.75zm7.5 0a.875.875 0 110-1.75.875.875 0 010 1.75zM3.75 12a.75.75 0 01.75.75v5.5a2.25 2.25 0 002.25 2.25h.5v2.75a.75.75 0 001.5 0V20.5h6v2.75a.75.75 0 001.5 0V20.5h.5a2.25 2.25 0 002.25-2.25v-5.5a.75.75 0 011.5 0v5.5a3.75 3.75 0 01-3.75 3.75H6.75A3.75 3.75 0 013 18.25v-5.5a.75.75 0 01.75-.75z"/></svg></div>
+                            <div class="app-card-icon"><img src="/images/logo_paceseeker.png" alt="PaceSeeker logo"></div>
                             <div>
                                 <div class="app-card-title">PaceSeeker</div>
                                 <div class="app-card-subtitle">Solana Mobile (Android)</div>
@@ -908,14 +920,14 @@
 
             <div class="card" id="lane">
                 <span class="badge coming">Coming Soon</span>
-                <h3>Lane</h3>
+                <h3><img class="card-logo" src="/images/logo_lane.png" alt="">Lane</h3>
                 <p><strong>A voice companion that runs entirely on your phone.</strong> Lane is a local-first voice assistant: on-device language model (Qwen), offline Whisper speech recognition, and Kokoro/Piper voices — speech recognition, reasoning, and speech synthesis all happen on the device. One button starts a conversation; spoken replies stream back sentence by sentence with interruption (barge-in) support.</p>
                 <p><strong>Private by Default.</strong> Wake and sleep phrases ("Wake up Lane"), multilingual replies that strictly follow the detected language, a changeable avatar, and voice tools for weather, web search, opening apps, alarms, calling, and assistant settings. Cloud models (OpenAI, Anthropic, OpenRouter, Gemini, Groq, Together, Mistral) are strictly bring-your-own-key and opt-in — offline, Lane keeps working fully local.</p>
                 <p><strong>Solana Integration.</strong> Connect a wallet via Mobile Wallet Adapter, and optionally publish your avatar as a public compressed NFT — always behind explicit confirmation. A Lane subscription also unlocks PaceSeeker and a 100 GB PhotoLynk plan on your linked StealthLynk account: one paid plan in any StealthLynk app covers them all, with the same 7-day trial, 3-day grace, and time-stacking rules.</p>
                 <div class="app-grid" style="margin-top: 20px;">
                     <div class="app-card">
                         <div class="app-card-header">
-                            <div class="app-card-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.523 2.237a.625.625 0 00-.856.228l-1.363 2.39A8.164 8.164 0 0012 4.088c-1.16 0-2.267.263-3.304.767L7.333 2.465a.625.625 0 10-1.084.628l1.3 2.282A8.175 8.175 0 003.77 10.5h16.46a8.175 8.175 0 00-3.479-5.125l1.3-2.282a.625.625 0 00-.228-.856zM8.25 8.625a.875.875 0 110-1.75.875.875 0 010 1.75zm7.5 0a.875.875 0 110-1.75.875.875 0 010 1.75zM3.75 12a.75.75 0 01.75.75v5.5a2.25 2.25 0 002.25 2.25h.5v2.75a.75.75 0 001.5 0V20.5h6v2.75a.75.75 0 001.5 0V20.5h.5a2.25 2.25 0 002.25-2.25v-5.5a.75.75 0 011.5 0v5.5a3.75 3.75 0 01-3.75 3.75H6.75A3.75 3.75 0 013 18.25v-5.5a.75.75 0 01.75-.75z"/></svg></div>
+                            <div class="app-card-icon"><img src="/images/logo_lane.png" alt="Lane logo"></div>
                             <div>
                                 <div class="app-card-title">Lane</div>
                                 <div class="app-card-subtitle">Android</div>

@@ -1,5 +1,7 @@
 # Lane — On-Device Voice Companion
 
+<img src="../images/logo_lane.png" alt="Lane" width="120">
+
 **Lane** is a local-first voice companion for Android — a voice assistant that runs entirely on your phone.
 
 - **On-device AI**: local language model (Qwen via llama.cpp), offline Whisper speech recognition, and Kokoro/Piper voices — speech recognition, reasoning, and speech synthesis all happen on the device

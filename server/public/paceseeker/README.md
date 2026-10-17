@@ -1,5 +1,7 @@
 # PaceSeeker
 
+<img src="../images/logo_paceseeker.png" alt="PaceSeeker" width="120">
+
 Self-custodial auto-trading for Solana. Simulate DEX and CEX arbitrage strategies risk-free in SIM mode, then optionally go LIVE with biometric-gated session keys. Your keys never leave your device.
 
 ## Strategies
