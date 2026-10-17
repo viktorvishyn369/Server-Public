@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lane — Privacy Policy</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            line-height: 1.7;
+            min-height: 100vh;
+            padding: 60px 24px;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        h1 { color: #C9A84C; font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+        .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 40px; }
+        h2 { color: #fff; font-size: 1.2rem; font-weight: 700; margin-top: 32px; margin-bottom: 12px; }
+        h3 { color: #ccc; font-size: 1.05rem; font-weight: 600; margin-top: 20px; margin-bottom: 10px; }
+        p { color: #bbb; margin-bottom: 14px; font-size: 0.95rem; }
+        ul { color: #bbb; margin-bottom: 14px; padding-left: 24px; }
+        li { margin-bottom: 8px; font-size: 0.95rem; }
+        a { color: #C9A84C; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .updated { color: #666; font-size: 0.82rem; margin-top: 40px; border-top: 1px solid #2a2a2a; padding-top: 16px; }
+        strong { color: #fff; font-weight: 600; }
+        .banner {
+            background: rgba(201,168,76,0.08);
+            border: 1px solid rgba(201,168,76,0.2);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lane Privacy Policy</h1>
+        <p class="subtitle">Your conversations stay on your device</p>
+        <p class="updated" style="border: none; padding: 0; margin-bottom: 24px;">Last Updated: October 18, 2026</p>
+
+        <div class="banner">
+            <strong>Lane is local-first by design</strong> — speech recognition, the language model, and speech synthesis run on your device. Your conversations, memory, and voice audio are never sent to StealthLynk servers.
+        </div>
+
+        <h2>1. Overview</h2>
+        <p>Lane is built with a <strong>privacy-first, on-device</strong> architecture. StealthLynk does not collect, store, or process your conversations or personal data on our infrastructure. Everything that makes Lane personal lives on your device.</p>
+
+        <h2>2. Data Stored Locally on Your Device</h2>
+        <p>All personal data is stored <strong>locally on your device</strong> (MMKV/secure storage):</p>
+        <ul>
+            <li><strong>Conversation history and memory</strong> — transcripts, summaries, facts, and open threads Lane remembers between sessions</li>
+            <li><strong>Assistant settings</strong> — language, voice, avatar, model pack selections, wake/sleep configuration</li>
+            <li><strong>Cloud provider API keys</strong> — only if you choose to configure a cloud model (bring-your-own-key)</li>
+            <li><strong>Wallet address</strong> — public key only, if you connect a Solana wallet</li>
+            <li><strong>Subscription and trial state</strong> — entitlement status and trial clock for your device</li>
+        </ul>
+        <p>StealthLynk cannot access this data. If you uninstall the app or clear its storage, it is permanently deleted.</p>
+
+        <h2>3. Data We Do NOT Collect</h2>
+        <p>We do not collect, transmit to our servers, or share with third parties:</p>
+        <ul>
+            <li><strong>Your conversations or voice audio</strong> — transcription happens on-device by default</li>
+            <li><strong>Your memory or personal facts</strong> Lane learns about you</li>
+            <li><strong>Solana private keys or seed phrases</strong> — they never leave your wallet app</li>
+            <li><strong>Cloud provider API keys</strong> — never sent to StealthLynk</li>
+            <li><strong>Precise location, contacts, photos, or device media</strong></li>
+            <li><strong>Usage analytics, telemetry, or behavioral tracking</strong> — Lane includes no third-party analytics SDK, advertising SDK, crash reporter with upload, or tracking pixel</li>
+        </ul>
+
+        <h2>4. Permissions and Device Access</h2>
+        <h3>4.1 Microphone</h3>
+        <p>Lane uses the <strong>microphone</strong> to hear you. Audio is processed on-device by the local speech-recognition model. A foreground service with microphone access keeps the conversation alive while the app is open; wake and sleep phrases control listening state. Audio is never recorded, stored, or transmitted to StealthLynk.</p>
+        <h3>4.2 Notifications</h3>
+        <p>Notifications are scheduled <strong>locally on your device</strong> for assistant status and reminders. No data is sent to any server to deliver them.</p>
+        <h3>4.3 Location (Approximate)</h3>
+        <p>If you grant approximate location, it is used only for weather and place lookups via Open-Meteo and OpenStreetMap Nominatim. It is not stored or sent to StealthLynk.</p>
+        <h3>4.4 Alarms</h3>
+        <p>The <strong>SET_ALARM</strong> permission lets Lane open your clock app's alarm screen; the alarm itself is confirmed and managed by your clock app.</p>
+
+        <h2>5. Cloud Models (Optional)</h2>
+        <p>If you configure a cloud language model (OpenAI, Anthropic, OpenRouter, Google Gemini, Groq, Together AI, or Mistral) with your own API key, conversation content is sent <strong>directly from your device to that provider</strong>. StealthLynk is not an intermediary and does not see these requests. Your use of a provider is governed by that provider's privacy policy and terms. When offline or unconfigured, Lane runs fully local and sends nothing.</p>
+
+        <h2>6. Server Interactions</h2>
+        <p>Lane contacts StealthLynk infrastructure only for account and entitlement functions:</p>
+        <ul>
+            <li><strong>Remote configuration</strong> — fetched on startup (model pack sources, feature flags, pricing). Verified before use; no user data transmitted</li>
+            <li><strong>Trial and entitlement status</strong> — a device-scoped heartbeat resolves your trial/grace/subscription state</li>
+            <li><strong>Payment verification</strong> — when you purchase a subscription, the on-chain payment is verified against public Solana transaction data</li>
+            <li><strong>Free-week claims</strong> — if you claim the weekly promo, your X handle and Telegram verification status are used to verify your post. Wallet-linked apps on the same account receive the grant at claim time</li>
+            <li><strong>Account linking</strong> — if you connect a wallet, its public key links your device to your shared StealthLynk account so one paid plan unlocks the other apps</li>
+        </ul>
+
+        <h2>7. Blockchain Interactions</h2>
+        <p>If you connect a wallet or publish an avatar cNFT, transactions are submitted to public Solana RPC nodes via your wallet app (Mobile Wallet Adapter). Your public wallet address is pseudonymous but visible on-chain. StealthLynk does not operate these RPC nodes.</p>
+
+        <h2>8. External Services</h2>
+        <p>Optional voice tools query third-party services directly from your device — Open-Meteo (weather), OpenStreetMap Nominatim (places), and DuckDuckGo (web search). These services may log requests per their own privacy policies. StealthLynk does not control their data practices.</p>
+
+        <h2>9. Data Retention and Deletion</h2>
+        <p>StealthLynk does not centrally store your conversations, memory, or personal data. Server-side records are limited to entitlement state (trial, subscription, claims) keyed by device and account identifiers.</p>
+        <p><strong>To delete all Lane data from your device:</strong></p>
+        <ul>
+            <li>Go to <strong>Android Settings &gt; Apps &gt; Lane &gt; Storage &gt; Clear Data</strong>, OR</li>
+            <li><strong>Uninstall the app</strong>.</li>
+        </ul>
+        <p>To request removal of server-side entitlement records, contact us at <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
+
+        <h2>10. Children's Privacy</h2>
+        <p>Lane is not directed at children under 13. We do not knowingly collect data from minors. If you believe a minor has provided information to us, please contact us.</p>
+
+        <h2>11. Your Privacy Rights</h2>
+        <p>Depending on your jurisdiction (e.g., EU/EEA/UK GDPR, California CCPA), you may have rights of access, deletion, rectification, portability, and objection. Since Lane stores all personal data locally on your device, you can exercise these rights directly by managing or deleting the app's data. For server-side entitlement records, contact <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
+
+        <h2>12. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. The updated version will be indicated by the "Last Updated" date at the top. Continued use after changes constitutes acceptance of the updated policy.</p>
+
+        <h2>13. Contact</h2>
+        <p>For privacy questions or concerns, contact <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a>.</p>
+
+        <p class="updated">Last Updated: October 18, 2026</p>
+    </div>
+</body>
+</html>
