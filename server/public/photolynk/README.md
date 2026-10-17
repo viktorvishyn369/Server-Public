@@ -6,7 +6,7 @@
 PhotoLynk is a cross-platform mobile application for photo and video backup with built-in digital proof of authenticity. Back up your media to your own server or StealthCloud with end-to-end encryption, and create tamper-evident certificates for your photographs — complete with RFC 3161 trusted timestamps, C2PA provenance manifests, and EXIF integrity hashing.
 
 [![Android](https://img.shields.io/badge/Platform-Android-3DDC84?style=flat&logo=android)](https://developer.android.com/)
-[![iOS](https://img.shields.io/badge/Platform-iOS-000000?style=flat&logo=apple)](https://developer.apple.com/)
+[![Solana](https://img.shields.io/badge/Platform-Solana_Mobile-9945FF?style=flat&logo=solana)](https://solanamobile.com/)
 [![React Native](https://img.shields.io/badge/React_Native-0.76-61DAFB?style=flat&logo=react)](https://reactnative.dev/)
 [![License](https://img.shields.io/badge/License-CC_BY--NC--ND_4.0-red)](LICENSE)
 
@@ -16,7 +16,7 @@ PhotoLynk is a cross-platform mobile application for photo and video backup with
 
 ### Photo & Video Backup
 - **End-to-End Encrypted**: XSalsa20-Poly1305 encryption before upload
-- **Cross-Device Sync**: Android ↔ Desktop ↔ iOS
+- **Cross-Device Sync**: Android ↔ Desktop
 - **Zero-Knowledge Architecture**: Server never sees plaintext data
 - **Self-Hosted or Cloud**: Local server, remote VPS, or StealthCloud
 
@@ -61,7 +61,7 @@ PhotoLynk is a cross-platform mobile application for photo and video backup with
 ### Tech Stack
 - **Frontend**: React Native 0.76, Expo SDK 52
 - **Crypto**: NaCl (TweetNaCl.js), SHA-256 (js-sha256)
-- **Native Modules**: Swift (iOS), Kotlin (Android) for EXIF extraction
+- **Native Modules**: Kotlin (Android) for EXIF extraction
 - **Backend**: Node.js server for certification orchestration
 
 ---
@@ -69,15 +69,17 @@ PhotoLynk is a cross-platform mobile application for photo and video backup with
 ## Getting Started
 
 ### Prerequisites
-- Android 10+ (API 29+) or iOS 15+
+- Android 10+ (API 29+)
 - Network access (Wi-Fi or cellular)
 
 ### Installation
 
-PhotoLynk is available on the App Store and Google Play:
+PhotoLynk is available on Google Play and the Solana Mobile dApp Store:
 
-- **iOS**: [Download on the App Store](https://apps.apple.com/app/id6748285696)
 - **Android**: [Download on Google Play](https://play.google.com/store/apps/details?id=com.photosync.app)
+- **Solana Mobile**: [Solana dApp Store](https://solanadappstore.com/details?id=com.photolynk.solana)
+
+Android only — no iOS version is planned. Apple's restrictions on cryptocurrency payments and wallet usage are incompatible with how the app pays, binds wallets, and verifies on-chain.
 
 ### Development Setup
 
@@ -95,9 +97,6 @@ cp .env.example .env
 
 # Run on Android
 npx expo run:android
-
-# Run on iOS
-npx expo run:ios
 ```
 
 > **Note:** The `.env` file is gitignored and never included in the repository. You must create your own. See `.env.example` for required keys.
@@ -145,8 +144,9 @@ PhotoLynk offers two optional in-app purchases:
 - 400 GB — $3.99/mo
 - 1 TB — $7.99/mo
 - Yearly billing = monthly price × 12
-- Paid via Solana wallet (SOL or SKR token)
-- 7-day free trial available
+- Paid via Solana wallet (SOL or SKR token), no auto-renew
+- One-time 7-day free trial for every new user — no payment needed
+- Time always stacks: a purchase or an earned free week starts where your current term ends — leftover trial days carry into paid time
 
 ### Premium — $49.99 USD (One-Time)
 - Unlocks 1 TB of end-to-end encrypted cloud storage for 1 year
@@ -164,9 +164,16 @@ PhotoLynk offers two optional in-app purchases:
 - Solana network fees are separate and always paid in SOL
 
 ### Grace Period
-- Lapsed subscriptions get a 3-day read-only window to download everything
-- No uploads or edits, no auto-deletions
-- Certificates remain user-owned via on-device keys
+- Every entitlement (trial, earned week, paid plan) carries a 3-day grace tail after expiry — downloading stays available, uploads pause
+- No auto-deletions; certificates remain user-owned via on-device keys
+
+### Free Weekly Option
+- 100 GB and 200 GB plans can be earned without paying — post a weekly promo from the plan sheet
+- A verified post grants 7 days on every app linked to your account at claim time, stacked on your remaining term
+
+### StealthLynk Ecosystem
+- A paid subscription in any StealthLynk app unlocks the others at equivalent value: any paid PhotoLynk storage plan unlocks PaceSeeker and Lane, and a PaceSeeker or Lane subscription includes a 100 GB PhotoLynk plan — all under one account
+- Apps link automatically by proving the same Solana wallet; no extra steps required. The one-time Premium upgrade stays PhotoLynk-only
 
 All Solana payments are processed on-chain. PhotoLynk does not directly handle payment card information. Purchases are final and non-refundable except as required by applicable law.
 
@@ -180,9 +187,9 @@ All Solana payments are processed on-chain. PhotoLynk does not directly handle p
 - **Zero-Knowledge**: Server never sees plaintext images
 
 ### Authentication
-- **Biometric Auth**: Fingerprint / Face ID for sensitive operations
+- **Biometric Auth**: Fingerprint for sensitive operations
 - **Device Binding**: JWT tokens bound to specific device identifiers
-- **Secure Storage**: iOS Keychain / Android Keystore for credentials
+- **Secure Storage**: Android Keystore for credentials
 
 ### API Key Management
 - **No Hardcoded Secrets**: All API keys via environment variables

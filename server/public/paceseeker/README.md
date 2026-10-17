@@ -14,7 +14,7 @@ Scans Jupiter swap routes on Solana for USDC → Token → USDC round-trip oppor
 Monitors prices across 7 centralized exchanges (Bybit, OKX, MEXC, Gate.io, KuCoin, BingX, Bitget) for cross-exchange spreads. SIM mode uses public feeds; LIVE mode places real market orders via your API keys.
 
 ### DCA AI
-AI-driven Dollar-Cost Averaging that accumulates a user-selected verified Solana token. Evaluates 13+ technical indicators (RSI, StochRSI, MACD, Bollinger Bands, EMA, Supertrend, ADX, OBV, chart patterns, Elliott Wave, momentum) across three timeframes (5m, 15m, 1H). Self-learns from every closed trade with adaptive weights and pattern memory. On-device price history dates back to 2020.
+AI-driven Dollar-Cost Averaging that trades a user-selected verified Solana token for USDC gains. Evaluates 37 technical indicators (RSI, StochRSI, MACD, Bollinger Bands, EMA, Supertrend, ADX, OBV, chart patterns, momentum, and more — 30 user-toggleable plus 7 always-on context feeds) across three timeframes plus a daily macro overlay. Self-learns from every closed trade with adaptive weights and pattern memory. On-device price history dates back to 2020.
 
 ## Wallet Types
 
@@ -38,12 +38,20 @@ AI-driven Dollar-Cost Averaging that accumulates a user-selected verified Solana
 
 ## Subscription
 
-- **Price**: $20.00 USD/month (50% off with promo code)
+- **Price**: $1.75 USD/month launch price (regular $3.99)
 - **Payment**: SOL, USDC, or SKR on Solana
 - **Duration**: 30 days, no auto-renew
 - **Unlocks**: Atomic mode, Auto mode, CEX LIVE trading, zero DEX app fees
 - **When expired**: Reverts to Sandwich mode, CEX LIVE disabled, DEX app fees resume
 - **SIM mode**: Always free
+
+### Free trial, grace & stacking
+
+- Every new device gets a **one-time 7-day free trial** — reinstalling does not reset it.
+- Every entitlement (trial, earned week, paid plan) carries a **3-day grace** tail after expiry.
+- **Time always stacks**: a purchase or earned free week starts where your current term ends — remaining trial days are never lost.
+- **Free weekly access**: post one verified promo per week for 7 days on every app linked at claim time.
+- **Ecosystem**: one paid subscription in any StealthLynk app unlocks every linked app at equivalent value — a PaceSeeker sub includes Lane and a 100 GB PhotoLynk plan, and any paid PhotoLynk storage plan (100 GB+) or Lane plan unlocks PaceSeeker. Apps link automatically by verifying the same Solana wallet.
 
 ## Safety
 

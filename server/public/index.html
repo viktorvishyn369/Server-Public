@@ -7,8 +7,8 @@
     <meta name="description" content="Building secure, privacy-respecting infrastructure for real-world digital systems.">
 
     <!-- Open Graph / Phantom wallet metadata -->
-    <meta property="og:title" content="StealthLynk — PhotoLynk & PaceSeeker">
-    <meta property="og:description" content="Secure photo & video backup with blockchain proof of ownership, and self-custodial Solana auto-trading with DEX, CEX, and DCA AI strategies. Built by StealthLynk.">
+    <meta property="og:title" content="StealthLynk — PhotoLynk, PaceSeeker & Lane">
+    <meta property="og:description" content="Secure photo & video backup with blockchain proof of ownership, self-custodial Solana auto-trading with DEX, CEX, and DCA AI strategies, and Lane — a voice companion that runs entirely on your phone. Built by StealthLynk.">
     <meta property="og:image" content="/images/logo_site.png">
     <meta property="og:url" content="https://stealthlynk.io">
     <meta property="og:type" content="website">
@@ -237,7 +237,7 @@
 
         .product-overview {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 16px;
             margin: 28px 0 46px;
         }
@@ -586,6 +586,16 @@
             border: 1px solid var(--border-color);
         }
         .store-btn.outline:hover { border-color: #444; }
+        .store-btn.soon {
+            pointer-events: none;
+            opacity: 0.55;
+            cursor: default;
+        }
+        .badge.coming {
+            color: #f5c842;
+            border-color: rgba(245, 200, 66, 0.3);
+            background: rgba(245, 200, 66, 0.08);
+        }
         .app-card-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .platform-tag {
             display: inline-flex; align-items: center; gap: 4px;
@@ -695,7 +705,7 @@
             </div>
             <div class="eyebrow">Secure software company · Privacy-first products</div>
             <div class="logo">StealthLynk</div>
-            <p class="tagline">Professional software for private media backup, self-custodial automation, and secure digital infrastructure.</p>
+            <p class="tagline">Professional software for private media backup, self-custodial automation, on-device AI, and secure digital infrastructure.</p>
             <div class="hero-actions">
                 <a href="#products" class="primary-link">View products</a>
                 <a href="#downloads" class="secondary-link">Get downloads</a>
@@ -724,13 +734,25 @@
                     <h3>PaceSeeker</h3>
                     <span class="badge released">Released</span>
                 </div>
-                <p>Self-custodial Solana auto-trading with three strategies: DEX arbitrage, CEX arbitrage, and DCA AI bot with 22 technical indicators.</p>
+                <p>Self-custodial Solana auto-trading with three strategies: DEX arbitrage, CEX arbitrage, and DCA AI bot with 37 technical indicators.</p>
                 <div class="product-tags">
                     <span class="platform-tag">Solana Mobile</span>
                     <span class="platform-tag">DEX</span>
                     <span class="platform-tag">CEX</span>
                     <span class="platform-tag">DCA AI</span>
                     <span class="platform-tag">SIM Mode</span>
+                </div>
+            </a>
+            <a href="#lane" class="product-tile">
+                <div class="product-tile-top">
+                    <h3>Lane</h3>
+                    <span class="badge coming">Coming Soon</span>
+                </div>
+                <p>A voice companion that runs entirely on your phone — on-device language model, offline speech recognition, and private by default.</p>
+                <div class="product-tags">
+                    <span class="platform-tag">On-Device AI</span>
+                    <span class="platform-tag">Voice</span>
+                    <span class="platform-tag">Local-First</span>
                 </div>
             </a>
         </div>
@@ -758,8 +780,10 @@
                 <p><strong>Ultimate Privacy &amp; Ownership Protection.</strong> Zero-knowledge StealthCloud storage, cryptographic hashes, authenticity certificates, duplicate cleanup, and a strict promise of no ads, tracking, or data resale.</p>
                 <p><strong>Certified Photos Album.</strong> Issue tamper-evident certificates that lock in the file bytes, EXIF metadata, capture context, and ownership history. Transfer certificates via blockchain links, keep them accessible forever, and use them as proof for licensing, archives, or IP defense.</p>
                 <p><strong>StealthCloud Plans.</strong> Monthly or yearly subscriptions at 100 GB ($1.75/mo), 200 GB ($2.45/mo), 400 GB ($3.99/mo), and 1 TB ($7.99/mo), or a one-time $49.99 Premium plan (1 TB storage for 1 year). Pay with SOL or SKR token via Solana wallet. All formats—JPG, HEIC, PNG, RAW, CR2, NEF, DNG, more—are stored byte-for-byte.</p>
+                <p><strong>Trial, Grace &amp; Stacking.</strong> Every new account gets a one-time 7-day free trial — no payment needed. Every entitlement carries a 3-day grace tail after it expires. Purchases and earned free weeks always stack on your remaining time — buy mid-trial and the leftover trial days carry into the paid term.</p>
+                <p><strong>Free Weekly Option.</strong> 100 GB and 200 GB plans can be earned without paying — post a weekly promo from the plan sheet and a verified post grants 7 days on every app linked to your account.</p>
                 <p><strong>Web3 Album &amp; Mint Fees.</strong> Base commission is $0.15 for files up to 3 MB, +10% per additional MB. Subscribers get 80% off mint fees. Premium includes 100 free Web3 Album additions (no app commission, no network fees), then $0.01/mint up to 10,000 total. Loyalty discounts accumulate weekly, up to 80% off. Solana network fees are separate.</p>
-                <p><strong>Grace Period After Expiration.</strong> Lapsed subscriptions get a 3-day read-only window to download everything. No uploads or edits, no auto-deletions, and certificates remain user-owned via on-device keys.</p>
+                <p><strong>Grace Period After Expiration.</strong> Lapsed subscriptions get a 3-day sync window to download and restore everything. No new uploads during grace, no auto-deletions, and certificates remain user-owned via on-device keys.</p>
 
                 <!-- Video, Pitch Deck & Source -->
                 <div style="display:flex;flex-direction:column;gap:10px;margin:20px 0 24px;">
@@ -850,11 +874,12 @@
             <div class="card" id="paceseeker">
                 <span class="badge released">Released</span>
                 <h3>PaceSeeker</h3>
-                <p><strong>Self-custodial auto-trading for Solana.</strong> Three strategies: DEX arbitrage, CEX arbitrage, and DCA AI bot with 22 technical indicators. Simulate risk-free in SIM mode, then optionally go LIVE with biometric-gated session keys. Your keys never leave your device.</p>
-                <p><strong>Three Strategies.</strong> DEX arbitrage scans Raydium, Orca, Meteora and other Solana DEXes for cross-pool price differences via Jupiter. CEX arbitrage monitors 7 exchanges (Bybit, OKX, MEXC, Gate.io, KuCoin, BingX, Bitget) for cross-exchange spreads, with real market orders in LIVE mode. DCA AI uses 22 technical indicators across three timeframes to accumulate verified Solana tokens with self-learning adaptive weights.</p>
+                <p><strong>Self-custodial auto-trading for Solana.</strong> Three strategies: DEX arbitrage, CEX arbitrage, and DCA AI bot with 37 technical indicators. Simulate risk-free in SIM mode, then optionally go LIVE with biometric-gated session keys. Your keys never leave your device.</p>
+                <p><strong>Three Strategies.</strong> DEX arbitrage scans Raydium, Orca, Meteora and other Solana DEXes for cross-pool price differences via Jupiter. CEX arbitrage monitors 7 exchanges (Bybit, OKX, MEXC, Gate.io, KuCoin, BingX, Bitget) for cross-exchange spreads, with real market orders in LIVE mode. DCA AI uses 37 technical indicators across three timeframes plus a daily macro overlay to accumulate verified Solana tokens with self-learning adaptive weights.</p>
                 <p><strong>Safety First.</strong> Daily loss caps, consecutive-loss halts, tight Jupiter slippage guards, and a 24-hour expiring session wallet. Revoke anytime to reclaim all USDC, ATA rent, and SOL.</p>
                 <p><strong>Built for Solana Mobile.</strong> Native wallet integration, dark glassmorphism UI, and one-button execution optimized for Seeker devices.</p>
-                <p><strong>Fees.</strong> DEX trades: 10% performance fee on net profit (winners only) — you only pay when you profit. CEX trades: no PaceSeeker app fees. Vault operations (deposit, withdraw, swap): zero app fees. Subscription ($20/mo, 50% off with promo code) unlocks Atomic mode, Auto mode, CEX LIVE, DCA LIVE, and waives all DEX app fees. SIM mode is always free.</p>
+                <p><strong>Fees.</strong> DEX trades: 10% performance fee on net profit (winners only) — you only pay when you profit. CEX trades: no PaceSeeker app fees. Vault operations (deposit, withdraw, swap): zero app fees. SIM mode is always free.</p>
+                <p><strong>Subscription.</strong> $1.75/mo launch price (regular $3.99), paid with SOL, USDC, or SKR — no auto-renew. Unlocks Auto mode, Atomic mode, CEX LIVE trading, and waives all DEX app fees. Every new device gets a one-time 7-day free trial, and every entitlement carries a 3-day grace tail. A paid month or an earned free week stacks on your remaining term — time is never lost. A PaceSeeker subscription also unlocks Lane and a 100 GB PhotoLynk plan on your linked StealthLynk account — one paid plan in any StealthLynk app covers them all at equivalent value.</p>
                 <div class="app-grid" style="margin-top: 20px;">
                     <div class="app-card">
                         <div class="app-card-header">
@@ -864,8 +889,9 @@
                                 <div class="app-card-subtitle">Solana Mobile (Android)</div>
                             </div>
                         </div>
-                        <div class="app-card-desc">DEX arbitrage, CEX arbitrage, and DCA AI bot with 22 indicators. Biometric session keys, SIM mode, and one-button execution.</div>
+                        <div class="app-card-desc">DEX arbitrage, CEX arbitrage, and DCA AI bot with 37 indicators. Biometric session keys, SIM mode, and one-button execution.</div>
                         <a href="solanadappstore://details?id=com.stealthlynk.paceseeker" class="store-btn outline">Solana dApp Store</a>
+                        <span class="store-btn soon">Google Play — Coming soon</span>
                     </div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:10px;margin:20px 0 0;">
@@ -878,6 +904,35 @@
                         <span style="margin-left:auto;font-size:1.1rem;opacity:0.5;">&rarr;</span>
                     </a>
                 </div>
+            </div>
+
+            <div class="card" id="lane">
+                <span class="badge coming">Coming Soon</span>
+                <h3>Lane</h3>
+                <p><strong>A voice companion that runs entirely on your phone.</strong> Lane is a local-first voice assistant: on-device language model (Qwen), offline Whisper speech recognition, and Kokoro/Piper voices — speech recognition, reasoning, and speech synthesis all happen on the device. One button starts a conversation; spoken replies stream back sentence by sentence with interruption (barge-in) support.</p>
+                <p><strong>Private by Default.</strong> Wake and sleep phrases ("Wake up Lane"), multilingual replies that strictly follow the detected language, a changeable avatar, and voice tools for weather, web search, opening apps, alarms, calling, and assistant settings. Cloud models (OpenAI, Anthropic, OpenRouter, Gemini, Groq, Together, Mistral) are strictly bring-your-own-key and opt-in — offline, Lane keeps working fully local.</p>
+                <p><strong>Solana Integration.</strong> Connect a wallet via Mobile Wallet Adapter, and optionally publish your avatar as a public compressed NFT — always behind explicit confirmation. A Lane subscription also unlocks PaceSeeker and a 100 GB PhotoLynk plan on your linked StealthLynk account: one paid plan in any StealthLynk app covers them all, with the same 7-day trial, 3-day grace, and time-stacking rules.</p>
+                <div class="app-grid" style="margin-top: 20px;">
+                    <div class="app-card">
+                        <div class="app-card-header">
+                            <div class="app-card-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.523 2.237a.625.625 0 00-.856.228l-1.363 2.39A8.164 8.164 0 0012 4.088c-1.16 0-2.267.263-3.304.767L7.333 2.465a.625.625 0 10-1.084.628l1.3 2.282A8.175 8.175 0 003.77 10.5h16.46a8.175 8.175 0 00-3.479-5.125l1.3-2.282a.625.625 0 00-.228-.856zM8.25 8.625a.875.875 0 110-1.75.875.875 0 010 1.75zm7.5 0a.875.875 0 110-1.75.875.875 0 010 1.75zM3.75 12a.75.75 0 01.75.75v5.5a2.25 2.25 0 002.25 2.25h.5v2.75a.75.75 0 001.5 0V20.5h6v2.75a.75.75 0 001.5 0V20.5h.5a2.25 2.25 0 002.25-2.25v-5.5a.75.75 0 011.5 0v5.5a3.75 3.75 0 01-3.75 3.75H6.75A3.75 3.75 0 013 18.25v-5.5a.75.75 0 01.75-.75z"/></svg></div>
+                            <div>
+                                <div class="app-card-title">Lane</div>
+                                <div class="app-card-subtitle">Android</div>
+                            </div>
+                        </div>
+                        <div class="app-card-desc">On-device voice companion — private, offline-capable, Solana-ready.</div>
+                        <span class="store-btn soon">Solana dApp Store — Coming soon</span>
+                        <span class="store-btn soon">Google Play — Coming soon</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Platforms</h3>
+                <p>
+                    StealthLynk apps are Android-first: distributed through Google Play and the Solana Mobile dApp Store, with desktop companions on macOS, Windows, and Linux where it makes sense. We do not ship iOS apps — Apple's restrictions on cryptocurrency payments and wallet usage are incompatible with how our apps pay, bind, and verify on-chain.
+                </p>
             </div>
         </section>
 
