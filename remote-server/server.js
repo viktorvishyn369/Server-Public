@@ -153,6 +153,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 // JWT_SECRET: env wins; otherwise a unique per-install secret is generated and
 // persisted under ~/.config/photolynk/ so tokens from one self-hosted server can
 // never verify on another. Persist failure degrades to an ephemeral secret
@@ -289,13 +290,23 @@ app.use(helmet({
     },
 }));
 app.use(cors());
+// Behind a same-host reverse proxy (the installer's nginx), trust X-Forwarded-For
+// only from loopback so req.ip is the real client IP — the auth rate limiter and
+// logs stay per-user instead of collapsing into one 127.0.0.1 bucket. Direct
+// connections to PORT are unaffected (XFF ignored). Override with TRUST_PROXY.
+const _trustProxyEnv = String(process.env.TRUST_PROXY || '').trim();
+app.set('trust proxy', _trustProxyEnv === '' ? 'loopback'
+    : _trustProxyEnv === 'true' ? true
+    : _trustProxyEnv === 'false' ? false
+    : /^\d+$/.test(_trustProxyEnv) ? Number(_trustProxyEnv)
+    : _trustProxyEnv);
 app.use(morgan('common')); // Logging
 // Allow larger JSON payloads (clients may send sizeable metadata blobs)
 app.use(express.json({ limit: '25mb' }));
 
-// Serve static files from public directory (company website assets)
-app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
-
+// Optional upload size cap in bytes (0 = unlimited). Protects a VPS disk from
+// a single runaway/abusive account. Applies to both raw and multipart uploads.
+const UPLOAD_MAX_BYTES = Math.max(0, Number.parseInt(process.env.UPLOAD_MAX_BYTES || '0', 10) || 0);
 
 // Serve .well-known directory for capacity JSON
 app.use('/.well-known', express.static(path.join(AUX_ROOT, '.well-known')));
@@ -580,7 +591,8 @@ const migrateUserFoldersToNewDeviceUuid = async (userId, newDeviceUuid, userEmai
 
 const resolveClassicFileForUser = async (user, filename) => {
     const safeName = path.basename(filename || '').replace(/\0/g, '');
-    if (!safeName) return null;
+    // Never serve in-progress raw uploads (they end in .uploading)
+    if (!safeName || safeName.endsWith('.uploading')) return null;
     const uuids = await getUserDeviceUuids(user);
     for (const uuid of uuids) {
         const deviceDir = path.join(UPLOAD_DIR, uuid);
@@ -1227,7 +1239,10 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+    storage: storage,
+    limits: UPLOAD_MAX_BYTES > 0 ? { fileSize: UPLOAD_MAX_BYTES } : {},
+});
 
 
 // --- ROUTES ---
@@ -1924,15 +1939,24 @@ app.post('/api/migrate-credentials', authenticateToken, async (req, res) => {
 });
 
 // Upload File
-app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
+app.post('/api/upload', authenticateToken, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const { filename, path: filePath, originalname, mimetype, size } = req.file;
-    
-    // Calculate file hash to detect duplicates
-    const fileBuffer = fs.readFileSync(filePath);
-    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-    
+
+    // Stream the file for hashing — never buffer a multi-GB upload in memory
+    const fileHash = await new Promise((resolve, reject) => {
+        const h = crypto.createHash('sha256');
+        fs.createReadStream(filePath)
+            .on('data', (c) => h.update(c))
+            .on('end', () => resolve(h.digest('hex')))
+            .on('error', reject);
+    }).catch(() => null);
+    if (!fileHash) {
+        try { fs.unlinkSync(filePath); } catch (e) {}
+        return res.status(500).json({ error: 'Failed to read uploaded file' });
+    }
+
     // Check if this exact file already exists for this user (by hash only - same content = duplicate)
     db.get(`SELECT filename, file_hash FROM files WHERE user_id = ? AND file_hash = ?`, 
         [req.user.id, fileHash], 
@@ -1976,6 +2000,15 @@ app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => 
 app.post('/api/upload/raw', authenticateToken, (req, res) => {
     const originalname = (req.headers['x-filename'] || req.headers['x-file-name'] || '').toString();
     if (!originalname) return res.status(400).json({ error: 'Missing x-filename header' });
+
+    // Optional disk-fill guard (UPLOAD_MAX_BYTES). Reject up front when the
+    // client declares a Content-Length, and abort mid-stream if it exceeds.
+    if (UPLOAD_MAX_BYTES > 0) {
+        const declared = Number(req.headers['content-length'] || 0);
+        if (declared > UPLOAD_MAX_BYTES) {
+            return res.status(413).json({ error: 'File too large' });
+        }
+    }
 
     const deviceDir = path.join(UPLOAD_DIR, req.user.device_uuid);
     try { fs.mkdirSync(deviceDir, { recursive: true }); } catch (e) {}
@@ -2059,19 +2092,30 @@ app.post('/api/upload/raw', authenticateToken, (req, res) => {
     out.on('error', (e) => {
         console.error(`[Upload] Write stream error for ${safeName}: ${e.message}`);
         closeStreamAndCleanup();
-        return res.status(500).json({ error: 'Failed to write upload' });
+        if (!res.headersSent) return res.status(500).json({ error: 'Failed to write upload' });
     });
 
+    let sizeLimitHit = false;
     req.on('data', (chunk) => {
         try {
             writtenBytes += chunk.length;
             hasher.update(chunk);
+            if (UPLOAD_MAX_BYTES > 0 && writtenBytes > UPLOAD_MAX_BYTES && !sizeLimitHit) {
+                sizeLimitHit = true;
+                console.log(`[Upload] Size cap hit for ${safeName} (${writtenBytes} > ${UPLOAD_MAX_BYTES})`);
+                try { req.unpipe(out); } catch (e) {}
+                try { req.destroy(); } catch (e) {}
+                try { out.destroy(); } catch (e) {}
+                closeStreamAndCleanup();
+                return res.status(413).json({ error: 'File too large' });
+            }
         } catch (e) {
             // ignore
         }
     });
 
     out.on('finish', async () => {
+        if (sizeLimitHit) return; // 413 already sent — don't finalize
         const cleanupTmp = (delayMs) => {
             const doClean = () => {
                 try {
@@ -2230,7 +2274,7 @@ app.post('/api/upload/raw', authenticateToken, (req, res) => {
 
             try {
                 fs.renameSync(tmpPath, correctedFinalPath);
-                try { fs.chmodSync(correctedFinalPath, 0o644); } catch (e) {}
+                try { fs.chmodSync(correctedFinalPath, 0o600); } catch (e) {}
             } catch (e) {
                 console.error(`[Upload] Failed to rename ${tmpPath} -> ${correctedFinalPath}: ${e.message}`);
                 cleanupTmp(200);
@@ -2281,7 +2325,7 @@ app.get('/api/files', authenticateToken, async (req, res) => {
                 continue;
             }
             for (const filename of dirItems) {
-                if (!filename || filename.startsWith('.')) continue;
+                if (!filename || filename.startsWith('.') || filename.endsWith('.uploading')) continue;
                 const filePath = path.join(deviceDir, filename);
                 if (!filePath.startsWith(deviceDir)) continue;
                 try {
@@ -2628,7 +2672,7 @@ app.post('/api/files/purge', authenticateToken, async (req, res) => {
         let exifDeleted = 0;
         for (const hash of fileHashes) {
             try {
-                const exifPath = getExifFilePath(hash);
+                const exifPath = getExifPath(hash);
                 if (exifPath && fs.existsSync(exifPath)) {
                     fs.unlinkSync(exifPath);
                     exifDeleted++;
@@ -3477,14 +3521,18 @@ app.delete('/api/account', authenticateToken, async (req, res) => {
             }
         }
         
-        // Delete user from database
-        await new Promise((resolve, reject) => {
-            db.run('DELETE FROM user_plans WHERE user_id = ?', [userId], (err) => {
-                if (err) console.error('[Account Deletion] Error deleting user_plans:', err.message);
-                resolve();
+        // Delete every user-scoped row so no orphaned metadata survives
+        // (files/devices/hashes/chunks/device-state all key on user_id).
+        const USER_SCOPED_TABLES = ['user_plans', 'files', 'devices', 'platform_hashes', 'cloud_chunks', 'cloud_device_state'];
+        for (const table of USER_SCOPED_TABLES) {
+            await new Promise((resolve) => {
+                db.run(`DELETE FROM ${table} WHERE user_id = ?`, [userId], (err) => {
+                    if (err) console.error(`[Account Deletion] Error deleting ${table}:`, err.message);
+                    resolve();
+                });
             });
-        });
-        
+        }
+
         await new Promise((resolve, reject) => {
             db.run('DELETE FROM users WHERE id = ?', [userId], (err) => {
                 if (err) {
@@ -4059,10 +4107,24 @@ const startExifBackfill = async () => {
     }
 };
 
+// Multer size-cap errors → clean 413 instead of Express' HTML error page.
+// Must be registered after all routes to catch their next(err) calls.
+app.use((err, req, res, next) => {
+    if (err && err.name === 'MulterError') {
+        const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+        return res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? 'File too large' : 'Upload rejected' });
+    }
+    next(err);
+});
+
 const startHttp = () => {
     const httpServer = http.createServer(app);
-    httpServer.listen(PORT, '0.0.0.0', () => {
-        console.log(`\n🚀 Secure Backup Server running on 0.0.0.0:${PORT}`);
+    // Disable the whole-request deadline: multi-GB uploads legitimately take
+    // far longer than Node's 300s default requestTimeout. headersTimeout still
+    // applies, and auth runs before the body is consumed.
+    httpServer.requestTimeout = 0;
+    httpServer.listen(PORT, HOST, () => {
+        console.log(`\n🚀 Secure Backup Server running on ${HOST}:${PORT}`);
         console.log(`📁 Upload directory: ${UPLOAD_DIR}`);
         console.log(`💾 Database: ${DB_PATH}\n`);
         setTimeout(() => startExifBackfill().catch(e => console.error('[ExifBackfill] Fatal:', e.message)), 30000);
@@ -4079,18 +4141,15 @@ const startHttps = () => {
         return startHttp();
     }
 
-    if (JWT_SECRET === 'super-secure-secret-key-change-this') {
-        console.warn('⚠️  JWT_SECRET is using the default value. Set a strong JWT_SECRET for remote deployments.');
-    }
-
     const tlsOptions = {
         key: fs.readFileSync(TLS_KEY_PATH),
         cert: fs.readFileSync(TLS_CERT_PATH)
     };
 
     const httpsServer = https.createServer(tlsOptions, app);
-    httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
-        console.log(`\n🔐 HTTPS enabled on 0.0.0.0:${HTTPS_PORT}`);
+    httpsServer.requestTimeout = 0; // same reason as HTTP — long uploads
+    httpsServer.listen(HTTPS_PORT, HOST, () => {
+        console.log(`\n🔐 HTTPS enabled on ${HOST}:${HTTPS_PORT}`);
         console.log(`📁 Upload directory: ${UPLOAD_DIR}`);
         console.log(`💾 Database: ${DB_PATH}\n`);
         setTimeout(() => startExifBackfill().catch(e => console.error('[ExifBackfill] Fatal:', e.message)), 30000);
@@ -4105,8 +4164,8 @@ const startHttps = () => {
             const location = `https://${host}${portPart}${req.originalUrl}`;
             res.redirect(301, location);
         });
-        http.createServer(redirectApp).listen(PORT, '0.0.0.0', () => {
-            console.log(`↪️  HTTP redirect enabled on 0.0.0.0:${PORT} -> HTTPS`);
+        http.createServer(redirectApp).listen(PORT, HOST, () => {
+            console.log(`↪️  HTTP redirect enabled on ${HOST}:${PORT} -> HTTPS`);
         });
     }
 };

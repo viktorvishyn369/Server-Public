@@ -38,9 +38,9 @@ PhotoLynk offers three server modes in the app (**Settings → Server**):
 
 ### Remote Server — one line on your VPS
 
-You bring a VPS (any Ubuntu/Debian host) and a domain. The script does the
-rest — Node.js, dependencies, systemd service, and optional Nginx + Let's
-Encrypt HTTPS:
+You bring a VPS (any Ubuntu/Debian host) and, ideally, a domain. The script
+does the rest — Node.js, dependencies, an unprivileged systemd service, and
+optional Nginx + Let's Encrypt HTTPS:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/viktorvishyn369/Server-Public/main/install.sh | sudo bash
@@ -48,6 +48,9 @@ curl -fsSL https://raw.githubusercontent.com/viktorvishyn369/Server-Public/main/
 
 The installer asks for your domain and email, configures everything, and prints
 the exact address to enter in the app. Re-running it updates the server.
+No domain? Enter the server's IP in the app instead — it will use
+`http://<ip>:3000` (plain HTTP, trusted networks only). A domain gets you
+free HTTPS, which is the recommended setup.
 
 Then in PhotoLynk: **Settings → Server → Remote** → enter your domain
 (e.g. `photos.example.com` — no `https://`, no port).

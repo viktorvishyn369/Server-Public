@@ -27,6 +27,10 @@ Listens on `0.0.0.0:3000` by default (`PORT`, `HOST` env vars). Put it behind
 Nginx/Caddy/Cloudflare Tunnel for TLS — the app expects `https://your-domain`
 on port 443 for domain hosts.
 
+**No domain?** The app also accepts a bare IPv4 address and will use
+`http://<ip>:3000` — plain HTTP, so only do this on networks you trust.
+Domain + Let's Encrypt HTTPS (what `install.sh` sets up) is the safe path.
+
 ## Configuration
 
 See [`.env.example`](.env.example). Everything is optional:
@@ -38,6 +42,9 @@ See [`.env.example`](.env.example). Everything is optional:
 | `DB_PATH` | `<data>/backup.db` | SQLite database (users, devices, hashes, EXIF) |
 | `PHOTOSYNC_DATA_DIR` | parent of `UPLOAD_DIR` | Cloud manifests, EXIF, capacity + uptime state |
 | `JWT_SECRET` | auto-generated | Session signing secret — generated per install under `~/.config/photolynk/` |
+| `TRUST_PROXY` | `loopback` | X-Forwarded-For trust for reverse proxies |
+| `UPLOAD_MAX_BYTES` | `0` (unlimited) | Optional per-file upload cap |
+| `AUTH_RATE_LIMIT_*` | `25` / `15min` | Brute-force limit on auth endpoints |
 | `ENABLE_HTTPS` + `TLS_*` | off | Built-in TLS instead of a reverse proxy |
 
 ## API surface (what the app calls)
@@ -63,9 +70,14 @@ bound to the device UUID they were issued for.
 
 - Files are stored **unencrypted** on your disk (same model as Local mode) —
   protect the VPS accordingly. TLS encrypts everything in transit.
+- The installer runs the service as an unprivileged `photolynk` system user
+  with `NoNewPrivileges` + `PrivateTmp`; uploaded files are mode `0600` under a
+  `0700` data dir.
 - Password-reset codes are written to the server log (`journalctl -u
   photolynk-remote`) — there is no email integration by design.
-- Rate limiting on auth endpoints is built in (in-memory, per-IP).
+- Rate limiting on auth endpoints is built in (in-memory, per client IP —
+  correct client IPs are recovered via `X-Forwarded-For` from the local
+  nginx proxy).
 - The only optional outbound call is an IP→country lookup used by the
   (disabled-by-default) country-verification flow.
 
