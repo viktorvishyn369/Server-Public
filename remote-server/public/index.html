@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PhotoLynk Remote Server</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0e1a;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif}
+  .card{max-width:520px;padding:40px;text-align:center}
+  h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
+  h1 span{color:#4fd1c5;font-weight:400}
+  p{color:#94a3b8;font-size:14px;line-height:1.6}
+  code{background:#111827;padding:2px 8px;border-radius:6px;font-size:13px;color:#4fd1c5}
+  .ok{display:inline-block;margin-top:16px;padding:6px 14px;border:1px solid #22c55e55;color:#22c55e;border-radius:999px;font-size:12px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Photo<span>Lynk</span> Remote Server</h1>
+    <p>This server is running and ready to accept backups from the PhotoLynk app.<br/>
+    In the app choose <strong>Settings → Server → Remote</strong> and enter this server's domain.</p>
+    <p>Health check: <code id="h">/api/health</code></p>
+    <div class="ok" id="status">checking…</div>
+  </div>
+  <script>
+    fetch('/api/health').then(r=>r.json()).then(d=>{
+      document.getElementById('status').textContent = d.ok ? '● Online' : '○ Degraded';
+    }).catch(()=>{ document.getElementById('status').textContent='○ Unreachable'; });
+  </script>
+</body>
+</html>

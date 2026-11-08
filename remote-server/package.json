@@ -1,0 +1,47 @@
+{
+  "name": "photolynk-remote-server",
+  "version": "1.0.0",
+  "description": "PhotoLynk Remote Server - self-hosted photo & video backup server. Your VPS, your domain, your files.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "photo-backup",
+    "self-hosted",
+    "privacy",
+    "remote-server",
+    "photolynk",
+    "stealthlynk"
+  ],
+  "author": "StealthLynk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/viktorvishyn369/Server-Public.git",
+    "directory": "remote-server"
+  },
+  "homepage": "https://github.com/viktorvishyn369/Server-Public#readme",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "axios": "^1.6.0",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "exif-reader": "^2.0.3",
+    "express": "^5.2.1",
+    "ffmpeg-static": "^5.2.0",
+    "heic-convert": "^2.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "sharp": "^0.33.2",
+    "sqlite3": "^5.1.6"
+  }
+}
