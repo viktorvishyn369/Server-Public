@@ -189,7 +189,7 @@ PhotoLynk certifications should be described as:
 # Links
 
 - **Demo Video**: https://youtu.be/FNTu4fUd6y8
-- **Pitch Deck**: https://github.com/viktorvishyn369/PhotoLynk/blob/main/PITCH_DECK.md
+- **Pitch Deck**: https://github.com/viktorvishyn369/Server-Public/blob/main/PITCH_DECK.md
 - **FreeTSA**: https://freetsa.org
 - **Website**: https://stealthlynk.io
 

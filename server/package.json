@@ -1,0 +1,53 @@
+{
+  "name": "photosync-server",
+  "version": "2.0.1",
+  "description": "PhotoLynk Server - Self-hosted photo backup server with auto-restart and firewall configuration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "update": "node -e \"require('./updater').downloadAndInstall()\"",
+    "check-update": "node -e \"require('./updater').checkForUpdates().then(r => console.log(r))\"",
+    "install-linux": "sudo bash install-linux.sh",
+    "install-macos": "bash install-macos.sh",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "photo-backup",
+    "self-hosted",
+    "privacy",
+    "decentralized",
+    "cloud-storage",
+    "mobile-backup"
+  ],
+  "author": "PhotoLynk Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/viktorvishyn369/Server-Public.git"
+  },
+  "bugs": {
+    "url": "https://github.com/viktorvishyn369/Server-Public/issues"
+  },
+  "homepage": "https://github.com/viktorvishyn369/Server-Public#readme",
+  "type": "commonjs",
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "axios": "^1.6.0",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "exif-reader": "^2.0.3",
+    "express": "^5.2.1",
+    "heic-convert": "^2.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "sharp": "^0.33.2",
+    "sqlite3": "^5.1.6",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "uuid": "^13.0.0"
+  }
+}

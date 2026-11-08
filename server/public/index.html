@@ -1082,6 +1082,21 @@
             { key: 'win-x64',   match: 'Windows-Setup.exe', file: 'Windows-Setup.exe',      label: 'Windows (x64)',         icon: 'windows', note: 'Windows 10+', ext: '.exe' },
             { key: 'linux-x64', match: 'Linux-x64.AppImage',file: 'Linux-x64.AppImage',     label: 'Linux (x86_64)',        icon: 'linux', note: 'Ubuntu 20.04+', ext: '.AppImage' },
         ];
+        // Releases moved to Server-Public; PhotoLynk-PoC-v1 still hosts older releases.
+        const RELEASE_REPOS = ['Server-Public', 'PhotoLynk-PoC-v1'];
+        let releaseRepo = 'PhotoLynk-PoC-v1';
+        async function fetchLatestRelease() {
+            for (const repo of RELEASE_REPOS) {
+                try {
+                    const res = await fetch('https://api.github.com/repos/viktorvishyn369/' + repo + '/releases/latest');
+                    if (res.ok) {
+                        const rel = await res.json();
+                        if (rel && rel.tag_name) { releaseRepo = repo; return rel; }
+                    }
+                } catch (e) {}
+            }
+            return null;
+        }
         function dlCopyHash(el) {
             const h = el.getAttribute('data-hash');
             if (!h) return;
@@ -1096,6 +1111,7 @@
             return (b / 1048576).toFixed(1) + ' MB';
         }
         function renderDownloadCards(grid, platforms, assets, versionText, ver, shaContainer, shaSection) {
+            const repo = releaseRepo;
             versionText.textContent = 'v' + ver + ' \u2014 Latest';
             let html = '';
             for (const p of platforms) {
@@ -1103,7 +1119,7 @@
                 if (asset) {
                     html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[p.icon] + '</div><div class="dl-info"><div class="dl-title">' + p.label + '</div><div class="dl-meta">' + p.ext + ' \u2014 ' + dlFormatSize(asset.size) + '</div></div><a href="' + asset.browser_download_url + '" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
                 } else {
-                    const fallbackUrl = 'https://github.com/viktorvishyn369/PhotoLynk/releases/download/v' + ver + '/PhotoLynk-Desktop-' + ver + '-' + p.file;
+                    const fallbackUrl = 'https://github.com/viktorvishyn369/' + repo + '/releases/download/v' + ver + '/PhotoLynk-Desktop-' + ver + '-' + p.file;
                     html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[p.icon] + '</div><div class="dl-info"><div class="dl-title">' + p.label + '</div><div class="dl-meta">' + p.ext + ' \u2014 ' + p.note + '</div></div><a href="' + fallbackUrl + '" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
                 }
             }
@@ -1111,7 +1127,7 @@
             // SHA-256 table
             const withHash = assets ? assets.filter(a => a.digest && a.digest.startsWith('sha256:')) : [];
             if (withHash.length === 0) {
-                shaContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-style:italic;">Checksums available on <a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a>.</div>';
+                shaContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-style:italic;">Checksums available on <a href="https://github.com/viktorvishyn369/' + repo + '/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a>.</div>';
                 return;
             }
             let tbl = '<table class="sha-table"><thead><tr><th>File</th><th>SHA-256</th></tr></thead><tbody>';
@@ -1128,9 +1144,8 @@
             const versionText = document.getElementById('dl-version-text');
             const shaSection = document.getElementById('sha-section');
             try {
-                const res = await fetch('https://api.github.com/repos/viktorvishyn369/PhotoLynk/releases/latest');
-                if (!res.ok) throw new Error('GitHub API error');
-                const rel = await res.json();
+                const rel = await fetchLatestRelease();
+                if (!rel) throw new Error('No releases found');
                 const ver = (rel.tag_name || '').replace(/^v/, '');
                 renderDownloadCards(grid, DL_PLATFORMS, rel.assets || [], versionText, ver, shaContainer, shaSection);
             } catch (e) {
@@ -1138,10 +1153,10 @@
                 versionText.textContent = 'Latest';
                 let html = '';
                 for (const p of DL_PLATFORMS) {
-                    html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[p.icon] + '</div><div class="dl-info"><div class="dl-title">' + p.label + '</div><div class="dl-meta">' + p.ext + ' \u2014 ' + p.note + '</div></div><a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" target="_blank" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
+                    html += '<div class="dl-row"><div class="dl-icon">' + DL_ICONS[p.icon] + '</div><div class="dl-info"><div class="dl-title">' + p.label + '</div><div class="dl-meta">' + p.ext + ' \u2014 ' + p.note + '</div></div><a href="https://github.com/viktorvishyn369/' + releaseRepo + '/releases/latest" target="_blank" class="dl-btn">' + DL_ICONS.dl + ' Download</a></div>';
                 }
                 grid.innerHTML = html;
-                shaContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-style:italic;">Visit <a href="https://github.com/viktorvishyn369/PhotoLynk/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a> for checksums.</div>';
+                shaContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;font-style:italic;">Visit <a href="https://github.com/viktorvishyn369/' + releaseRepo + '/releases/latest" style="color:var(--accent);" target="_blank">GitHub Releases</a> for checksums.</div>';
             }
         }
         loadDownloads();

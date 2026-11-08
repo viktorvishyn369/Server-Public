@@ -5695,7 +5695,7 @@ function formatCertificateForExport(cert) {
     '    npm install exifreader',
     '    node verify-exif-hash.js <original_file>',
     '',
-    '    Script: https://github.com/viktorvishyn369/PhotoLynk/blob/main/server-tray/verify-exif-hash.js',
+    '    Script: https://github.com/viktorvishyn369/Server-Public/blob/main/server-tray/verify-exif-hash.js',
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
