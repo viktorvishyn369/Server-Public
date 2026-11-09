@@ -1,25 +1,20 @@
-Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International
+STEALTHLYNK PROPRIETARY LICENSE — ALL RIGHTS RESERVED
 
-Copyright (c) 2026 Viktor Vishyn / PhotoLynk
+Copyright (c) 2026 Viktor Pavlyshyn. All rights reserved.
 
-This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
+The StealthLynk self-hosted server package and its source code are the exclusive intellectual property of
+Viktor Pavlyshyn, operated commercially by StealthLynk LLC
+(https://www.stealthlynk.io — support@stealthlynk.io).
 
-You are free to:
-- View and study the source code
-- Share the repository link
+No license, express or implied, is granted to any person or entity to
+use, copy, reproduce, modify, merge, publish, distribute, sublicense,
+sell, or create derivative works of this software or any part of it,
+except under a separate written agreement signed by the copyright
+holder.
 
-Under the following terms:
-- Attribution: You must give appropriate credit to PhotoLynk
-- NonCommercial: You may NOT use this code for commercial purposes
-- NoDerivatives: You may NOT distribute modified versions
-- No Building: You may NOT build, compile, or distribute applications without explicit written permission
-- No Intellectual Property Use: You may NOT use the ideas, logic, algorithms, or implementation patterns from this codebase in any commercial product, listing, or production system without explicit written permission
+Trade secrets, server configurations, payment/entitlement logic, and
+associated data are confidential and remain the property of the
+copyright holder. Reverse engineering, decompilation, or circumvention
+of access controls is prohibited.
 
-COMMERCIAL USE REQUIRES WRITTEN PERMISSION FROM:
-Viktor Vishyn
-Email: support@photolynk.io
-
-To view a copy of this license, visit:
-https://creativecommons.org/licenses/by-nc-nd/4.0/
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+For licensing or legal inquiries: support@stealthlynk.io
