@@ -337,6 +337,7 @@ app.use(express.json({ limit: '25mb' }));
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')));
 app.use('/paceseeker', express.static(path.join(__dirname, 'public', 'paceseeker')));
 app.use('/blipp', express.static(path.join(__dirname, 'public', 'blipp')));
+app.use('/photolynk', express.static(path.join(__dirname, 'public', 'photolynk')));
 
 // Desktop app downloads directory (builds uploaded here become available at /photolynk/download)
 const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || path.join(AUX_ROOT, 'downloads');
