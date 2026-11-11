@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blipp — Open Source &amp; Model Licenses</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            line-height: 1.7;
+            min-height: 100vh;
+            padding: 60px 24px;
+        }
+        .container { max-width: 720px; margin: 0 auto; }
+        h1 { color: #C9A84C; font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+        .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 40px; }
+        h2 { color: #fff; font-size: 1.2rem; font-weight: 700; margin-top: 32px; margin-bottom: 12px; }
+        h3 { color: #ccc; font-size: 1.05rem; font-weight: 600; margin-top: 20px; margin-bottom: 10px; }
+        p { color: #bbb; margin-bottom: 14px; font-size: 0.95rem; }
+        ul { color: #bbb; margin-bottom: 14px; padding-left: 24px; }
+        li { margin-bottom: 8px; font-size: 0.95rem; }
+        a { color: #C9A84C; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .updated { color: #666; font-size: 0.82rem; margin-top: 40px; border-top: 1px solid #2a2a2a; padding-top: 16px; }
+        strong { color: #fff; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 0.9rem; }
+        th, td { border: 1px solid #2a2a2a; padding: 10px 12px; text-align: left; vertical-align: top; color: #bbb; }
+        th { color: #fff; background: rgba(201,168,76,0.06); }
+        .banner {
+            background: rgba(201,168,76,0.08);
+            border: 1px solid rgba(201,168,76,0.2);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Open Source &amp; Model Licenses</h1>
+        <p class="subtitle">Blipp bundles and downloads open-source runtimes and AI models</p>
+        <p class="updated" style="border: none; padding: 0; margin-bottom: 24px;">Last Updated: November 11, 2026</p>
+
+        <div class="banner">
+            Blipp uses third-party open-source software and AI models. This page lists them and their licenses, including the attributions their licenses require. Blipp itself is proprietary software of StealthLynk LLC.
+        </div>
+
+        <h2>AI Models (downloaded on demand)</h2>
+        <table>
+            <tr><th>Component</th><th>Used for</th><th>License</th><th>Attribution / terms</th></tr>
+            <tr>
+                <td>Kokoro TTS (multi-lang v1.0)</td>
+                <td>Neural voices: en, es, fr, it, pt, hi, zh, ja</td>
+                <td>Apache-2.0</td>
+                <td><a href="https://github.com/hexgrad/kokoro">hexgrad/kokoro</a> — Copyright the Kokoro authors. Licensed under the Apache License 2.0.</td>
+            </tr>
+            <tr>
+                <td>Supertonic-3 TTS</td>
+                <td>Neural voices: uk, ru, bg, pl, nl, sv, da, fi, cs, ro, hu, sk, sl, hr, et, lt, lv, el, ar, tr, ko, vi, id and more</td>
+                <td>OpenRAIL-M</td>
+                <td><a href="https://huggingface.co/supertone/supertonic-3">supertone/supertonic-3</a> — OpenRAIL-M license. Commercial use permitted; use restrictions (no harmful, deceptive, impersonating/deepfake, discriminatory, or illegal use) are passed through to users in our <a href="terms.html">Terms of Service §9</a>.</td>
+            </tr>
+            <tr>
+                <td>Piper voices</td>
+                <td>Offline voices for ~20 languages (de, ca, eu, no, nb, is, sr, sl, lv, el, ar, tr, vi, sw, kk and more)</td>
+                <td>MIT (per rhasspy/piper-voices registry)</td>
+                <td><a href="https://github.com/rhasspy/piper">rhasspy/piper</a> and <a href="https://github.com/rhasspy/piper-voices">piper-voices</a> — MIT License.</td>
+            </tr>
+            <tr>
+                <td>Coqui "Mai" voice (uk)</td>
+                <td>Ukrainian fallback voice</td>
+                <td>CC-BY-4.0 (model); code MPL-2.0</td>
+                <td><a href="https://github.com/coqui-ai/TTS">coqui-ai/TTS</a> — Mai voice. Attribution: Coqui / Idiap Research Institute, licensed under CC-BY-4.0.</td>
+            </tr>
+            <tr>
+                <td>Whisper STT (tiny/base/small)</td>
+                <td>On-device speech recognition, 90+ languages</td>
+                <td>MIT</td>
+                <td><a href="https://github.com/openai/whisper">openai/whisper</a> — Copyright OpenAI. Licensed under the MIT License.</td>
+            </tr>
+            <tr>
+                <td>Qwen3 LLM (1.7B / 4B, quantized)</td>
+                <td>On-device conversational language model</td>
+                <td>Apache-2.0</td>
+                <td><a href="https://huggingface.co/Qwen">Qwen</a> — Copyright Alibaba Cloud / Qwen team. Licensed under the Apache License 2.0.</td>
+            </tr>
+            <tr>
+                <td>Silero VAD / KWS models</td>
+                <td>Voice activity detection, wake-word spotting</td>
+                <td>MIT</td>
+                <td><a href="https://github.com/snakers4/silero-vad">snakers4/silero-vad</a> — MIT License.</td>
+            </tr>
+        </table>
+
+        <h2>Runtimes &amp; Libraries</h2>
+        <table>
+            <tr><th>Component</th><th>License</th><th>Attribution</th></tr>
+            <tr><td>sherpa-onnx (ONNX inference engine)</td><td>Apache-2.0</td><td><a href="https://github.com/k2-fsa/sherpa-onnx">k2-fsa/sherpa-onnx</a></td></tr>
+            <tr><td>ONNX Runtime</td><td>MIT</td><td><a href="https://github.com/microsoft/onnxruntime">microsoft/onnxruntime</a></td></tr>
+            <tr><td>llama.cpp</td><td>MIT</td><td><a href="https://github.com/ggml-org/llama.cpp">ggml-org/llama.cpp</a></td></tr>
+            <tr><td>React Native &amp; related JS libraries</td><td>MIT</td><td>See package licenses in the app distribution.</td></tr>
+        </table>
+
+        <h2>Notes</h2>
+        <ul>
+            <li>Model weights are downloaded at runtime to reduce app size; the same licenses apply.</li>
+            <li>Some voices use models whose training-data provenance is documented upstream; per-model license metadata is maintained by each project's registry.</li>
+            <li>Non-commercial (e.g., CC-BY-NC) models are intentionally excluded from Blipp.</li>
+            <li>Questions about licensing: <a href="mailto:support@stealthlynk.io">support@stealthlynk.io</a></li>
+        </ul>
+
+        <p class="updated">Last Updated: November 11, 2026</p>
+    </div>
+</body>
+</html>
