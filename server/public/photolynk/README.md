@@ -5,7 +5,7 @@
 > **⚠️ INTELLECTUAL PROPERTY NOTICE**  
 > This repository is licensed under **CC BY-NC-ND 4.0**. The code, ideas, logic, algorithms, and implementation patterns are **proprietary intellectual property**. You may view and study the code, but you **MAY NOT** use any part of it (including concepts, logic, or algorithms) in commercial products, listings, or production systems without explicit written permission from Viktor Pavlyshyn (support@photolynk.io). See [LICENSE](LICENSE) for full terms.
 
-PhotoLynk is a cross-platform mobile application for photo and video backup with built-in digital proof of authenticity. Back up your media to your own server or StealthCloud with end-to-end encryption, and create tamper-evident certificates for your photographs — complete with RFC 3161 trusted timestamps, C2PA provenance manifests, and EXIF integrity hashing.
+PhotoLynk is a cross-platform mobile application for photo and video backup with built-in digital proof of authenticity. Back up your media to a local server or StealthCloud with end-to-end encryption, and create tamper-evident certificates for your photographs — complete with RFC 3161 trusted timestamps, C2PA provenance manifests, and EXIF integrity hashing.
 
 [![Android](https://img.shields.io/badge/Platform-Android-3DDC84?style=flat&logo=android)](https://developer.android.com/)
 [![Solana](https://img.shields.io/badge/Platform-Solana_Mobile-9945FF?style=flat&logo=solana)](https://solanamobile.com/)
@@ -20,7 +20,7 @@ PhotoLynk is a cross-platform mobile application for photo and video backup with
 - **End-to-End Encrypted**: XSalsa20-Poly1305 encryption before upload
 - **Cross-Device Sync**: Android ↔ Desktop
 - **Zero-Knowledge Architecture**: Server never sees plaintext data
-- **Self-Hosted or Cloud**: Local server, remote VPS, or StealthCloud
+- **Self-Hosted or Cloud**: Local server or StealthCloud
 
 ### Certify Original (Digital Proof of Authenticity)
 - **One-Tap Certification**: Capture or select a photo and create a digital certificate
@@ -174,7 +174,7 @@ PhotoLynk offers two optional in-app purchases:
 - A verified post grants 7 days on every app linked to your account at claim time, stacked on your remaining term
 
 ### StealthLynk Ecosystem
-- A paid subscription in any StealthLynk app unlocks the others at equivalent value: any paid PhotoLynk storage plan unlocks PaceSeeker and Lane, and a PaceSeeker or Lane subscription includes a 100 GB PhotoLynk plan — all under one account
+- A paid subscription in any StealthLynk app unlocks the others at equivalent value: any paid PhotoLynk storage plan unlocks PaceSeeker and Blipp, and a PaceSeeker or Blipp One subscription includes a 100 GB PhotoLynk plan — all under one account
 - Apps link automatically by proving the same Solana wallet; no extra steps required. The one-time Premium upgrade stays PhotoLynk-only
 
 All Solana payments are processed on-chain. PhotoLynk does not directly handle payment card information. Purchases are final and non-refundable except as required by applicable law.

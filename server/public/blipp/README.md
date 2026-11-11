@@ -1,6 +1,6 @@
 # Blipp — On-Device Voice Companion
 
-<img src="../images/logo_lane.png" alt="Blipp" width="120">
+<img src="../images/logo_blipp.png" alt="Blipp" width="120">
 
 **Blipp** is a local-first voice companion for Android — a voice assistant that runs entirely on your phone.
 

@@ -53,7 +53,7 @@ AI-driven Dollar-Cost Averaging that trades a user-selected verified Solana toke
 - Every entitlement (trial, earned week, paid plan) carries a **3-day grace** tail after expiry.
 - **Time always stacks**: a purchase or earned free week starts where your current term ends — remaining trial days are never lost.
 - **Free weekly access**: post one verified promo per week for 7 days on every app linked at claim time.
-- **Ecosystem**: one paid subscription in any StealthLynk app unlocks every linked app at equivalent value — a PaceSeeker sub includes Lane and a 100 GB PhotoLynk plan, and any paid PhotoLynk storage plan (100 GB+) or Lane plan unlocks PaceSeeker. Apps link automatically by verifying the same Solana wallet.
+- **Ecosystem**: one paid subscription in any StealthLynk app unlocks every linked app at equivalent value — a PaceSeeker sub includes Blipp and a 100 GB PhotoLynk plan, and any paid PhotoLynk storage plan (100 GB+) or Blipp One plan unlocks PaceSeeker. Apps link automatically by verifying the same Solana wallet.
 
 ## Safety
 
