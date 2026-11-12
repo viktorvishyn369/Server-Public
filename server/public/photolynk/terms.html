@@ -80,8 +80,8 @@
         <p>When any entitlement (trial, earned free week, or paid plan) reaches its end date, the following applies:</p>
         <ul>
           <li><strong>Grace Period (3 days):</strong> After expiry you enter a 3-day grace period. During this time, new cloud uploads are disabled, but you can still sync, download, and restore all your backed-up data.</li>
-          <li><strong>After Grace Period:</strong> Once the 3-day grace period ends, new cloud uploads remain disabled. However, <strong>all your backed-up data remains accessible</strong> — you can still browse, download, and restore your photos and videos at any time. You can purchase a new term at any time to re-enable uploads; the new term always starts where your remaining time ends (or immediately if none remains) — you never lose purchased time.</li>
-          <li><strong>Data Retention:</strong> Your encrypted data is not deleted when your subscription expires. Data is only deleted if you explicitly delete your account (see Section 15).</li>
+          <li><strong>After Grace Period:</strong> Once the 3-day grace period ends, cloud uploads and cloud access pause. Your backed-up data is not deleted right away — it enters a retention window (see Data Retention below) so you can renew and resume exactly where you left off.</li>
+          <li><strong>Data Retention:</strong> Your encrypted data is kept for <strong>30 days</strong> after the grace period ends if you have ever held a paid plan, or <strong>10 days</strong> otherwise. If you do not renew within that window, your encrypted data and account records are permanently deleted. Renewing at any time during the window restores full access immediately with all data intact. You can delete your account at any time (see Section 15) — that deletion is immediate and permanent. NFT certificates minted on Solana are unaffected.</li>
           <li><strong>NFT Certifications:</strong> Any NFT certificates minted on the Solana blockchain remain permanently accessible and are not affected by subscription expiration.</li>
           <li><strong>Premium Add-On:</strong> If you have purchased the Premium add-on, your premium storage (1,000 GB for 1 year) and NFT minting benefits remain active independently of your subscription status.</li>
         </ul>
@@ -321,7 +321,7 @@
           <li>Provisions that by their nature should survive termination shall survive</li>
         </ul>
         <div class="warning">
-          <p><strong>Subscription expiration is not account termination.</strong> When your subscription expires (Section 5.5), your data is <strong>not</strong> deleted. Uploads are paused, but you retain full access to download, restore, and browse your backed-up data. Data is only deleted when you explicitly delete your account.</p>
+          <p><strong>Subscription expiration is not account termination — but it starts a retention clock.</strong> When your subscription expires (Section 5.5), uploads pause after the 3-day grace period. Your backed-up data is kept for 30 days (10 days if you never had a paid plan), then permanently deleted. Renew anytime during that window to restore full access with all data intact. Data is deleted sooner only if you explicitly delete your account.</p>
         </div>
 
         <h2>16. Governing Law and Dispute Resolution</h2>
