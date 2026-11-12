@@ -166,7 +166,7 @@ PhotoLynk offers two optional in-app purchases:
 - Solana network fees are separate and always paid in SOL
 
 ### Grace Period
-- Every entitlement (trial, earned week, paid plan) carries a 3-day grace tail after expiry — downloading stays available, uploads pause
+- Paid plans and earned entitlements carry a 10-day grace period with full access after expiry; free trials get a 3-day tail — downloading stays available, uploads pause
 - No auto-deletions; certificates remain user-owned via on-device keys
 
 ### Free Weekly Option
