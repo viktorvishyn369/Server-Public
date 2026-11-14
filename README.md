@@ -10,7 +10,7 @@ own infrastructure instead of (or alongside) StealthCloud.
 |---|---|
 | **PhotoLynk** | Photo & video backup with bit-for-bit storage, end-to-end encryption, digital authenticity certificates (RFC 3161 timestamps, C2PA provenance, 4-layer EXIF hashing), and an optional Solana cNFT Web3 album |
 | **PaceSeeker** | AI-assisted DCA trading with on-device strategy learning |
-| **Lane** | Avatar/profile companion app for the ecosystem |
+| **Blipp** | Local-first voice companion — on-device LLM/STT/TTS with optional managed cloud tier |
 | **PhotoLynk Desktop Tray** | The desktop app in this repo — runs your own local server |
 | **StealthCloud** | Managed zero-knowledge cloud (alternative to self-hosting) |
 
@@ -20,7 +20,7 @@ own infrastructure instead of (or alongside) StealthCloud.
 |---|---|
 | `remote-server/` | **PhotoLynk Remote Server** — headless Node.js backup server for your own VPS. Source-auditable, no NFT/payment/telemetry code. |
 | `server-tray/` | PhotoLynk Desktop Tray — Electron app that runs a backup server on your own machine (macOS/Windows/Linux): sync, backups, NFT minting, wallet connect |
-| `server/public/` | Public pages served by StealthLynk servers — landing page and per-app pages for PhotoLynk, PaceSeeker and Lane |
+| `server/public/` | Public pages served by StealthLynk servers — landing page and per-app pages for PhotoLynk, PaceSeeker and Blipp |
 | `install.sh` | One-line installer for the Remote Server (interactive domain + HTTPS setup) |
 | `docs/` | Policy documents: privacy policy, terms, license, copyright, delete-account instructions |
 | `security/` | Security audit report and audit script |
